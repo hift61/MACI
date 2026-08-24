@@ -1,5 +1,5 @@
 # MACI
-(This repository is for the 2026 R&E project at CBSH 1st students.)
+(This repository is for the 2026 R&E project at CBSH 1st students.) <br>
 MACI is a project designed to analyze and evaluate collaboration between multiple AI agents in a shared environment.
 
 ---
