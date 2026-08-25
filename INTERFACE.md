@@ -8,9 +8,17 @@ This document defines the functions shared between modules, including their para
 
 ### GameMap(Class)
 
+- 변수
+
 self.map_width : 테스트 환경의 좌우 길이
 
 self.map_height : 테스트 환경의 상하 길이
+
+- 함수
+
+__init__(self) -> None : 맵의 기본 함수 정의
+
+configure_map(self) -> None : 맵의 크기 입력(정수형)
 
 ---
 

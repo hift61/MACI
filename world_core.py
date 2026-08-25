@@ -6,16 +6,19 @@ import pygame
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import IntPrompt
+from rich.console import Align
+from rich import box
 
+# define concole
 console = Console()
 
 class GameMap:
-    def __init__(self):
+    def __init__(self) -> None:
         self.map_width = 500
         self.map_height = 500
-
-    def configure_map(self):
-        # Input map data
+    
+    # Input map data
+    def configure_map(self) -> None:
         self.map_width = IntPrompt.ask(
             "[bold magenta]Width[/]",
             default=500
@@ -30,9 +33,19 @@ class GameMap:
             f"[green]Map size:[/] {self.map_width} × {self.map_height}"
         )
 
-
 if __name__ == "__main__":
-    console.print("[bold cyan italic]Project MACI[/]")
+    console.print(
+        Panel(
+            Align.center(
+                "[bold bright_white]PROJECT[/]\n"
+                "[bold bright_cyan]M A C I[/]"
+            ),
+            border_style="bright_magenta",
+            box = box.DOUBLE,
+            padding=(1, 6),
+            expand=False
+            )
+        )
     console.rule()
 
     game_map = GameMap()
