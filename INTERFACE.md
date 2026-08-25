@@ -18,6 +18,8 @@ self.map_height : 테스트 환경의 상하 길이
 
 __init__(self) -> None : 맵의 기본 함수 정의
 
+display_map(self) -> None : pygame을 통하여 화면 출력
+
 configure_map(self) -> None : 맵의 크기 입력(정수형)
 
 ---

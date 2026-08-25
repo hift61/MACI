@@ -1,5 +1,4 @@
 # Main library
-import sys
 import pygame
 
 # Console library
@@ -16,22 +15,33 @@ class GameMap:
     def __init__(self) -> None:
         self.map_width = 500
         self.map_height = 500
+        
+        self.window_width = self.map_width + 50
+        self.window_height = self.map_height + 50
+    
+    def display_map(self) -> None:
+        pygame.init()
+        
+        screen = pygame.display.set_mode((self.window_width, self.window_height))
+        pygame.display.set_caption("MACI")
+        
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+        
+        pygame.quit()
     
     # Input map data
     def configure_map(self) -> None:
-        self.map_width = IntPrompt.ask(
-            "[bold magenta]Width[/]",
-            default=500
-        )
+        self.map_width = IntPrompt.ask( "[bold magenta]Width[/]", default=500)
+        self.window_width = self.map_width + 50
 
-        self.map_height = IntPrompt.ask(
-            "[bold magenta]Height[/]",
-            default=500
-        )
+        self.map_height = IntPrompt.ask("[bold magenta]Height[/]", default=500)
+        self.window_width = self.map_height + 50
 
-        console.print(
-            f"[green]Map size:[/] {self.map_width} × {self.map_height}"
-        )
+        console.print(f"[green]Map size:[/] {self.map_width} × {self.map_height}")
 
 if __name__ == "__main__":
     console.print(
@@ -50,3 +60,5 @@ if __name__ == "__main__":
 
     game_map = GameMap()
     game_map.configure_map()
+    
+    game_map.display_map()
