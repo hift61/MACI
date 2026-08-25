@@ -1,5 +1,6 @@
 # Main library
 import pygame
+import random
 
 # Console library
 from rich.console import Console
@@ -33,6 +34,26 @@ class GameMap:
         
         pygame.quit()
     
+    def make_seed(self, wall_c: int, seed: int) -> str:
+        return f"{self.map_width}x{self.map_height}-{wall_c}-{seed}"
+    
+    def read_seed(self, code: str) -> tuple[int, int, int, int]:
+        size, wall_c, seed = code.split("-")
+        width, height = size.split("x")
+        
+        return (int(width), int(height), int(wall_c), int(seed))
+    
+    def make_rseed(self) -> str:
+        seed = random.randint(100000, 999999)
+        random.seed(seed)
+        
+        min_wall_c = max(3, self.map_width * self.map_height // 50000)
+        max_wall_c = max(8, self.map_width * self.map_height // 15000)
+        
+        wall_c = random.randint(min_wall_c, max_wall_c)
+        
+        return self.make_seed(wall_c, seed)
+    
     # Input map data
     def configure_map(self) -> None:
         self.map_width = IntPrompt.ask( "[bold magenta]Width[/]", default=500)
@@ -61,4 +82,5 @@ if __name__ == "__main__":
     game_map = GameMap()
     game_map.configure_map()
     
+    code = game_map.make_seed(12, 483921)
     game_map.display_map()
