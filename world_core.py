@@ -82,5 +82,7 @@ if __name__ == "__main__":
     game_map = GameMap()
     game_map.configure_map()
     
-    code = game_map.make_seed(12, 483921)
+    print(game_map.make_rseed())
+    print(game_map.make_seed(12, 100611))
+    print(game_map.read_seed('400x400-12-987654'))
     game_map.display_map()
