@@ -12,6 +12,11 @@ from rich import box
 # define concole
 console = Console()
 
+class Wall():
+    def __init__(self, x: int, y: int, width: int, height: int) -> None:
+        self.rect = pygame.Rect(x, y, width, height)
+        self.is_solid = True
+
 class GameMap:
     def __init__(self) -> None:
         self.map_width = 500
@@ -26,11 +31,28 @@ class GameMap:
         screen = pygame.display.set_mode((self.window_width, self.window_height))
         pygame.display.set_caption("MACI")
         
+        border = [
+            # 위쪽 경계
+            Wall(25, 25, self.map_width, 10),
+            # 오른쪽 경계
+            Wall(self.map_width + 15, 25, 10, self.map_height),
+            # 아래쪽 경계
+            Wall(25, self.map_height + 15, self.map_width, 10),
+            # 왼쪽 경계
+            Wall(25, 25, 10, self.map_height)
+        ]
+        
         running = True
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+            
+            screen.fill("black")
+            
+            for b in border:
+                pygame.draw.rect(screen, "white", b.rect)
+            pygame.display.flip()
         
         pygame.quit()
     
@@ -60,7 +82,7 @@ class GameMap:
         self.window_width = self.map_width + 50
 
         self.map_height = IntPrompt.ask("[bold magenta]Height[/]", default=500)
-        self.window_width = self.map_height + 50
+        self.window_height = self.map_height + 50
 
         console.print(f"[green]Map size:[/] {self.map_width} × {self.map_height}")
 
@@ -81,6 +103,8 @@ if __name__ == "__main__":
 
     game_map = GameMap()
     game_map.configure_map()
+    
+    print(game_map.window_width, game_map.window_height)
     
     print(game_map.make_rseed())
     print(game_map.make_seed(12, 100611))
