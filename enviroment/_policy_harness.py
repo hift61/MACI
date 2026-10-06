@@ -28,6 +28,10 @@ import sys
 
 _FORBIDDEN_CALL_NAMES = {"exec", "eval", "open", "__import__", "compile", "input"}
 
+# 프레임/코드 객체 속성: dunder 없이도 제너레이터의 gi_frame.f_back.f_globals처럼 하네스
+# 자신의 전역(sys, builtins)까지 거슬러 올라가 샌드박스를 벗어날 수 있으므로 막음
+_FORBIDDEN_ATTR_PREFIXES = ("gi_", "cr_", "ag_", "f_", "tb_", "co_")
+
 _SAFE_BUILTIN_NAMES = (
     "abs", "all", "any", "bool", "dict", "enumerate", "float", "int", "len",
     "list", "max", "min", "range", "reversed", "round", "sorted", "str",
@@ -48,6 +52,8 @@ def _check_code_safety(code: str) -> None:
         # check would let object-introspection chains slip through unnoticed.
         if isinstance(node, ast.Attribute) and node.attr.startswith("__"):
             raise ValueError("generated code may not reference dunder attributes")
+        if isinstance(node, ast.Attribute) and node.attr.startswith(_FORBIDDEN_ATTR_PREFIXES):
+            raise ValueError(f"generated code may not access frame/code attribute .{node.attr}")
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             if node.func.id in _FORBIDDEN_CALL_NAMES:
                 raise ValueError(f"generated code may not call {node.func.id}()")

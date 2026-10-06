@@ -76,6 +76,10 @@ class GameMap:
             Wall(25, 25, 10, self.map_height)
         ]
         
+        # 매 프레임 새로 만들면 벽이 깜빡이며 바뀌므로 한 번만 생성
+        _, _, wall_c, seed = self.read_seed(self.make_rseed())
+        walls = self._generate_walls(wall_c, seed)
+
         running = True
         while running:
             for event in pygame.event.get():
@@ -87,7 +91,7 @@ class GameMap:
             for b in border:
                 pygame.draw.rect(screen, "white", b.rect)
             
-            for wall in self._generate_walls():
+            for wall in walls:
                 pygame.draw.rect(screen, "white", wall.rect)
             
             pygame.display.flip()

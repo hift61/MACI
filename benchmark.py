@@ -152,6 +152,8 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                             "final_action": decisions_by_agent.get(agent_id, {}).get("final_action"),
                             "overridden": decisions_by_agent.get(agent_id, {}).get("overridden", False),
                             "policy_error": getattr(policies[agent_id], "last_error", None),
+                            # CodePolicy가 이번 step에 stuck으로 코드를 재생성했으면 {"step", "reason"}
+                            "replan": getattr(policies[agent_id], "last_replan", None),
                         },
                     }
                     for agent_id in task_descriptions
@@ -160,14 +162,20 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
             f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
 
             errors = {a: p.last_error for a, p in policies.items() if getattr(p, "last_error", None)}
-            suffix = f"  errors={errors}" if errors else ""
+            replans = {a: p.last_replan["reason"] for a, p in policies.items() if getattr(p, "last_replan", None)}
+            suffix = (f"  replans={replans}" if replans else "") + (f"  errors={errors}" if errors else "")
             print(f"step {step}/{steps}: cleared={record['cleared']}{suffix}")
 
             if record["cleared"]:
                 print(f"\nSUCCESS at step {step}: all objectives achieved.")
                 break
-            # trap이 발동해 문이 영구 봉인되면 문 objective는 더 이상 달성 불가 - 남은 step을 낭비하지 않음
-            if env.failure is not None:
+            # trap이 발동해 문이 영구 봉인되면 그 문의 objective는 더 이상 달성 불가 - 남은 step을 낭비하지 않음.
+            # 봉인된 문이 이미 열린 적 있거나 objective와 무관하면 아직 클리어 가능하므로 계속 진행
+            if env.failure is not None and any(
+                objective.get("door_id") in env.failure["sealed_doors"]
+                and clear_step(env.event_log.entries, [objective]) is None
+                for objective in objectives
+            ):
                 print(f"\nFAILED at step {step}: trap '{env.failure['object_id']}' triggered by "
                       f"{env.failure['agent_id']} sealed {env.failure['sealed_doors']}.")
                 break

@@ -1,6 +1,7 @@
 import copy
 import json
 import math
+from concurrent.futures import ThreadPoolExecutor
 
 from agent import Agent
 from history import DecisionLog, EventLog, MessageLog
@@ -520,8 +521,10 @@ class Environment:
     # ---- Messaging ----
 
     def _deliver(self, receiver_id: str, message: dict) -> None:
-        if receiver_id not in self.agents:  # 존재하지 않는/누락된 receiver_id는 조용히 무시
+        if not isinstance(receiver_id, str) or receiver_id not in self.agents:  # 존재하지 않는/누락된 receiver_id는 조용히 무시
             return
+        # inbox는 비워지지 않고 계속 쌓이므로, 새 메시지와 예전 메시지를 구분할 수 있게 전달 시점을 붙임
+        message["step"] = self.step_count
         self.agents[receiver_id].inbox.append(message)
         self.message_log.record(self.step_count, receiver_id, message)
 
@@ -692,10 +695,10 @@ class Environment:
             # 에이전트가 직접 쓰는 메모장: action에 "memory": {...}를 넣어 반환하면 다음 step부터
             # 여기로 돌아옴 (탐색한 곳, 계획 등 자유롭게 저장)
             "memory": copy.deepcopy(agent.memory),
-            # inbox는 참조를 그대로 유지: ObeyCommandRule이 처리한 명령 메시지에
-            # message["handled"] = True를 표시해 같은 명령이 다시 실행되지 않도록 하는데,
-            # 이게 실제 agent.inbox에 반영되려면 복사본이 아니라 같은 객체여야 함
-            "inbox": agent.inbox
+            # inbox는 목록만 복사하고 메시지 객체는 그대로 공유: 동시 실행에서 이번 step에 다른
+            # 에이전트가 보낸 메시지가 이미 만든 관찰에 끼어들면 안 되지만, ObeyCommandRule이 처리한
+            # 명령 메시지에 표시하는 message["handled"] = True는 실제 agent.inbox에 반영돼야 함
+            "inbox": list(agent.inbox)
         }
 
     # (x, y)에서 radius 안에 일부라도 걸친 벽 목록 [x, y, width, height]
@@ -733,10 +736,19 @@ class Environment:
     # Rules are enforced here (not just in step()), so any action reaching
     # the environment is already filtered/overridden — agents cannot bypass
     # their rules by any path.
-    def apply_action(self, agent_id: str, action: dict) -> dict:
+    # observation: Rule 검사에 쓸 관찰. step()은 결정에 쓴 step 시작 시점의 관찰을 넘겨, 같은 step에
+    # 먼저 적용된 다른 에이전트의 행동(예: 방금 보낸 명령)이 적용 순서에 따라 끼어들지 않게 함.
+    # 생략하면 지금 상태로 새로 만듦
+    def apply_action(self, agent_id: str, action: dict, observation: dict = None) -> dict:
         agent = self.agents[agent_id]
-        observation = self.get_observation(agent_id)
+        if observation is None:
+            observation = self.get_observation(agent_id)
         action = self._enforce_rules(agent, observation, action)
+        if not self._is_well_formed(action):
+            # LLM이 짠 코드가 {"dx": "5"}나 {"object_id": [...]}를 반환하면 아래 처리에서
+            # TypeError로 회차 전체가 죽거나 NaN 좌표가 생기므로, 그 에이전트의 이번 행동만 무효 처리
+            self._log("invalid_action", [agent_id], action=action)
+            return {"type": "noop"}
         action_type = action.get("type", "noop")
 
         if action_type == "move":
@@ -770,19 +782,47 @@ class Environment:
 
         return action
 
-    # Run one simulation tick: pressure plates update first (based on where
-    # agents ended up last tick), then every agent observes, decides, and acts
+    # 숫자 필드는 유한한 실수(bool 제외), id 필드는 문자열(또는 생략)이어야 함
+    _NUMBER_FIELDS = ("dx", "dy", "facing")
+    _ID_FIELDS = ("object_id", "key_id", "button_id", "lever_id", "receiver_id")
+
+    def _is_well_formed(self, action) -> bool:
+        if not isinstance(action, dict):
+            return False
+        for key in self._NUMBER_FIELDS:
+            value = action.get(key, 0)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                return False
+        return all(isinstance(action.get(key), (str, type(None))) for key in self._ID_FIELDS)
+
+    # 한 틱을 동시 실행으로 진행: 모든 에이전트가 같은 시점의 세계를 관찰하고, 각자의 policy가
+    # 병렬로(스레드) 결정한 뒤, 그 행동들을 한꺼번에 적용하고 마지막에 압력판을 판정함.
+    # 같은 물건을 동시에 집는 것처럼 적용 순서가 결과를 가르는 충돌이 있으므로, 한 에이전트가
+    # 늘 먼저 적용되는 편향이 없도록 적용 순서를 step마다 한 칸씩 돌림 (결정적이라 재현 가능)
     def step(self) -> None:
         self.step_count += 1
-        self._update_pressure_plates()
         self._update_movers()
-        for agent_id in list(self.agents.keys()):
-            observation = self.get_observation(agent_id)
-            self._record_sightings(agent_id, observation)
-            action = self.agents[agent_id].decide(observation)
-            final_action = self.apply_action(agent_id, action)
-            self._store_memory(agent_id, action)
-            self.decision_log.record(self.step_count, agent_id, observation, action, final_action)
+        agent_ids = list(self.agents.keys())
+        if not agent_ids:
+            self._update_pressure_plates()
+            return
+
+        observations = {}
+        for agent_id in agent_ids:
+            observations[agent_id] = self.get_observation(agent_id)
+            self._record_sightings(agent_id, observations[agent_id])
+
+        with ThreadPoolExecutor(max_workers=len(agent_ids)) as pool:
+            decided = pool.map(lambda a: self.agents[a].decide(observations[a]), agent_ids)
+            actions = dict(zip(agent_ids, decided))
+
+        shift = self.step_count % len(agent_ids)
+        for agent_id in agent_ids[shift:] + agent_ids[:shift]:
+            final_action = self.apply_action(agent_id, actions[agent_id], observations[agent_id])
+            self._store_memory(agent_id, actions[agent_id])
+            self.decision_log.record(self.step_count, agent_id, observations[agent_id], actions[agent_id], final_action)
+
+        self._update_pressure_plates()
 
     # policy가 고른 action에 "memory": dict가 있으면 다음 관찰의 memory로 저장. Rule이 action을
     # 바꿔치기해도 메모는 에이전트 자신의 기록이므로 원래 action 기준. 너무 크면(직렬화 20000자
