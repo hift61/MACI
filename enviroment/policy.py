@@ -1,4 +1,3 @@
-import ast
 import json
 import math
 import random
@@ -7,6 +6,7 @@ import traceback
 
 from openai import OpenAI, RateLimitError
 
+from _policy_harness import _check_code_safety  # 생성 단계와 실행 단계가 같은 검사를 쓰도록
 from policy_sandbox import run_decide_code
 from tools import TOOLS
 
@@ -256,6 +256,7 @@ _OBSERVATION_DOC = """{"self": {"x", "y", "facing", "inventory": [...], "step", 
 - known_objects: last seen state of everything you have ever seen (it may be outdated).
 - walls: walls near you. Walls block movement - a move stops right before a wall.
 - facing is in degrees: 0 = +x (right), 90 = +y (down), 180 = left, 270 = up. Moving turns you toward the move.
+- inbox: every message ever delivered to you (oldest first); each has "step" (when it arrived) and "from".
 - memory: your own notes. Add a "memory": {...} key to any returned action to replace it for the next step
   (your code runs fresh every step, so this is the only way to remember plans or explored places).
 - Interactions (pick_up, use_key, press_button, pull_lever) only work within about 15 units."""
@@ -289,26 +290,6 @@ def decide(observation):
     dy = -5 if y > 0 else 5
     return {{"type": "move", "dx": dx, "dy": dy}}
 ```"""
-
-_FORBIDDEN_CALL_NAMES = {"exec", "eval", "open", "__import__", "compile", "input"}
-
-
-def _check_code_safety(code: str) -> None:
-    tree = ast.parse(code)
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            raise ValueError("generated code may not use import statements")
-        if isinstance(node, ast.Name) and node.id.startswith("__"):
-            raise ValueError("generated code may not reference dunder names")
-        # Blocks attribute-access escapes too (e.g. ({}).__class__.__bases__),
-        # not just bare dunder names (e.g. __builtins__) - a bare-name-only
-        # check would let object-introspection chains slip through unnoticed.
-        if isinstance(node, ast.Attribute) and node.attr.startswith("__"):
-            raise ValueError("generated code may not reference dunder attributes")
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            if node.func.id in _FORBIDDEN_CALL_NAMES:
-                raise ValueError(f"generated code may not call {node.func.id}()")
-
 
 def _extract_code(text: str) -> str:
     if "```" not in text:

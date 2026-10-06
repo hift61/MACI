@@ -231,7 +231,9 @@ def judge_turn(client, judge_model: str, record: dict, agent_record: dict, log=N
         log(f"[maci_judge] WARNING: judge reasoning still truncated after retries (finish_reason={finish_reason!r}); returning NaN.")
         return float("nan")
 
-    numbers = re.findall(r"-?\d+(?:\.\d+)?", answer_only or text)
+    # "7/10", "6 out of 10"의 분모 10을 점수로 읽지 않도록 먼저 제거
+    answer = re.sub(r"(?i)\s*(?:/|out of)\s*10(?:\.0+)?\b", "", answer_only or text)
+    numbers = re.findall(r"-?\d+(?:\.\d+)?", answer)
     if not numbers:
         return float("nan")
     return max(0.0, min(10.0, float(numbers[-1])))
@@ -326,7 +328,9 @@ def main():
 
     if args.set_baseline:
         actor_matches = any(args.baseline_model in m for m in result["actor_models"])
-        if not actor_matches and not args.force_baseline:
+        if result["raw_avg"] != result["raw_avg"]:  # NaN: 채점된 턴이 하나도 없음
+            print("[REFUSED] --set-baseline: no turn was scored (all NaN), so there is no baseline to save.")
+        elif not actor_matches and not args.force_baseline:
             print(
                 f"[REFUSED] --set-baseline expects a manifest actually run with {args.baseline_model}, "
                 f"but this manifest's actor model(s) were {result['actor_models']}. "

@@ -520,8 +520,10 @@ class Environment:
     # ---- Messaging ----
 
     def _deliver(self, receiver_id: str, message: dict) -> None:
-        if receiver_id not in self.agents:  # 존재하지 않는/누락된 receiver_id는 조용히 무시
+        if not isinstance(receiver_id, str) or receiver_id not in self.agents:  # 존재하지 않는/누락된 receiver_id는 조용히 무시
             return
+        # inbox는 비워지지 않고 계속 쌓이므로, 새 메시지와 예전 메시지를 구분할 수 있게 전달 시점을 붙임
+        message["step"] = self.step_count
         self.agents[receiver_id].inbox.append(message)
         self.message_log.record(self.step_count, receiver_id, message)
 
@@ -737,6 +739,11 @@ class Environment:
         agent = self.agents[agent_id]
         observation = self.get_observation(agent_id)
         action = self._enforce_rules(agent, observation, action)
+        if not self._is_well_formed(action):
+            # LLM이 짠 코드가 {"dx": "5"}나 {"object_id": [...]}를 반환하면 아래 처리에서
+            # TypeError로 회차 전체가 죽거나 NaN 좌표가 생기므로, 그 에이전트의 이번 행동만 무효 처리
+            self._log("invalid_action", [agent_id], action=action)
+            return {"type": "noop"}
         action_type = action.get("type", "noop")
 
         if action_type == "move":
@@ -769,6 +776,19 @@ class Environment:
             self.issue_command(agent_id, action.get("receiver_id"), action.get("command"))
 
         return action
+
+    # 숫자 필드는 유한한 실수(bool 제외), id 필드는 문자열(또는 생략)이어야 함
+    _NUMBER_FIELDS = ("dx", "dy", "facing")
+    _ID_FIELDS = ("object_id", "key_id", "button_id", "lever_id", "receiver_id")
+
+    def _is_well_formed(self, action) -> bool:
+        if not isinstance(action, dict):
+            return False
+        for key in self._NUMBER_FIELDS:
+            value = action.get(key, 0)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                return False
+        return all(isinstance(action.get(key), (str, type(None))) for key in self._ID_FIELDS)
 
     # Run one simulation tick: pressure plates update first (based on where
     # agents ended up last tick), then every agent observes, decides, and acts

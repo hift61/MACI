@@ -166,8 +166,13 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
             if record["cleared"]:
                 print(f"\nSUCCESS at step {step}: all objectives achieved.")
                 break
-            # trap이 발동해 문이 영구 봉인되면 문 objective는 더 이상 달성 불가 - 남은 step을 낭비하지 않음
-            if env.failure is not None:
+            # trap이 발동해 문이 영구 봉인되면 그 문의 objective는 더 이상 달성 불가 - 남은 step을 낭비하지 않음.
+            # 봉인된 문이 이미 열린 적 있거나 objective와 무관하면 아직 클리어 가능하므로 계속 진행
+            if env.failure is not None and any(
+                objective.get("door_id") in env.failure["sealed_doors"]
+                and clear_step(env.event_log.entries, [objective]) is None
+                for objective in objectives
+            ):
                 print(f"\nFAILED at step {step}: trap '{env.failure['object_id']}' triggered by "
                       f"{env.failure['agent_id']} sealed {env.failure['sealed_doors']}.")
                 break
