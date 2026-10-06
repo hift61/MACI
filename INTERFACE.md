@@ -7,10 +7,12 @@ This document defines the functions shared between modules, including their para
 위치와 방향은 float 월드 좌표/각도다. 렌더링 픽셀로 반올림하는 것은 화면에 그릴 때만 하며, 시뮬레이션 상태에는 소수가 유지된다. 맵 크기와 상호작용 거리의 단위/스케일은 기존과 동일하다.
 
 - `{"type": "move_forward", "distance": 2.5}`: 현재 facing을 유지하면서 2.5만큼 전진. distance는 필수이며 유한한 0 이상의 숫자(bool 제외). 잘못된 action은 invalid_action 이벤트와 noop으로 처리한다.
-- `{"type": "turn", "facing": 37.5}`: 절대 방향을 소수 각도로 지정. 0=오른쪽, 90=아래, 180=왼쪽, 270=위.
-- 기존 `move(dx, dy)`도 유지하며 소수 이동량을 허용한다. move는 이동 방향으로 facing을 바꾼다.
+- `{"type": "turn", "angle": 37.5}`: 몸을 제자리에서 현재 방향 기준 37.5° 시계 방향으로 회전. 음수는 반시계 방향. 위치는 그대로이며 heading과 시야가 함께 바뀐다. 다음 행동에서 전진한다.
+- `{"type": "turn", "facing": 37.5}`도 절대 방향 지정용으로 지원한다. angle/facing 중 정확히 하나만 제공한다. 0=오른쪽, 90=아래, 180=왼쪽, 270=위.
+- `move(dx, dy)`는 제거되었으며 invalid_action과 noop으로 처리된다. 옆/뒤로 이동할 수 없고 원하는 방향으로 회전 후 전진해야 한다. TOOLS의 turn은 상대 회전 angle을 사용한다.
 - `Environment.move_forward(agent_id: str, distance: float) -> None`: 위 전진 명령의 환경 API. 잘못된 직접 API 인자는 ValueError.
-- `Environment.move_agent(agent_id, dx, dy, *, preserve_facing=False)`: 이동 제한·협력 조건·충돌을 적용하고 last_move 기록. move_forward는 preserve_facing=True로 호출한다.
+- `Environment._move_agent(agent_id, dx, dy)`: move_forward만 호출하는 내부 물리 처리. 이동 제한·협력 조건·충돌을 적용하고 last_move를 기록하며 facing을 변경하지 않는다.
+- `Environment.rotate_agent(agent_id, angle)`: 상대 회전. 유한한 숫자(bool 제외)를 받아 facing을 0~360°로 정규화한다.
 - `Agent.heading`: facing의 단위 방향 벡터 `(dx, dy)`.
 - `Agent.spatial_state() -> dict`: `{x, y, facing, heading: {x, y}, last_move}`의 복사본. observation.self와 benchmark agents[].spatial_state에 반영한다.
 - observation.self에 `max_move` 추가(기본 20, None은 제한 없음). 기존 x/y/facing/inventory/step/map_width/map_height는 유지한다.
@@ -257,19 +259,19 @@ python -m mapgen.editor [--load PATH] [--seed N] [--width W] [--height H] [--out
 
 - 조작 (편집 모드)
 
-도구 키: V 선택/드래그 이동, 1 벽(드래그), 2 문, 3 열쇠, 4 버튼, 5 레버, 6 압력판, 7 일반 물품, 8 협동 물품, 9 함정 물품, 0 포탈(입구→출구 두 번 클릭), C 단서(배치 후 내용 입력), A 에이전트, L 연결(장치→문, 포탈→목적지), G 목표 지정/해제, H 숨김(문/단서)·위장(함정), T 단서 내용 수정. 우클릭: 진행 중인 작업 취소, 없으면 삭제. 휠: 에이전트 방향 45도 회전. Ctrl+S 저장(검증 error가 있으면 거부), P 테스트 플레이, Esc 선택 도구. 좌표는 5 단위로 스냅. 사이드바에 도구/검증 결과(error 빨강, warning 노랑)/메시지 표시
+도구 키: V 선택/드래그 이동, 1 벽(드래그), 2 문, 3 열쇠, 4 버튼, 5 레버, 6 압력판, 7 일반 물품, 8 협동 물품, 9 함정 물품, 0 포탈(입구→출구 두 번 클릭), C 단서(배치 후 내용 입력), A 에이전트, L 연결(장치→문, 포탈→목적지), G 목표 지정/해제, H 숨김(문/단서)·위장(함정), T 단서 내용 수정. 우클릭: 진행 중인 작업 취소, 없으면 삭제. 휠: 몸 회전 15도(Shift는 1.5도). Ctrl+S 저장(검증 error가 있으면 거부), P 테스트 플레이, Esc 선택 도구. 판의 격자와 좌표 스냅 없이 소수 월드 좌표로 자유 배치/드래그. 사이드바에 도구/검증 결과(error 빨강, warning 노랑)/메시지 표시
 
 - 조작 (테스트 플레이 모드, P로 전환)
 
-현재 맵을 finalize() → builder.build_environment()로 실제 Environment로 만들어 직접 조작 (Environment는 이때만 import). 방향키/WASD 이동(max_move만큼), Q/E 45도 회전, Space 상호작용(가까운 것부터 열쇠 사용 → 레버/버튼 → 줍기), X 마지막 물품 내려놓기, . 대기, Tab 조작할 에이전트 전환, P/Esc 편집으로 복귀. 키 입력 하나마다 env.step() 한 번 (조작하지 않는 에이전트는 대기). 사이드바에 step, 인벤토리, 목표별 달성 여부, 함정 실패, 최근 이벤트 표시. 현재 에이전트의 시야에 보이는 물체는 흰 테두리로 표시
+현재 맵을 finalize() → builder.build_environment()로 실제 Environment로 만들어 직접 조작 (Environment는 이때만 import). W/↑ 2.5단위 전진, A/D·←/→·Q/E 15도 몸 회전, Shift로 0.25단위 전진/1.5도 회전, S/↓ 후진 없음, Space 상호작용(가까운 것부터 열쇠 사용 → 레버/버튼 → 줍기), X 마지막 물품 내려놓기, . 대기, Tab 조작할 에이전트 전환, P/Esc 편집으로 복귀. 키 입력 하나마다 env.step() 한 번(누르고 있으면 200ms 후 30ms 간격 반복) (조작하지 않는 에이전트는 대기). 사이드바에 소수 위치/facing/heading, step, 인벤토리, 목표별 달성 여부, 함정 실패, 최근 이벤트 표시. 현재 에이전트의 시야에 보이는 물체는 흰 테두리로 표시
 
 - 상수/클래스/함수
 
-MAP_VIEW(맵 영역 최대 픽셀 720), PAD(20), SIDEBAR_W(360), SNAP(5), VIEW_RADIUS/VIEW_ANGLE(미리보기 시야 100/90), COLORS(색상표), TOOL_KEYS(키 -> 도구), TOOL_HELP(사이드바 도구 설명)
+MAP_VIEW(맵 영역 최대 픽셀 720), PAD(20), SIDEBAR_W(360), FORWARD_STEP(2.5)/TURN_STEP(15.0), FINE_FORWARD_STEP(0.25)/FINE_TURN_STEP(1.5), VIEW_RADIUS/VIEW_ANGLE(미리보기 시야 100/90), COLORS(색상표), TOOL_KEYS(키 -> 도구), TOOL_HELP(사이드바 도구 설명)
 
 ManualPolicy(Class) : 테스트 플레이에서 키보드로 고른 행동(next_action)을 한 번만 내보내고 이후엔 noop을 반환하는 정책
 
-EditorApp(Class) : __init__(model: EditorModel, save_path: str)으로 창 생성. run()이 이벤트 루프, handle(event)가 모드별(단서 입력/테스트 플레이/편집) 입력 처리, draw()가 그리기. to_screen/to_map은 맵 좌표 <-> 화면 좌표 변환(to_map은 스냅), save()는 검증 후 저장, start_play()는 테스트 플레이 시작, _smart_interact(env, agent)는 Space 상호작용 결정
+EditorApp(Class) : __init__(model: EditorModel, save_path: str)으로 창 생성. run()이 이벤트 루프, handle(event)가 모드별(단서 입력/테스트 플레이/편집) 입력 처리, draw()가 그리기. to_screen/to_map은 맵 좌표 <-> 화면 좌표 변환(to_map은 반올림/스냅 없이 소수 좌표 반환), save()는 검증 후 저장, start_play()는 테스트 플레이 시작, _smart_interact(env, agent)는 Space 상호작용 결정
 
 main(argv=None) -> None : 명령행 인자를 읽어 에디터 실행
 
@@ -305,7 +307,7 @@ configure_map(self) -> None : 맵의 크기 입력(정수형)
 
 ## tools.py
 
-OpenAI function-calling(tool) 스키마 목록(TOOLS). Environment.apply_action()이 처리하는 action type(move/move_forward/turn/pick_up/drop/use_key/press_button/pull_lever/send_message/share_belief/request_info/confirm/claim_role/claim_task/noop)과 1:1로 대응됨. apply_action에 새 action type을 추가/변경하면 여기도 함께 갱신해야 함. policy.py의 LLMPolicy가 이 목록을 그대로 사용.
+OpenAI function-calling(tool) 스키마 목록(TOOLS). Environment.apply_action()이 처리하는 action type(move_forward/turn/pick_up/drop/use_key/press_button/pull_lever/send_message/share_belief/request_info/confirm/claim_role/claim_task/noop)과 1:1로 대응됨. apply_action에 새 action type을 추가/변경하면 여기도 함께 갱신해야 함. policy.py의 LLMPolicy가 이 목록을 그대로 사용.
 
 - 변수
 
@@ -347,7 +349,7 @@ self.step_size : 한 번에 이동할 수 있는 최대 거리
 
 __init__(self, step_size: float = 5.0) -> None : 이동 폭 설정
 
-decide(self, observation: dict) -> dict : -step_size ~ step_size 범위의 무작위 dx, dy로 {"type": "move", "dx":.., "dy":..} 반환
+decide(self, observation: dict) -> dict : 무작위 turn(angle) 또는 move_forward(distance)를 반환. 전진 거리는 0~step_size 소수.
 
 ### ToolUsePolicy(Class, Policy 상속)
 
@@ -369,7 +371,7 @@ _distance(self, x: float, y: float, obj: dict) -> float : 현재 좌표에서 ob
 
 _nearest(self, x: float, y: float, objs: list) -> dict | None : objs 중 가장 가까운 것을 반환 (없으면 None)
 
-_move_toward(self, x: float, y: float, obj: dict) -> dict : obj를 향해 이동하는 move action 생성. obj가 문이면 문의 radius(+여유 1.0)를 고려해 그 반경 밖에서 멈추도록 stop_distance를 계산 (그렇지 않으면 문의 차단 반경에 막혀 제자리에서 멈추는 상태에 빠질 수 있음)
+_move_toward(self, self_state: dict, obj: dict) -> dict : obj 방향과 facing이 다르면 turn(angle)으로 먼저 몸을 회전하고, 맞으면 move_forward(distance)로 전진. obj가 문이면 문의 radius(+여유 1.0)를 고려해 그 반경 밖에서 멈추도록 stop_distance를 계산 (그렇지 않으면 문의 차단 반경에 막혀 제자리에서 멈추는 상태에 빠질 수 있음)
 
 ### LLMPolicy(Class, Policy 상속)
 
@@ -423,7 +425,7 @@ self.generated_code : submit_policy_code로 제출되어 accepted된 decide() �
 
 self.last_error : 가장 최근 decide() 호출에서 발생한 예외의 문자열 (없으면 None). noop으로 조용히 대체되는 실패의 원인을 밖에서 확인할 수 있게 함
 
-self.stall_limit : 위치가 이 step 수만큼 연속으로 그대로면 코드를 재생성 (기본 3)
+self.stall_limit : 위치와 방향이 이 step 수만큼 연속으로 그대로면 코드를 재생성 (기본 3)
 
 self.max_replans : 회차당 재생성 최대 횟수 (기본 10). 다 쓰면 기존 코드를 계속 사용
 
@@ -434,8 +436,8 @@ self.last_replan : 이번 decide() 호출에서 재생성했으면 그 기록 {"
 - 재생성(replan) 조건
 
 캐시된 코드는 같은 관찰에 같은 행동을 내므로, 막히면 같은 자리에서 영원히 반복됨. 그래서 다음 경우 LLM에게 이유/이전 코드/현재 관찰(CODE_REPLAN_PROMPT)을 보여주고 코드를 다시 짜게 함
-  * 즉시(stuck): decide() 실행 오류(예외/타임아웃/잘못된 action) - 이때는 같은 step 안에서 새 코드로 바로 다시 실행. 또는 move(dx/dy가 0이 아님)를 했는데 위치가 그대로(벽/잠긴 문/coop 운반에 막힘)
-  * 누적(정지): stall_limit step 연속으로 위치가 그대로. 단 known_objects의 압력판 위에 서 있으면 의도된 대기이므로 제외
+  * 즉시(stuck): decide() 실행 오류(예외/타임아웃/잘못된 action) - 이때는 같은 step 안에서 새 코드로 바로 다시 실행. 또는 move_forward(distance > 0)를 했는데 위치가 그대로(벽/잠긴 문/coop 운반에 막힘)
+  * 누적(정지): stall_limit step 연속으로 위치와 방향이 그대로. 실제 몸 회전은 진행으로 취급한다. 단 known_objects의 압력판 위에 서 있으면 의도된 대기이므로 제외
 
 - 함수
 
@@ -631,7 +633,7 @@ enforce(self, agent, observation: dict, action: dict) -> dict : observation["inb
 
 ## physics.py
 
-에이전트 이동을 실제로 어떻게 처리할지(경계/충돌 계산)를 결정하는 교체 가능한 인터페이스. Environment.move_agent()가 좌표 계산을 직접 하지 않고 이 인터페이스에 위임하므로, 팀원이 정교한 물리 엔진을 만들면 이 클래스를 상속한 구현체로 통째로 교체해 Environment(physics=...)에 넣기만 하면 됨 (agent/policy/rule/tools는 그대로 유지).
+에이전트 이동을 실제로 어떻게 처리할지(경계/충돌 계산)를 결정하는 교체 가능한 인터페이스. Environment.move_forward()가 좌표 계산을 직접 하지 않고 이 인터페이스에 위임하므로, 팀원이 정교한 물리 엔진을 만들면 이 클래스를 상속한 구현체로 통째로 교체해 Environment(physics=...)에 넣기만 하면 됨 (agent/policy/rule/tools는 그대로 유지).
 
 ### PhysicsEngine(Class)
 
@@ -667,7 +669,7 @@ self.x : 에이전트의 x좌표 (연속값)
 
 self.y : 에이전트의 y좌표 (연속값)
 
-self.facing : 에이전트가 바라보는 방향 (도, 0~360). 0=오른쪽(+x), 90=아래(+y), 180=왼쪽, 270=위. move 시 이동 방향으로 자동 갱신되고, turn action으로 제자리에서 바꿀 수 있음 (Environment.move_agent/turn_agent)
+self.facing : 에이전트가 바라보는 방향 (도, 0~360). 0=오른쪽(+x), 90=아래(+y), 180=왼쪽, 270=위. turn action으로 몸과 시야가 함께 회전하며, move_forward는 방향을 유지 (Environment.rotate_agent/turn_agent)
 
 self.view_radius : 에이전트의 시야 반경
 
@@ -904,7 +906,7 @@ _enforce_rules(self, agent: Agent, observation: dict, action: dict) -> dict : �
 
 turn_agent(self, agent_id: str, facing: float) -> None : 제자리에서 바라보는 방향만 facing(도, 360으로 나눈 나머지로 정규화)으로 바꿈. 시야가 facing 중심의 부채꼴이므로 주변을 둘러볼 때 사용. apply_action의 {"type": "turn", "facing": ..}이 호출함
 
-move_agent(self, agent_id: str, dx: float, dy: float) -> None : 에이전트 이동을 self.physics.resolve_move()에 위임하고 그 결과 좌표를 적용 (실제 경계/충돌 계산은 physics.py 참고). coop 물품을 들고 있는데 주변(interact_radius)에 required_agents명(본인 포함)이 없으면 이동하지 않음. 이동 후 _check_portals()로 포탈 진입을 판정. coop 때문에 막히면 move_blocked 이벤트 기록. dx/dy가 0이 아니면 이동 방향(atan2(dy, dx))으로 facing을 먼저 갱신 - 막혀서 실제로 못 움직여도 그 방향을 돌아봄. 요청한 (dx, dy)의 길이가 max_move보다 크면 같은 방향으로 max_move만큼으로 줄인 뒤 처리
+_move_agent(self, agent_id: str, dx: float, dy: float) -> None : move_forward가 호출하는 내부 물리 처리. max_move 제한·협동 운반 조건·충돌·포탈을 적용하고 last_move를 기록한다. facing을 바꾸지 않으며 정책은 직접 호출할 수 없다.
 
 add_object(self, object_id: str, x: float, y: float, object_type: str = "item") -> None : 환경에 일반 상호작용 물체 배치 (category가 없으므로 normal 물품으로 취급)
 
@@ -986,7 +988,7 @@ _record_sightings(self, agent_id: str, observation: dict) -> None : observation�
 
 _disguise(self, obj: dict) -> dict : obj의 deep copy 반환. disguised=True인 trap이면 category를 "normal"로 바꾸고 seals/disguised 필드를 제거
 
-apply_action(self, agent_id: str, action: dict, observation: dict = None) -> dict : action을 _enforce_rules()로 먼저 강제 검사/교체한 뒤(ObeyCommandRule이 걸려 있으면 여기서 명령으로 치환됨. 규칙 검사에는 observation을 쓰며, 생략하면 지금 상태로 새로 만듦 - step()은 결정에 쓴 step 시작 시점의 관찰을 넘김), _is_well_formed()로 필드 타입(dx/dy/facing은 유한한 실수, object_id 등 id는 문자열)을 확인해 잘못됐으면 invalid_action 이벤트를 남기고 noop으로 처리, 아니면 move/turn/pick_up/drop/use_key/press_button/pull_lever/send_message/share_belief/request_info/confirm/claim_role/claim_task/issue_command 중 해당 처리로 라우팅. step() 없이 직접 호출해도 규칙은 항상 적용됨. 강제 적용 후 실제로 실행된 action을 반환(step()이 이 값을 DecisionLog에 final_action으로 기록)
+apply_action(self, agent_id: str, action: dict, observation: dict = None) -> dict : action을 _enforce_rules()로 먼저 강제 검사/교체한 뒤(ObeyCommandRule이 걸려 있으면 여기서 명령으로 치환됨. 규칙 검사에는 observation을 쓰며, 생략하면 지금 상태로 새로 만듦 - step()은 결정에 쓴 step 시작 시점의 관찰을 넘김), _is_well_formed()로 필드 타입(distance/angle/facing은 유한한 실수, object_id 등 id는 문자열)을 확인해 잘못됐으면 invalid_action 이벤트를 남기고 noop으로 처리, 아니면 move_forward/turn/pick_up/drop/use_key/press_button/pull_lever/send_message/share_belief/request_info/confirm/claim_role/claim_task/issue_command 중 해당 처리로 라우팅. step() 없이 직접 호출해도 규칙은 항상 적용됨. 강제 적용 후 실제로 실행된 action을 반환(step()이 이 값을 DecisionLog에 final_action으로 기록) move(dx, dy)는 거부한다. turn은 angle(상대 회전) 또는 facing(절대 방향) 중 하나가 필수다.
 
 step(self) -> None : 한 틱을 동시 실행으로 진행. step_count를 1 증가시키고 _update_movers()로 움직이는 오브젝트를 갱신한 뒤, (1) 모든 에이전트의 관찰을 같은 시점에 만들고(_record_sightings()로 목격 이벤트 기록) (2) 각 policy의 decide()를 스레드로 병렬 호출해 행동을 정하고 (3) 그 행동들을 apply_action(결정에 쓴 관찰을 넘김)으로 적용하고(_store_memory()로 memory 저장, decision_log에 observation/action/final_action 기록) (4) 마지막에 _update_pressure_plates()로 압력판을 판정. 따라서 이번 step에 보낸 메시지는 상대가 다음 step 관찰에서 처음 보고, 압력판은 올라선 그 step에 바로 문을 엶. 같은 물건을 동시에 집는 것처럼 적용 순서가 결과를 가르는 충돌이 있어, 적용 순서를 step마다 한 칸씩 돌림(step_count % 에이전트 수만큼 회전 - 결정적이라 재현 가능)
 

@@ -108,9 +108,16 @@ by the simulation. To move 2.5 units in the current facing direction, return:
 {"type": "move_forward", "distance": 2.5}
 ```
 
-Use `{"type": "turn", "facing": 37.5}` to aim first. Facing is in degrees:
-0 points right, 90 down, 180 left, and 270 up. The existing `move(dx, dy)` action
-also accepts fractions and continues to turn toward its displacement.
+Use `{"type": "turn", "angle": 37.5}` to rotate the body 37.5 degrees clockwise
+in place, then move forward on the next step. Negative angles rotate
+counterclockwise. Facing is in degrees: 0 points right, 90 down, 180 left, and
+270 up. Forward motion preserves facing; rotation changes both heading and the
+view cone without changing position. `turn(facing=...)` remains available for
+absolute orientation; provide exactly one of `angle` or `facing`.
+
+`move(dx, dy)` is removed and rejected as an invalid action, including commands
+from another agent. Agents cannot strafe or walk backward. To move toward a
+target, first rotate by `(target_facing - facing + 180) % 360 - 180`, then advance.
 
 The observation's `self` includes `x`, `y`, `facing`, a unit `heading` vector,
 `max_move` (default 20; `None` means unlimited), and `last_move`:
@@ -135,6 +142,13 @@ stop movement just before contact, including obstacles crossed mid-move.
 The same spatial state is saved under each agent's `spatial_state` in the run log.
 Movement still advances once per simulation step; distances are not velocities
 and this interface does not introduce elapsed-time physics or rendering animation.
+
+The pygame map editor has no visible grid or placement snapping. Dragging and
+placing entities keeps fractional world coordinates. In test play, hold W/Up
+to advance 2.5 units per action; A/Left/Q and D/Right/E rotate the body by 15
+degrees per action. Hold Shift for 0.25-unit forward steps and 1.5-degree turns.
+S/Down does not move backward. The mouse wheel rotates agents in edit mode with
+the same angular increments. The sidebar shows position, facing, and heading.
 
 Run the movement regression checks without external API calls:
 

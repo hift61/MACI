@@ -2,7 +2,7 @@ import math
 
 
 # 에이전트 이동을 실제로 어떻게 처리할지 결정하는 추상 인터페이스.
-# Environment.move_agent()는 이동 계산을 직접 하지 않고 이 인터페이스에 위임하므로,
+# Environment.move_forward()는 내부 _move_agent()를 통해 이 인터페이스에 위임하므로,
 # 나중에 팀원이 정교한 물리 엔진을 만들면 이 클래스를 상속한 구현체로 통째로 교체해
 # Environment.__init__(physics=...)에 넣기만 하면 됨 (agent/policy/rule/tools 쪽은
 # 그대로 두고 물리 계산만 바꿔 끼우는 구조).

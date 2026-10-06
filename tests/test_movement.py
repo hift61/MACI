@@ -8,9 +8,10 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "enviroment"))
 
 from enviroment import Environment
-from policy import CodePolicy
+from policy import CodePolicy, ToolUsePolicy, RandomPolicy, CODE_POLICY_SYSTEM_PROMPT
 from policy_sandbox import run_decide_code
-from rule import ForbidActionRule
+from rule import ForbidActionRule, ObeyCommandRule
+from tools import TOOLS
 
 
 class MovementTests(unittest.TestCase):
@@ -39,13 +40,75 @@ class MovementTests(unittest.TestCase):
             self.forward(env, 0.01)
         self.assertAlmostEqual(env.agents["A"].x, 11.0)
 
-    def test_fractional_turn_and_legacy_move(self):
+    def test_fractional_rotation_and_absolute_facing(self):
         env = self.make_env()
         env.apply_action("A", {"type": "turn", "facing": 405.5})
         self.assertEqual(env.agents["A"].facing, 45.5)
-        env.apply_action("A", {"type": "move", "dx": 0.25, "dy": -0.5})
-        self.assertEqual((env.agents["A"].x, env.agents["A"].y), (10.25, 9.5))
-        self.assertAlmostEqual(env.agents["A"].facing, math.degrees(math.atan2(-0.5, 0.25)) % 360)
+        env.apply_action("A", {"type": "turn", "angle": -46.75})
+        agent = env.agents["A"]
+        self.assertEqual(agent.facing, 358.75)
+        self.assertEqual((agent.x, agent.y), (10, 10))
+        self.forward(env, 0.25)
+        self.assertAlmostEqual(agent.x, 10 + 0.25 * math.cos(math.radians(358.75)))
+        self.assertAlmostEqual(agent.y, 10 + 0.25 * math.sin(math.radians(358.75)))
+        self.assertEqual(agent.facing, 358.75)
+
+    def test_cartesian_motion_is_rejected_including_commands(self):
+        env = self.make_env(facing=22.5)
+        action = {"type": "move", "dx": 0.25, "dy": -0.5}
+        self.assertEqual(env.apply_action("A", action), {"type": "noop"})
+        env.add_agent_rule("A", ObeyCommandRule("commander"))
+        observation = env.get_observation("A")
+        observation["inbox"] = [{"type": "command", "from": "commander", "command": action}]
+        self.assertEqual(env.apply_action("A", {"type": "noop"}, observation), {"type": "noop"})
+        self.assertEqual((env.agents["A"].x, env.agents["A"].y, env.agents["A"].facing), (10, 10, 22.5))
+        self.assertIsNone(env.agents["A"].last_move)
+
+    def test_invalid_rotation_keeps_pose(self):
+        for action in ({"type": "turn"}, {"type": "turn", "angle": 1, "facing": 2},
+                       *({"type": "turn", "angle": v} for v in (True, None, "1.5", float("nan"), float("inf")))):
+            with self.subTest(action=action):
+                env = self.make_env(facing=22.5)
+                self.assertEqual(env.apply_action("A", action), {"type": "noop"})
+                self.assertEqual(env.agents["A"].facing, 22.5)
+
+    def test_rotation_changes_view_and_heading_without_translation(self):
+        env = self.make_env()
+        env.add_object("target", 10, 50)
+        self.assertFalse(env.get_observation("A")["visible_objects"])
+        env.apply_action("A", {"type": "turn", "angle": 90.0})
+        observation = env.get_observation("A")
+        self.assertEqual(observation["self"]["heading"], {"x": 0.0, "y": 1.0})
+        self.assertEqual(observation["visible_objects"][0]["object_id"], "target")
+        self.assertEqual((observation["self"]["x"], observation["self"]["y"]), (10, 10))
+
+    def test_tool_policy_rotates_before_forward_and_reaches_target(self):
+        env = self.make_env(facing=0)
+        policy = ToolUsePolicy(step_size=2.75)
+        # Behind the agent but remembered as a target: the steering helper must turn first.
+        target = {"type": "key", "x": 10, "y": 40}
+        action = policy._move_toward(env.get_observation("A")["self"], target)
+        self.assertEqual(action, {"type": "turn", "angle": 90.0})
+        env.apply_action("A", action)
+        env.add_key("key", 10, 40, "gate")
+        env.agents["A"].set_policy(policy)
+        for _ in range(8):
+            env.step()
+        self.assertEqual(env.agents["A"].inventory[0]["object_id"], "key")
+        self.assertTrue(all(d["final_action"]["type"] != "move" for d in env.decision_log.entries))
+
+    def test_model_tools_and_random_policy_only_offer_rotation_and_forward(self):
+        functions = {t["function"]["name"]: t["function"] for t in TOOLS}
+        self.assertNotIn("move", functions)
+        self.assertEqual(functions["turn"]["parameters"]["required"], ["angle"])
+        self.assertIn("ONLY movement action is move_forward", CODE_POLICY_SYSTEM_PROMPT)
+        policy = RandomPolicy(step_size=0.25)
+        for _ in range(100):
+            action = policy.decide(self.make_env().get_observation("A"))
+            self.assertIn(action["type"], ("turn", "move_forward"))
+            if action["type"] == "move_forward":
+                self.assertGreaterEqual(action["distance"], 0)
+                self.assertLessEqual(action["distance"], 0.25)
 
     def test_distance_limit_is_distinct_from_collision(self):
         env = self.make_env(max_move=1.25)
@@ -145,13 +208,40 @@ class MovementTests(unittest.TestCase):
         env.apply_action("A", result["action"])
         self.assertEqual(env.agents["A"].x, 10.375)
 
+    def test_generated_controller_rotates_then_advances_on_next_step(self):
+        env = self.make_env()
+        code = '''def decide(observation):
+    angle = (37.5 - observation["self"]["facing"] + 180) % 360 - 180
+    if abs(angle) > 0.001:
+        return {"type": "turn", "angle": angle}
+    return {"type": "move_forward", "distance": 0.375}
+'''
+        for expected in ("turn", "move_forward"):
+            result = run_decide_code(code, env.get_observation("A"))
+            self.assertIsNone(result["error"])
+            self.assertEqual(result["action"]["type"], expected)
+            env.apply_action("A", result["action"])
+        self.assertEqual(env.agents["A"].facing, 37.5)
+        self.assertAlmostEqual(env.agents["A"].x, 10 + 0.375 * math.cos(math.radians(37.5)))
+
     def test_code_policy_detects_blocked_forward_immediately(self):
         policy = CodePolicy.__new__(CodePolicy)
         policy._last_pos = (10, 10)
+        policy._last_facing = 0
         policy._last_action = {"type": "move_forward", "distance": 0.25}
         policy._stall_count = 0
         policy.stall_limit = 3
         self.assertIn("blocked", policy._stuck_reason(self.make_env().get_observation("A")))
+
+    def test_code_policy_treats_rotation_as_progress(self):
+        policy = CodePolicy.__new__(CodePolicy)
+        policy._last_pos = (10, 10)
+        policy._last_facing = 0
+        policy._last_action = {"type": "turn", "angle": 1.5}
+        policy._stall_count = 2
+        policy.stall_limit = 3
+        self.assertIsNone(policy._stuck_reason(self.make_env(facing=1.5).get_observation("A")))
+        self.assertEqual(policy._stall_count, 0)
 
     def test_step_records_fractional_action_and_observation(self):
         env = self.make_env()

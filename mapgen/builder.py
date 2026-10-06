@@ -51,7 +51,10 @@ def task_descriptions(spec: MapSpec) -> dict[str, str]:
             f"You are agent {agent_id} in a {spec.width}x{spec.height} area. Other agents: {others}. "
             f"The team clears the map when ALL of these goals have been achieved:\n{goals}\n"
             f"You only see objects inside your view cone (90 degrees around your facing, about 100 units "
-            f"far), and walls block sight. Moving turns you toward the move direction; use 'turn' to look "
-            f"around. You cannot see other agents - use send_message to share what you find and coordinate."
+            f"far), and walls block sight. You can only move forward along your body's heading with "
+            f"move_forward(distance); fractional distances are allowed. To choose a new direction, "
+            f"turn(angle) rotates your body in place (degrees; positive clockwise, negative counterclockwise), "
+            f"then move forward on a later step. Forward motion preserves heading. "
+            f"You cannot see other agents - use send_message to share what you find and coordinate."
         )
     return descriptions
