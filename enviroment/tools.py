@@ -5,8 +5,22 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "move_forward",
+            "description": "현재 바라보는 방향(facing)을 유지하며 distance만큼 전진한다. 좌표/거리는 연속적인 월드 단위이며 0.25, 2.5 같은 소수를 지원한다. self.max_move를 넘으면 그 거리로 제한한다(기본 20). 벽/잠긴 문 앞에서 멈춘다. self.last_move로 실제 이동 거리와 막힘 여부를 확인한다",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "distance": {"type": "number", "minimum": 0, "description": "앞으로 이동할 거리(0 이상, 소수 허용)"}
+                },
+                "required": ["distance"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "move",
-            "description": "현재 위치에서 (dx, dy)만큼 이동한다(한 번에 최대 20, 더 크면 같은 방향으로 20만 이동). 벽에 닿으면 그 앞에서 멈춘다. 이동하려는 방향으로 바라보는 방향(facing)도 바뀐다",
+            "description": "월드 좌표에서 소수 이동량 (dx, dy)만큼 이동한다(self.max_move로 제한, 기본 20). 벽/잠긴 문 앞에서 멈춘다. 이동 방향으로 facing도 바뀐다. 현재 방향을 유지하며 전진하려면 move_forward를 사용한다",
             "parameters": {
                 "type": "object",
                 "properties": {

@@ -496,6 +496,7 @@ class EditorApp:
         agent = env.agents[current]
         self.text("테스트 플레이", (x, y)); y += line + 4
         self.text(f"step {env.step_count}   조작 중: {current}", (x, y)); y += line
+        self.text(f"위치 ({agent.x:.2f}, {agent.y:.2f})  방향 {agent.facing:.2f}°", (x, y), COLORS["dim"], self.small); y += line
         inv = ", ".join(o["object_id"] for o in agent.inventory) or "없음"
         self.text(f"인벤토리: {inv}", (x, y), COLORS["dim"], self.small); y += line
         self.text("목표:", (x, y)); y += line

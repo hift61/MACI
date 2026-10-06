@@ -98,6 +98,52 @@ MACI focuses on a more detailed question:
 
 ---
 
+## Continuous movement
+
+Agent positions and headings use floating-point world coordinates. Screen pixels
+are only a rendering detail; fractional distances and angles do not get rounded
+by the simulation. To move 2.5 units in the current facing direction, return:
+
+```python
+{"type": "move_forward", "distance": 2.5}
+```
+
+Use `{"type": "turn", "facing": 37.5}` to aim first. Facing is in degrees:
+0 points right, 90 down, 180 left, and 270 up. The existing `move(dx, dy)` action
+also accepts fractions and continues to turn toward its displacement.
+
+The observation's `self` includes `x`, `y`, `facing`, a unit `heading` vector,
+`max_move` (default 20; `None` means unlimited), and `last_move`:
+
+```python
+{
+    "step": 1,
+    "requested_distance": 2.5,
+    "distance": 2.5,
+    "dx": 2.5,
+    "dy": 0.0,
+    "blocked": False,
+    "limited": False,
+}
+```
+
+`last_move` is initially `None` and persists until the next movement action.
+Its distance and displacement exclude portal teleportation. `blocked` means
+collision, a map boundary, or missing cooperative helpers shortened the capped
+move; `limited` means the request exceeded `max_move`. Walls and locked doors
+stop movement just before contact, including obstacles crossed mid-move.
+The same spatial state is saved under each agent's `spatial_state` in the run log.
+Movement still advances once per simulation step; distances are not velocities
+and this interface does not introduce elapsed-time physics or rendering animation.
+
+Run the movement regression checks without external API calls:
+
+```sh
+python3 -m unittest discover -s tests -v
+```
+
+---
+
 ## Repository Access
 
 The following members are authorized to access and modify this repository:

@@ -246,7 +246,8 @@ def _action_schema_docs() -> str:
 
 
 # CodePolicy/LiveCodePolicy 프롬프트에 들어가는 observation 형식 설명 (Environment.get_observation과 맞춰야 함)
-_OBSERVATION_DOC = """{"self": {"x", "y", "facing", "inventory": [...], "step", "map_width", "map_height"},
+_OBSERVATION_DOC = """{"self": {"x", "y", "facing", "heading": {"x", "y"}, "last_move", "max_move",
+ "inventory": [...], "step", "map_width", "map_height"},
  "visible_objects": [...], "known_objects": {object_id: {..., "last_seen_step"}},
  "walls": [[x, y, width, height], ...], "memory": {...}, "inbox": [...]}
 - Every object has "object_id", "type", "x", "y" plus type-specific fields (door: "locked"; key: "unlocks";
@@ -255,7 +256,16 @@ _OBSERVATION_DOC = """{"self": {"x", "y", "facing", "inventory": [...], "step", 
 - visible_objects: what you see right now (view cone around "facing"; walls block sight).
 - known_objects: last seen state of everything you have ever seen (it may be outdated).
 - walls: walls near you. Walls block movement - a move stops right before a wall.
-- facing is in degrees: 0 = +x (right), 90 = +y (down), 180 = left, 270 = up. Moving turns you toward the move.
+- Positions and distances are continuous world units, not integer screen pixels. Fractions such as 0.25 are valid.
+- facing is in degrees: 0 = +x (right), 90 = +y (down), 180 = left, 270 = up. Fractional angles are valid.
+- heading is the unit direction vector {x: cos(facing), y: sin(facing)}.
+- Prefer move_forward(distance) to advance along facing; use turn(facing) to aim first.
+  Legacy move(dx, dy) turns toward its displacement. move_forward preserves facing.
+- max_move is the maximum distance per action (null means unlimited); smaller fractional moves are allowed.
+- last_move is null before any move, otherwise {step, requested_distance, distance, dx, dy, blocked, limited}.
+  distance/dx/dy describe actual movement after collision, excluding portal teleportation.
+  blocked means an obstacle/boundary/helper prevented the full capped move; limited means max_move capped it.
+  It persists through non-movement actions; compare its step to the current step before treating it as recent.
 - inbox: every message ever delivered to you (oldest first); each has "step" (when it arrived) and "from".
 - memory: your own notes. Add a "memory": {...} key to any returned action to replace it for the next step
   (your code runs fresh every step, so this is the only way to remember plans or explored places).
@@ -284,11 +294,7 @@ Rules:
 Example:
 ```python
 def decide(observation):
-    x = observation["self"]["x"]
-    y = observation["self"]["y"]
-    dx = -5 if x > 0 else 5
-    dy = -5 if y > 0 else 5
-    return {{"type": "move", "dx": dx, "dy": dy}}
+    return {{"type": "move_forward", "distance": 2.5}}
 ```"""
 
 def _extract_code(text: str) -> str:
@@ -523,7 +529,13 @@ class CodePolicy(Policy):
         self._stall_count += 1
 
         last = self._last_action or {}
-        if last.get("type") == "move" and (last.get("dx") or last.get("dy")):
+        forward_distance = last.get("distance", 0)
+        attempted_move = (
+            last.get("type") == "move" and (last.get("dx") or last.get("dy"))
+            or last.get("type") == "move_forward"
+            and isinstance(forward_distance, (int, float)) and forward_distance > 0
+        )
+        if attempted_move:
             return f"your last move {last} was blocked - your position {pos} did not change"
         if self._stall_count >= self.stall_limit and not self._on_pressure_plate(observation, pos):
             return f"you have not moved from {pos} for {self._stall_count} steps in a row"

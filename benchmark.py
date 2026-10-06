@@ -146,6 +146,7 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                         "agent": agent_id,
                         "model": model if policy_kind == "code" else policy_kind,
                         "position": [env.agents[agent_id].x, env.agents[agent_id].y],
+                        "spatial_state": env.agents[agent_id].spatial_state(),
                         "generated_code": getattr(policies[agent_id], "generated_code", None),
                         "decision": {
                             "action": decisions_by_agent.get(agent_id, {}).get("action"),

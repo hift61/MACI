@@ -2,6 +2,23 @@
 
 This document defines the functions shared between modules, including their parameters, return values, and expected output formats.
 
+## 연속 좌표와 전진 이동
+
+위치와 방향은 float 월드 좌표/각도다. 렌더링 픽셀로 반올림하는 것은 화면에 그릴 때만 하며, 시뮬레이션 상태에는 소수가 유지된다. 맵 크기와 상호작용 거리의 단위/스케일은 기존과 동일하다.
+
+- `{"type": "move_forward", "distance": 2.5}`: 현재 facing을 유지하면서 2.5만큼 전진. distance는 필수이며 유한한 0 이상의 숫자(bool 제외). 잘못된 action은 invalid_action 이벤트와 noop으로 처리한다.
+- `{"type": "turn", "facing": 37.5}`: 절대 방향을 소수 각도로 지정. 0=오른쪽, 90=아래, 180=왼쪽, 270=위.
+- 기존 `move(dx, dy)`도 유지하며 소수 이동량을 허용한다. move는 이동 방향으로 facing을 바꾼다.
+- `Environment.move_forward(agent_id: str, distance: float) -> None`: 위 전진 명령의 환경 API. 잘못된 직접 API 인자는 ValueError.
+- `Environment.move_agent(agent_id, dx, dy, *, preserve_facing=False)`: 이동 제한·협력 조건·충돌을 적용하고 last_move 기록. move_forward는 preserve_facing=True로 호출한다.
+- `Agent.heading`: facing의 단위 방향 벡터 `(dx, dy)`.
+- `Agent.spatial_state() -> dict`: `{x, y, facing, heading: {x, y}, last_move}`의 복사본. observation.self와 benchmark agents[].spatial_state에 반영한다.
+- observation.self에 `max_move` 추가(기본 20, None은 제한 없음). 기존 x/y/facing/inventory/step/map_width/map_height는 유지한다.
+- `last_move`: 최초에는 None. 이후 `{step, requested_distance, distance, dx, dy, blocked, limited}`. distance/dx/dy는 충돌 후 실제 이동이며 포탈 순간이동은 제외한다. blocked는 제한 적용 후에도 전부 이동하지 못한 경우, limited는 max_move로 제한한 경우다. 다음 이동 전까지 유지되므로 기록의 step을 확인한다.
+- 물리는 벽과 잠긴 문의 이동 경로상 첫 충돌 직전(여유 0.5 월드 단위)에 정지한다. 큰 이동으로 잠긴 문을 건너뛰지 못하며, 맵 경계에서도 요청한 방향을 유지한 채 정지한다.
+
+step 기반 실행은 유지한다. 새 명령의 거리는 속도나 초 단위 시간이 아니며, 화면 프레임 보간은 별도다. CodePolicy/LiveCodePolicy/HybridPolicy의 관찰·행동 설명과 LLMPolicy의 TOOLS에도 동일한 계약을 제공한다.
+
 ---
 
 ## benchmark.py
@@ -288,7 +305,7 @@ configure_map(self) -> None : 맵의 크기 입력(정수형)
 
 ## tools.py
 
-OpenAI function-calling(tool) 스키마 목록(TOOLS). Environment.apply_action()이 처리하는 action type(move/turn/pick_up/drop/use_key/press_button/pull_lever/send_message/share_belief/request_info/confirm/claim_role/claim_task/noop)과 1:1로 대응됨. apply_action에 새 action type을 추가/변경하면 여기도 함께 갱신해야 함. policy.py의 LLMPolicy가 이 목록을 그대로 사용.
+OpenAI function-calling(tool) 스키마 목록(TOOLS). Environment.apply_action()이 처리하는 action type(move/move_forward/turn/pick_up/drop/use_key/press_button/pull_lever/send_message/share_belief/request_info/confirm/claim_role/claim_task/noop)과 1:1로 대응됨. apply_action에 새 action type을 추가/변경하면 여기도 함께 갱신해야 함. policy.py의 LLMPolicy가 이 목록을 그대로 사용.
 
 - 변수
 

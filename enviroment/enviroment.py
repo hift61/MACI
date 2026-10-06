@@ -97,19 +97,48 @@ class Environment:
     # 실제 이동 계산(경계/충돌 처리)은 physics.py의 PhysicsEngine에 위임
     # coop 물품을 들고 있으면 주변에 도와줄 에이전트가 모자랄 때 이동 자체가 막힘.
     # 이동 후 포탈 진입 여부를 판정. 이동하려는 방향으로 몸을 돌림(막혀서 못 움직여도 돌아봄)
-    def move_agent(self, agent_id: str, dx: float, dy: float) -> None:
+    def move_agent(self, agent_id: str, dx: float, dy: float, *, preserve_facing: bool = False) -> None:
         agent = self.agents[agent_id]
+        start_x, start_y = agent.x, agent.y
         distance = math.hypot(dx, dy)
+        requested_distance = distance
         if self.max_move is not None and distance > self.max_move:
             dx, dy = dx / distance * self.max_move, dy / distance * self.max_move
-        if dx or dy:
+        distance = math.hypot(dx, dy)
+        if (dx or dy) and not preserve_facing:
             agent.facing = math.degrees(math.atan2(dy, dx)) % 360
+        blocked_by_helpers = False
         for obj in agent.inventory:
             if obj.get("category") == ITEM_COOP and len(self._helpers_near(agent, agent.x, agent.y)) + 1 < obj["required_agents"]:
                 self._log("move_blocked", [agent_id], object_id=obj["object_id"], reason="not_enough_helpers")
-                return
-        agent.x, agent.y = self.physics.resolve_move(self, agent, dx, dy)
+                blocked_by_helpers = True
+                break
+        if not blocked_by_helpers:
+            agent.x, agent.y = self.physics.resolve_move(self, agent, dx, dy)
+        actual_dx, actual_dy = agent.x - start_x, agent.y - start_y
+        actual_distance = math.hypot(actual_dx, actual_dy)
+        agent.last_move = {
+            "step": self.step_count,
+            "requested_distance": requested_distance,
+            "distance": actual_distance,
+            "dx": actual_dx,
+            "dy": actual_dy,
+            "blocked": not math.isclose(actual_distance, distance, rel_tol=1e-9, abs_tol=1e-9),
+            "limited": requested_distance > distance,
+        }
+        if blocked_by_helpers:
+            return
         self._check_portals(agent)
+
+    def move_forward(self, agent_id: str, distance: float) -> None:
+        """Move a nonnegative fractional distance along the current heading."""
+        if (
+            not isinstance(distance, (int, float)) or isinstance(distance, bool)
+            or not math.isfinite(distance) or distance < 0
+        ):
+            raise ValueError("distance must be a finite, nonnegative number")
+        dx, dy = self.agents[agent_id].heading
+        self.move_agent(agent_id, distance * dx, distance * dy, preserve_facing=True)
 
     # 제자리에서 바라보는 방향만 바꿈 (주변 둘러보기용). facing은 도 단위 절대 방향으로
     # 0=오른쪽(+x), 90=아래(+y), 180=왼쪽, 270=위 - _is_visible의 atan2(dy, dx) 기준과 동일
@@ -672,9 +701,8 @@ class Environment:
 
         return {
             "self": {
-                "x": agent.x,
-                "y": agent.y,
-                "facing": agent.facing,
+                **agent.spatial_state(),
+                "max_move": self.max_move,
                 # deep copy: policy 코드가 observation을 직접 mutate해서(예: inventory에
                 # 아이템을 그냥 append) pick_up 없이 인벤토리를 조작하는 걸 막기 위함
                 "inventory": [self._disguise(obj) for obj in agent.inventory],
@@ -753,6 +781,8 @@ class Environment:
 
         if action_type == "move":
             self.move_agent(agent_id, action.get("dx", 0), action.get("dy", 0))
+        elif action_type == "move_forward":
+            self.move_forward(agent_id, action["distance"])
         elif action_type == "turn":
             self.turn_agent(agent_id, action.get("facing", self.agents[agent_id].facing))
         elif action_type == "pick_up":
@@ -783,7 +813,7 @@ class Environment:
         return action
 
     # 숫자 필드는 유한한 실수(bool 제외), id 필드는 문자열(또는 생략)이어야 함
-    _NUMBER_FIELDS = ("dx", "dy", "facing")
+    _NUMBER_FIELDS = ("dx", "dy", "facing", "distance")
     _ID_FIELDS = ("object_id", "key_id", "button_id", "lever_id", "receiver_id")
 
     def _is_well_formed(self, action) -> bool:
@@ -793,6 +823,8 @@ class Environment:
             value = action.get(key, 0)
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
                 return False
+        if action.get("type") == "move_forward" and ("distance" not in action or action["distance"] < 0):
+            return False
         return all(isinstance(action.get(key), (str, type(None))) for key in self._ID_FIELDS)
 
     # 한 틱을 동시 실행으로 진행: 모든 에이전트가 같은 시점의 세계를 관찰하고, 각자의 policy가
