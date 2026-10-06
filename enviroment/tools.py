@@ -6,7 +6,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "move",
-            "description": "현재 위치에서 (dx, dy)만큼 이동한다",
+            "description": "현재 위치에서 (dx, dy)만큼 이동한다(한 번에 최대 20, 더 크면 같은 방향으로 20만 이동). 벽에 닿으면 그 앞에서 멈춘다. 이동하려는 방향으로 바라보는 방향(facing)도 바뀐다",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -20,8 +20,22 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "turn",
+            "description": "제자리에서 바라보는 방향(facing)만 바꾼다. 시야는 facing을 중심으로 한 부채꼴이므로 주변을 둘러볼 때 사용",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "facing": {"type": "number", "description": "바라볼 절대 방향(도). 0=오른쪽(+x), 90=아래(+y), 180=왼쪽, 270=위"}
+                },
+                "required": ["facing"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "pick_up",
-            "description": "상호작용 범위 안에 있는 물체(item 또는 key)를 습득해 인벤토리에 넣는다",
+            "description": "상호작용 범위 안에 있는 물체(item 또는 key)를 습득해 인벤토리에 넣는다. category가 coop인 물품은 다른 에이전트가 곁에 함께 있어야만 줍고 옮길 수 있다",
             "parameters": {
                 "type": "object",
                 "properties": {

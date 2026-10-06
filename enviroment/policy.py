@@ -1,5 +1,4 @@
 import ast
-import builtins
 import json
 import math
 import random
@@ -8,6 +7,7 @@ import traceback
 
 from openai import OpenAI, RateLimitError
 
+from policy_sandbox import run_decide_code
 from tools import TOOLS
 
 _RATE_LIMIT_MAX_RETRIES = 3
@@ -221,6 +221,20 @@ class LLMPolicy(Policy):
 # 생성된 코드는 환경을 직접 조작하지 않고 action(dict)만 반환하는 순수 함수여야
 # 하며(그래야 Rule 강제 시스템을 우회할 수 없음), 논문 III절과 동일하게 import/
 # exec/eval/__로 시작하는 이름 사용을 금지해 안전하게 실행한다.
+#
+# 코드 생성과 코드 실행 둘 다 이중으로 강제된다:
+#   1) 생성 단계 - submit_policy_code tool-call 게이트. 모델은 텍스트로 답을 끝낼 수
+#      없고 반드시 이 tool을 호출해야 하며, 코드가 compile+안전성 검사를 통과해야만
+#      "accepted"로 응답받는다. 실패하면 그 에러가 tool 결과로 그대로 돌아가 같은 턴
+#      안에서(MAX_TOOL_ROUNDS까지) 다시 시도할 수 있다 - 잘못된 코드를 그냥 버리고
+#      noop으로 넘어가는 대신, 모델 스스로 고칠 기회를 준다. tool-calling을 지원하지
+#      않는 프로바이더에서는 자동으로 예전 방식(평문 + 코드펜스 추출)으로 대체된다.
+#   2) 실행 단계 - policy_sandbox.run_decide_code()가 매 decide() 호출마다 코드를
+#      격리된 `python -I -S` 서브프로세스에서 실행하고 하드 타임아웃을 건다. 생성
+#      단계의 검사를 우회하는 경로(예: 재생성 없이 재사용되는 캐시된 코드)가 있어도,
+#      무한루프나 크래시가 시뮬레이션 프로세스 자체는 절대 멈추지 못하게 하는
+#      OS 수준의 두 번째 방어선 - 자세한 내용은 policy_sandbox.py, _policy_harness.py
+#      참고.
 
 def _action_schema_docs() -> str:
     lines = []
@@ -231,6 +245,22 @@ def _action_schema_docs() -> str:
     return "\n".join(lines)
 
 
+# CodePolicy/LiveCodePolicy 프롬프트에 들어가는 observation 형식 설명 (Environment.get_observation과 맞춰야 함)
+_OBSERVATION_DOC = """{"self": {"x", "y", "facing", "inventory": [...], "step", "map_width", "map_height"},
+ "visible_objects": [...], "known_objects": {object_id: {..., "last_seen_step"}},
+ "walls": [[x, y, width, height], ...], "memory": {...}, "inbox": [...]}
+- Every object has "object_id", "type", "x", "y" plus type-specific fields (door: "locked"; key: "unlocks";
+  button: "linked_door_id"; lever: "on", "linked_door_ids"; pressure_plate: "linked_door_id", "radius";
+  item: "category" ("normal" or "coop"); portal: "dest_x", "dest_y"; clue: "content").
+- visible_objects: what you see right now (view cone around "facing"; walls block sight).
+- known_objects: last seen state of everything you have ever seen (it may be outdated).
+- walls: walls near you. Walls block movement - a move stops right before a wall.
+- facing is in degrees: 0 = +x (right), 90 = +y (down), 180 = left, 270 = up. Moving turns you toward the move.
+- memory: your own notes. Add a "memory": {...} key to any returned action to replace it for the next step
+  (your code runs fresh every step, so this is the only way to remember plans or explored places).
+- Interactions (pick_up, use_key, press_button, pull_lever) only work within about 15 units."""
+
+
 CODE_POLICY_SYSTEM_PROMPT = f"""You write Python policy code for an agent in a multi-agent \
 simulation. Define exactly one function:
 
@@ -239,8 +269,7 @@ def decide(observation):
     return action
 
 decide() is called once per simulation step with an observation dict shaped like:
-{{"self": {{"x":.., "y":.., "facing":.., "inventory": [...]}}, \
-"visible_objects": [...], "inbox": [...]}}
+{_OBSERVATION_DOC}
 
 It must RETURN an action dict (never call environment methods directly). Valid action \
 shapes (the "type" field is required):
@@ -263,13 +292,6 @@ def decide(observation):
 
 _FORBIDDEN_CALL_NAMES = {"exec", "eval", "open", "__import__", "compile", "input"}
 
-_SAFE_BUILTIN_NAMES = (
-    "abs", "all", "any", "bool", "dict", "enumerate", "float", "int", "len",
-    "list", "max", "min", "range", "reversed", "round", "sorted", "str",
-    "sum", "tuple", "zip", "isinstance", "True", "False", "None"
-)
-_SAFE_BUILTINS = {name: getattr(builtins, name) for name in _SAFE_BUILTIN_NAMES}
-
 
 def _check_code_safety(code: str) -> None:
     tree = ast.parse(code)
@@ -278,6 +300,11 @@ def _check_code_safety(code: str) -> None:
             raise ValueError("generated code may not use import statements")
         if isinstance(node, ast.Name) and node.id.startswith("__"):
             raise ValueError("generated code may not reference dunder names")
+        # Blocks attribute-access escapes too (e.g. ({}).__class__.__bases__),
+        # not just bare dunder names (e.g. __builtins__) - a bare-name-only
+        # check would let object-introspection chains slip through unnoticed.
+        if isinstance(node, ast.Attribute) and node.attr.startswith("__"):
+            raise ValueError("generated code may not reference dunder attributes")
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             if node.func.id in _FORBIDDEN_CALL_NAMES:
                 raise ValueError(f"generated code may not call {node.func.id}()")
@@ -293,14 +320,141 @@ def _extract_code(text: str) -> str:
     return fenced.strip()
 
 
-def _compile_decide_code(code: str):
-    _check_code_safety(code)
-    scope: dict = {}
-    exec(code, {"__builtins__": _SAFE_BUILTINS, "math": math}, scope)
-    decide_fn = scope.get("decide")
-    if not callable(decide_fn):
-        raise ValueError("generated code did not define a decide() function")
-    return decide_fn
+def _safety_check_error(code: str) -> str | None:
+    """Compile+safety-check `code` without running it (used by the
+    submit_policy_code gate below). Returns None if it's fine to accept, or
+    a short error string to hand back to the model as a tool result."""
+    try:
+        _check_code_safety(code)  # ast.parse() inside raises SyntaxError on bad syntax too
+        return None
+    except (SyntaxError, ValueError) as e:
+        return f"{type(e).__name__}: {e}"
+
+
+MAX_TOOL_ROUNDS = 4
+
+SUBMIT_POLICY_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "submit_policy_code",
+        "description": (
+            "Submit your final decide() policy code. This is the ONLY way to answer - "
+            "plain text is ignored. The code is checked for valid, safe Python before "
+            "being accepted: if it fails, you get the error back and must call this "
+            "again with a fix (nothing is run for real until it is accepted)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "code": {"type": "string", "description": "The final Python code defining decide(observation)."},
+            },
+            "required": ["code"],
+        },
+    },
+}
+
+
+def _generate_code_with_submission_gate(
+    client,
+    model: str,
+    system_prompt: str,
+    user_content: str,
+    temperature: float,
+    max_tokens: int,
+    extra_params: dict,
+) -> str:
+    """Drives the submit_policy_code tool-call loop: the model must call the
+    tool to answer, and its code is compile+safety-checked before being
+    accepted - a failure comes back as a tool result (not spent as a wasted
+    generation) and the model gets up to MAX_TOOL_ROUNDS attempts to fix it,
+    within the SAME call to this function (no extra LLM calls from the
+    caller's side). Falls back to the old plain one-shot text + code-fence
+    extraction path (no tool calling at all) if the provider never returns a
+    tool call, or outright rejects the tools/tool_choice parameters (some
+    OpenRouter free models don't support function-calling reliably)."""
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content},
+    ]
+
+    try:
+        for _round in range(MAX_TOOL_ROUNDS):
+            response = _create_with_retry(
+                client,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                messages=messages,
+                tools=[SUBMIT_POLICY_TOOL_SCHEMA],
+                tool_choice="required",
+                **extra_params,
+            )
+            choice = response.choices[0]
+            if choice.finish_reason == "length":
+                raise ValueError(
+                    "LLM response was cut off before finishing (finish_reason='length'); "
+                    "the generated code may be incomplete. Increase max_tokens."
+                )
+
+            tool_calls = choice.message.tool_calls or []
+            if not tool_calls:
+                # Some models answer in plain text despite tool_choice="required" -
+                # nudge them back instead of silently accepting untrusted text.
+                messages.append({"role": "assistant", "content": choice.message.content})
+                messages.append({"role": "user", "content": (
+                    "That was plain text, which is ignored - you must call the "
+                    "submit_policy_code tool with your final code to answer."
+                )})
+                continue
+
+            messages.append({
+                "role": "assistant",
+                "content": choice.message.content,
+                "tool_calls": [
+                    {"id": tc.id, "type": "function", "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in tool_calls
+                ],
+            })
+
+            accepted_code = None
+            for tc in tool_calls:
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except Exception:
+                    args = {}
+                code = _extract_code(str(args.get("code", "")))
+                error = _safety_check_error(code)
+                if error is None:
+                    result = {"accepted": True}
+                    accepted_code = accepted_code if accepted_code is not None else code
+                else:
+                    result = {"accepted": False, "error": f"NOT accepted - {error}. Fix it and call submit_policy_code again."}
+                messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(result)})
+
+            if accepted_code is not None:
+                return accepted_code
+        # Exhausted MAX_TOOL_ROUNDS without an accepted submission - fall through.
+    except Exception:
+        pass  # provider rejected tools/tool_choice outright - fall back below
+
+    response = _create_with_retry(
+        client,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ],
+        **extra_params,
+    )
+    if response.choices[0].finish_reason == "length":
+        raise ValueError(
+            "LLM response was cut off before finishing (finish_reason='length'); "
+            "the generated code is incomplete. Increase max_tokens or shorten "
+            "the system/task prompt."
+        )
+    return _extract_code(response.choices[0].message.content)
 
 
 class CodePolicy(Policy):
@@ -312,7 +466,8 @@ class CodePolicy(Policy):
         api_key: str = "not-needed",
         temperature: float = 0.0,
         max_tokens: int = 4000,
-        extra_params: dict | None = None
+        extra_params: dict | None = None,
+        sandbox_timeout: float = 5.0
     ) -> None:
         self.client = OpenAI(base_url=base_url, api_key=api_key)
         self.model = model
@@ -320,53 +475,38 @@ class CodePolicy(Policy):
         self.temperature = temperature
         self.max_tokens = max_tokens        # 응답이 코드 완성 전에 잘리는 것을 막기 위한 여유값
         self.extra_params = extra_params or {}  # 프로바이더 전용 옵션 (예: gpt-oss의 reasoning_effort)
-        self._decide_fn = None       # 생성된 decide() 함수 캐시 (한 번만 생성, 매 스텝 재사용)
-        self.generated_code = None   # LLM이 실제로 작성한 코드 원문 (표시/디버깅용)
+        self.sandbox_timeout = sandbox_timeout  # decide() 서브프로세스 실행 하드 타임아웃 (초)
+        self.generated_code = None   # LLM이 제출/수락한 코드 원문 (한 번만 생성, 매 스텝 재사용)
         self.last_error = None       # 가장 최근 decide() 호출에서 발생한 예외 (없으면 None)
 
     # 다음 decide() 호출에서 정책 코드를 새로 생성하도록 캐시를 비움
     def reset(self) -> None:
-        self._decide_fn = None
         self.generated_code = None
         self.last_error = None
 
     def _generate_code(self) -> str:
-        response = _create_with_retry(
+        return _generate_code_with_submission_gate(
             self.client,
-            model=self.model,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            messages=[
-                {"role": "system", "content": CODE_POLICY_SYSTEM_PROMPT},
-                {"role": "user", "content": self.task_description}
-            ],
-            **self.extra_params
+            self.model,
+            CODE_POLICY_SYSTEM_PROMPT,
+            self.task_description,
+            self.temperature,
+            self.max_tokens,
+            self.extra_params,
         )
-        if response.choices[0].finish_reason == "length":
-            raise ValueError(
-                "LLM response was cut off before finishing (finish_reason='length'); "
-                "the generated code is incomplete. Increase max_tokens or shorten "
-                "task_description / CODE_POLICY_SYSTEM_PROMPT."
-            )
-        return _extract_code(response.choices[0].message.content)
-
-    def _compile(self, code: str):
-        return _compile_decide_code(code)
 
     def decide(self, observation: dict) -> dict:
         try:
-            if self._decide_fn is None:
-                code = self._generate_code()
-                self.generated_code = code  # 컴파일 성공 전에 저장: 실패해도 원문은 남음
-                self._decide_fn = self._compile(code)
+            if self.generated_code is None:
+                self.generated_code = self._generate_code()
 
-            action = self._decide_fn(observation)
-            if not isinstance(action, dict) or "type" not in action:
-                self.last_error = f"decide() returned invalid action: {action!r}"
+            result = run_decide_code(self.generated_code, observation, timeout=self.sandbox_timeout)
+            if result.get("error"):
+                self.last_error = result["error"]
                 return {"type": "noop"}
 
             self.last_error = None
-            return action
+            return result["action"]
         except Exception:
             # 매 스텝 같은 버그로 계속 noop이 나와도 원인을 알 수 있도록 예외를 보존.
             # (여기서 noop으로 폴백하는 이유는 그대로: 시뮬레이션 자체는 멈추면 안 됨)
@@ -392,8 +532,7 @@ right now — you do not need to plan the whole task inside this one function, a
 change your approach completely on the next call based on what you see then.
 
 observation is shaped like:
-{{"self": {{"x":.., "y":.., "facing":.., "inventory": [...]}}, \
-"visible_objects": [...], "inbox": [...]}}
+{_OBSERVATION_DOC}
 
 It must RETURN an action dict (never call environment methods directly). Valid action \
 shapes (the "type" field is required):
@@ -414,7 +553,8 @@ class LiveCodePolicy(Policy):
         api_key: str = "not-needed",
         temperature: float = 0.2,
         max_tokens: int = 1500,
-        extra_params: dict | None = None
+        extra_params: dict | None = None,
+        sandbox_timeout: float = 5.0
     ) -> None:
         self.client = OpenAI(base_url=base_url, api_key=api_key)
         self.model = model
@@ -422,48 +562,33 @@ class LiveCodePolicy(Policy):
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.extra_params = extra_params or {}  # 프로바이더 전용 옵션 (예: gpt-oss의 reasoning_effort)
-        self.generated_code = None   # 가장 최근 스텝에서 LLM이 작성한 코드 원문 (표시/디버깅용)
+        self.sandbox_timeout = sandbox_timeout  # decide() 서브프로세스 실행 하드 타임아웃 (초)
+        self.generated_code = None   # 가장 최근 스텝에서 제출/수락된 코드 원문 (표시/디버깅용)
         self.last_error = None       # 가장 최근 decide() 호출에서 발생한 예외 (없으면 None)
 
     def _generate_code(self, observation: dict) -> str:
-        response = _create_with_retry(
+        return _generate_code_with_submission_gate(
             self.client,
-            model=self.model,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            messages=[
-                {"role": "system", "content": CODE_STEP_SYSTEM_PROMPT},
-                {"role": "user", "content": (
-                    f"Task: {self.task_description}\n\n"
-                    f"Current observation:\n{json.dumps(observation, ensure_ascii=False)}"
-                )}
-            ],
-            **self.extra_params
+            self.model,
+            CODE_STEP_SYSTEM_PROMPT,
+            f"Task: {self.task_description}\n\nCurrent observation:\n{json.dumps(observation, ensure_ascii=False)}",
+            self.temperature,
+            self.max_tokens,
+            self.extra_params,
         )
-        if response.choices[0].finish_reason == "length":
-            raise ValueError(
-                "LLM response was cut off before finishing (finish_reason='length'); "
-                "the generated code is incomplete. Increase max_tokens or shorten "
-                "task_description / CODE_STEP_SYSTEM_PROMPT."
-            )
-        return _extract_code(response.choices[0].message.content)
-
-    def _compile(self, code: str):
-        return _compile_decide_code(code)
 
     def decide(self, observation: dict) -> dict:
         try:
             code = self._generate_code(observation)
-            self.generated_code = code  # 컴파일/실행 실패해도 원문은 남김
-            decide_fn = self._compile(code)
+            self.generated_code = code  # 실행 실패해도 원문은 남김
 
-            action = decide_fn(observation)
-            if not isinstance(action, dict) or "type" not in action:
-                self.last_error = f"decide() returned invalid action: {action!r}"
+            result = run_decide_code(code, observation, timeout=self.sandbox_timeout)
+            if result.get("error"):
+                self.last_error = result["error"]
                 return {"type": "noop"}
 
             self.last_error = None
-            return action
+            return result["action"]
         except Exception:
             self.last_error = traceback.format_exc()
             return {"type": "noop"}
@@ -526,7 +651,8 @@ class HybridPolicy(Policy):
         api_key: str = "not-needed",
         temperature: float = 0.2,
         max_tokens: int = 1500,
-        extra_params: dict | None = None
+        extra_params: dict | None = None,
+        sandbox_timeout: float = 5.0
     ) -> None:
         self.client = OpenAI(base_url=base_url, api_key=api_key)
         self.model = model
@@ -534,8 +660,8 @@ class HybridPolicy(Policy):
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.extra_params = extra_params or {}  # 프로바이더 전용 옵션 (예: gpt-oss의 reasoning_effort)
-        self._decide_fn = None       # 캐시된 코드 모드 함수. None이면 매 스텝 LLM에게 새로 물어봄
-        self.generated_code = None   # 현재 캐시된 코드 원문 (코드 모드가 아니면 None)
+        self.sandbox_timeout = sandbox_timeout  # 코드 모드 decide() 서브프로세스 실행 하드 타임아웃 (초)
+        self.generated_code = None   # 현재 캐시된 코드 원문. None이면 코드 모드가 아니라 매 스텝 LLM에게 새로 물어봄
         self.last_error = None       # 가장 최근 decide() 호출에서 발생한 예외/사유 (없으면 None)
 
     def _ask_llm(self, observation: dict) -> str:
@@ -563,30 +689,35 @@ class HybridPolicy(Policy):
 
     def decide(self, observation: dict) -> dict:
         try:
-            if self._decide_fn is not None:
-                action = self._decide_fn(observation)
-                if not isinstance(action, dict) or "type" not in action:
-                    self.last_error = f"cached decide() returned invalid action: {action!r}"
-                    self._decide_fn, self.generated_code = None, None
+            if self.generated_code is not None:
+                result = run_decide_code(self.generated_code, observation, timeout=self.sandbox_timeout)
+                if result.get("error"):
+                    self.last_error = f"cached decide() failed: {result['error']}"
+                    self.generated_code = None
                     return {"type": "noop"}
+                action = result["action"]
                 if action["type"] != "replan":
                     self.last_error = None
                     return action
                 # 코드가 스스로 재계획을 요청함: 캐시를 비우고 이번 호출 안에서 바로
                 # LLM에게 다시 물어봄 (한 스텝을 그냥 버리지 않기 위해)
-                self._decide_fn, self.generated_code = None, None
+                self.generated_code = None
 
             reply = self._ask_llm(observation)
             stripped = _extract_code(reply)
 
             if "def decide(" in stripped:
-                self.generated_code = stripped
-                self._decide_fn = _compile_decide_code(stripped)
-                action = self._decide_fn(observation)
-                if not isinstance(action, dict) or "type" not in action or action["type"] == "replan":
-                    self.last_error = f"generated decide()'s first action was invalid: {action!r}"
-                    self._decide_fn, self.generated_code = None, None
+                safety_error = _safety_check_error(stripped)
+                if safety_error is not None:
+                    self.last_error = f"generated code rejected: {safety_error}"
                     return {"type": "noop"}
+
+                result = run_decide_code(stripped, observation, timeout=self.sandbox_timeout)
+                action = result.get("action")
+                if result.get("error") or not isinstance(action, dict) or "type" not in action or action["type"] == "replan":
+                    self.last_error = f"generated decide()'s first action was invalid: {result.get('error') or action!r}"
+                    return {"type": "noop"}
+                self.generated_code = stripped
                 self.last_error = None
                 return action
 
@@ -599,5 +730,5 @@ class HybridPolicy(Policy):
             return action
         except Exception:
             self.last_error = traceback.format_exc()
-            self._decide_fn, self.generated_code = None, None
+            self.generated_code = None
             return {"type": "noop"}

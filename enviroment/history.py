@@ -82,3 +82,47 @@ class DecisionLog:
 
     def clear(self) -> None:
         self.entries = []
+
+
+# 환경의 상태를 실제로 바꾼 사건(문 열림/잠김, 물품 습득, 압력판 점유, 포탈 이동, 함정 발동
+# 등)과 그 사건을 일으킨 에이전트를 기록. DecisionLog가 "무엇을 하려 했나"라면 이쪽은
+# "그래서 실제로 무슨 일이 일어났고 누구 덕/탓인가"로, 마일스톤 기반 채점과 에이전트별
+# 기여도(credit) 산정에 사용한다. 상태가 바뀌지 않은 시도(이미 열린 문에 열쇠 사용 등)는
+# 기록하지 않고, 협력 판단에 의미 있는 실패(coop 물품 단독 습득/이동 시도)만 따로 기록한다.
+# Environment가 각 처리 지점에서 자동으로 기록한다.
+class EventLog:
+    def __init__(self) -> None:
+        self.entries: list[dict] = []
+
+    # step: 사건이 일어난 시점의 Environment.step_count
+    # event_type: 사건 종류 (enviroment.py의 Environment 주석/INTERFACE.md의 이벤트 목록 참고)
+    # agent_ids: 사건을 일으킨(공로/책임이 있는) 에이전트 목록. 압력판으로 문이 열린 경우처럼
+    #            여러 명이 함께 일으킨 사건이면 여러 명, 환경이 스스로 일으킨 사건이면 빈 목록
+    # fields: 사건별 추가 정보 (door_id, object_id, cause 등)
+    def record(self, step: int, event_type: str, agent_ids: list[str], **fields) -> None:
+        self.entries.append({
+            "step": step,
+            "type": event_type,
+            "agent_ids": list(agent_ids),
+            **copy.deepcopy(fields)
+        })
+
+    # event_type/agent_id(agent_ids에 포함되는지)/step 중 지정한 조건만 만족하는 항목을
+    # 반환 (모두 생략하면 전체 기록 그대로)
+    def filter(
+        self,
+        event_type: str = None,
+        agent_id: str = None,
+        step: int = None
+    ) -> list[dict]:
+        result = self.entries
+        if event_type is not None:
+            result = [e for e in result if e["type"] == event_type]
+        if agent_id is not None:
+            result = [e for e in result if agent_id in e["agent_ids"]]
+        if step is not None:
+            result = [e for e in result if e["step"] == step]
+        return result
+
+    def clear(self) -> None:
+        self.entries = []

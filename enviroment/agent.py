@@ -20,6 +20,7 @@ class Agent:
         self.view_angle = view_angle    # 시야각 (전체 폭, 도)
         self.inventory: list = []
         self.inbox: list = []
+        self.memory: dict = {}          # 에이전트가 action의 "memory"로 직접 남기는 메모장 (관찰의 memory)
         self.policy: Policy | None = None  # 탑재된 AI (Policy 인터페이스 구현체)
         self.rules: list[Rule] = []        # 이 에이전트에게만 적용되는 강제 규칙 목록
 

@@ -1,16 +1,32 @@
 import copy
+import json
 import math
 
 from agent import Agent
-from history import DecisionLog, MessageLog
+from history import DecisionLog, EventLog, MessageLog
 from physics import PhysicsEngine, SimplePhysicsEngine
 from rule import Rule, ObeyCommandRule
 
+# add_item()의 물품 분류 (자세한 의미는 add_item 주석 참고)
+ITEM_NORMAL = "normal"  # 혼자 다룰 수 있는 일반 물품
+ITEM_COOP = "coop"      # 여러 명이 함께 있어야만 줍고 옮길 수 있는 물품
+ITEM_TRAP = "trap"      # 줍는 순간 문을 영구 봉인해 게임을 불가능하게 만드는 물품
+ITEM_CATEGORIES = (ITEM_NORMAL, ITEM_COOP, ITEM_TRAP)
+
 
 class Environment:
-    def __init__(self, game_map, interact_radius: float = 15.0, physics: PhysicsEngine = None) -> None:
+    def __init__(
+        self,
+        game_map,
+        interact_radius: float = 15.0,
+        physics: PhysicsEngine = None,
+        max_move: float | None = 20.0
+    ) -> None:
         self.game_map = game_map
         self.interact_radius = interact_radius  # 버튼/문 상호작용 가능 거리
+        # 한 번의 move로 갈 수 있는 최대 거리 (None이면 제한 없음). 제한이 없으면 한 step에 맵을
+        # 가로지를 수 있어 클리어 시간 점수가 의미를 잃으므로 기본으로 제한
+        self.max_move = max_move
         self.physics = physics or SimplePhysicsEngine()  # 이동/충돌 계산 위임 대상 (교체 가능)
         self.agents: dict[str, Agent] = {}
         self.objects: dict[str, dict] = {}
@@ -18,6 +34,14 @@ class Environment:
         self.step_count = 0  # step()이 몇 번 진행됐는지 (메시지 기록에 시점 표시용)
         self.message_log = MessageLog()  # 오간 메시지 전부 기록 (반사실적 재현 분석용)
         self.decision_log = DecisionLog()  # 매 step 각 에이전트의 관찰/결정/실제 실행 기록 (반사실적 재현 분석용)
+        self.event_log = EventLog()  # 실제로 일어난 상태 변화와 그걸 일으킨 에이전트 기록 (마일스톤 채점/기여도 산정용)
+        # trap 물품이 발동해 게임이 불가능해진 경우 그 원인 기록 (None이면 아직 진행 가능).
+        # {"step", "agent_id", "object_id", "sealed_doors"} - "누가 언제 실패를 확정지었나" 분석용
+        self.failure: dict | None = None
+        self._portals_inside: dict[str, set[str]] = {}  # agent_id -> 현재 서 있는 portal_id 집합 (재발동 방지)
+        self._plate_occupants: dict[str, set[str]] = {}  # plate_id -> 지난 판정 때 위에 서 있던 agent_id 집합 (진입/이탈 이벤트용)
+        self._seen: dict[str, set[str]] = {}  # agent_id -> 지금까지 관찰에 한 번이라도 나타난 object_id 집합 (object_seen 이벤트용)
+        self._known: dict[str, dict[str, dict]] = {}  # agent_id -> object_id -> 마지막으로 본 상태 (관찰의 known_objects)
 
     # Register a new agent into the environment
     def add_agent(
@@ -37,6 +61,7 @@ class Environment:
         for rule in rules or []:
             agent.add_rule(rule)
         self.agents[agent_id] = agent
+        self._portals_inside[agent_id] = self._portals_at(x, y)  # 포탈 위에서 시작해도 바로 발동하지 않도록
         return agent
 
     # Add a rule that applies to every agent in the environment, unconditionally
@@ -69,9 +94,26 @@ class Environment:
         del self.agents[agent_id]
 
     # 실제 이동 계산(경계/충돌 처리)은 physics.py의 PhysicsEngine에 위임
+    # coop 물품을 들고 있으면 주변에 도와줄 에이전트가 모자랄 때 이동 자체가 막힘.
+    # 이동 후 포탈 진입 여부를 판정. 이동하려는 방향으로 몸을 돌림(막혀서 못 움직여도 돌아봄)
     def move_agent(self, agent_id: str, dx: float, dy: float) -> None:
         agent = self.agents[agent_id]
+        distance = math.hypot(dx, dy)
+        if self.max_move is not None and distance > self.max_move:
+            dx, dy = dx / distance * self.max_move, dy / distance * self.max_move
+        if dx or dy:
+            agent.facing = math.degrees(math.atan2(dy, dx)) % 360
+        for obj in agent.inventory:
+            if obj.get("category") == ITEM_COOP and len(self._helpers_near(agent, agent.x, agent.y)) + 1 < obj["required_agents"]:
+                self._log("move_blocked", [agent_id], object_id=obj["object_id"], reason="not_enough_helpers")
+                return
         agent.x, agent.y = self.physics.resolve_move(self, agent, dx, dy)
+        self._check_portals(agent)
+
+    # 제자리에서 바라보는 방향만 바꿈 (주변 둘러보기용). facing은 도 단위 절대 방향으로
+    # 0=오른쪽(+x), 90=아래(+y), 180=왼쪽, 270=위 - _is_visible의 atan2(dy, dx) 기준과 동일
+    def turn_agent(self, agent_id: str, facing: float) -> None:
+        self.agents[agent_id].facing = facing % 360
 
     # ---- Plain interactable objects (items) ----
 
@@ -84,8 +126,53 @@ class Environment:
             "type": object_type
         }
 
+    # 분류가 있는 물품 배치. category:
+    #   ITEM_NORMAL("normal") - 혼자 줍고 옮길 수 있는 일반 물품 (add_object로 만든 item과 동일)
+    #   ITEM_COOP("coop")     - required_agents명(본인 포함)이 interact_radius 안에 함께 있어야만
+    #                           주울 수 있고, 들고 있는 동안에도 그만큼 곁에 있어야 이동 가능
+    #   ITEM_TRAP("trap")     - 줍는 순간 seals의 문들이 영구 봉인(sealed)되어 어떤 수단으로도
+    #                           열리지 않게 되고, env.failure에 원인이 기록됨 (게임 불가능 상태)
+    # disguised=True(trap 전용): 관찰에는 일반 물품(normal)으로 보임 - 정보를 공유/검증하지
+    # 않으면 함정을 구분할 수 없는 상황을 만들 때 사용 (clue와 조합)
+    def add_item(
+        self,
+        item_id: str,
+        x: float,
+        y: float,
+        category: str = ITEM_NORMAL,
+        required_agents: int = 2,
+        seals: list[str] = None,
+        disguised: bool = False
+    ) -> None:
+        if category not in ITEM_CATEGORIES:
+            raise ValueError(f"unknown item category: {category!r} (expected one of {ITEM_CATEGORIES})")
+        item = {
+            "object_id": item_id,
+            "x": x,
+            "y": y,
+            "type": "item",
+            "category": category
+        }
+        if category == ITEM_COOP:
+            item["required_agents"] = required_agents
+        elif category == ITEM_TRAP:
+            item["seals"] = list(seals or [])
+            item["disguised"] = disguised
+        self.objects[item_id] = item
+
     def remove_object(self, object_id: str) -> None:
         del self.objects[object_id]
+
+    # (x, y)의 interact_radius 안에 있는, agent 본인을 제외한 다른 에이전트 id 목록 (coop 물품용)
+    def _helpers_near(self, agent: Agent, x: float, y: float) -> list[str]:
+        return [
+            other.agent_id for other in self.agents.values()
+            if other is not agent and math.hypot(other.x - x, other.y - y) <= self.interact_radius
+        ]
+
+    # 현재 step_count로 event_log에 기록하는 단축 함수
+    def _log(self, event_type: str, agent_ids: list[str], **fields) -> None:
+        self.event_log.record(self.step_count, event_type, agent_ids, **fields)
 
     # Only free-standing items/keys within interact_radius can be picked up
     # (doors, buttons, levers, pressure plates cannot)
@@ -96,8 +183,93 @@ class Environment:
             return
         if math.hypot(agent.x - obj["x"], agent.y - obj["y"]) > self.interact_radius:
             return
+        category = obj.get("category", ITEM_NORMAL)
+        helpers = self._helpers_near(agent, obj["x"], obj["y"]) if category == ITEM_COOP else []
+        if category == ITEM_COOP and len(helpers) + 1 < obj["required_agents"]:
+            self._log("pickup_blocked", [agent_id], object_id=object_id, reason="not_enough_helpers")
+            return
         self.objects.pop(object_id)
         agent.inventory.append(obj)
+        # coop 물품은 함께 들어준 에이전트도 공로자로 agent_ids에 포함 (helper_ids로 구분 가능)
+        self._log("item_picked_up", [agent_id, *helpers], object_id=object_id,
+                  object_type=obj["type"], category=category, helper_ids=helpers)
+        if category == ITEM_TRAP:
+            self._trigger_trap(agent_id, obj)
+
+    # trap 발동: 연결된 문을 잠그고 영구 봉인. 최초 실패 원인만 failure에 남김
+    def _trigger_trap(self, agent_id: str, trap: dict) -> None:
+        self._log("trap_triggered", [agent_id], object_id=trap["object_id"], sealed_doors=list(trap["seals"]))
+        for door_id in trap["seals"]:
+            door = self.objects.get(door_id)
+            if door is not None:
+                self._set_door_locked(door, True, "trap", [agent_id], trap["object_id"])
+                door["sealed"] = True
+        if self.failure is None:
+            self.failure = {
+                "step": self.step_count,
+                "agent_id": agent_id,
+                "object_id": trap["object_id"],
+                "sealed_doors": list(trap["seals"])
+            }
+
+    # 봉인된(sealed) 문은 열쇠/버튼/레버/압력판 어느 것으로도 잠금 상태가 바뀌지 않음.
+    # 상태가 실제로 바뀐 경우에만 door_unlocked/door_locked 이벤트를 남김
+    # cause: "key"/"button"/"lever"/"pressure_plate"/"trap", source: 원인 오브젝트 id(압력판은 id 목록)
+    def _set_door_locked(self, door: dict, locked: bool, cause: str, agent_ids: list[str], source) -> None:
+        if door.get("sealed") or door["locked"] == locked:
+            return
+        door["locked"] = locked
+        self._log("door_locked" if locked else "door_unlocked", agent_ids,
+                  door_id=door["object_id"], cause=cause, source=source)
+
+    # ---- Portal ----
+
+    # 반경 안으로 진입하면 (dest_x, dest_y)로 즉시 순간이동하는 바닥 장치. 별도 action 없음.
+    # "진입하는 순간"에만 발동하므로 포탈 위에 계속 서 있거나, 도착 지점이 다른 포탈 위여도
+    # 연쇄/왕복 이동이 일어나지 않음 (한 번 벗어났다가 다시 들어와야 재발동).
+    # 목적지가 잠긴 문 안쪽이면 발동하지 않음
+    def add_portal(
+        self,
+        portal_id: str,
+        x: float,
+        y: float,
+        dest_x: float,
+        dest_y: float,
+        radius: float = 10.0
+    ) -> None:
+        self.objects[portal_id] = {
+            "object_id": portal_id,
+            "x": x,
+            "y": y,
+            "type": "portal",
+            "dest_x": dest_x,
+            "dest_y": dest_y,
+            "radius": radius
+        }
+
+    def _portals_at(self, x: float, y: float) -> set[str]:
+        return {
+            obj["object_id"] for obj in self.objects.values()
+            if obj["type"] == "portal" and math.hypot(x - obj["x"], y - obj["y"]) <= obj["radius"]
+        }
+
+    def _check_portals(self, agent: Agent) -> None:
+        inside_before = self._portals_inside.get(agent.agent_id, set())
+        inside_now = self._portals_at(agent.x, agent.y)
+        entered = sorted(inside_now - inside_before)
+        if entered:
+            portal = self.objects[entered[0]]
+            dest = (portal["dest_x"], portal["dest_y"])
+            if not any(
+                obj["type"] == "door" and obj["locked"]
+                and math.hypot(dest[0] - obj["x"], dest[1] - obj["y"]) <= obj["radius"]
+                for obj in self.objects.values()
+            ):
+                origin = (agent.x, agent.y)
+                agent.x, agent.y = dest
+                self._log("portal_used", [agent.agent_id], portal_id=portal["object_id"], origin=origin, dest=dest)
+                inside_now = self._portals_at(agent.x, agent.y)
+        self._portals_inside[agent.agent_id] = inside_now
 
     def drop(self, agent_id: str, object_id: str) -> None:
         agent = self.agents[agent_id]
@@ -107,6 +279,7 @@ class Environment:
         agent.inventory.remove(obj)
         obj["x"], obj["y"] = agent.x, agent.y
         self.objects[object_id] = obj
+        self._log("item_dropped", [agent_id], object_id=object_id, position=(agent.x, agent.y))
 
     # ---- Game elements: door / key / button ----
 
@@ -268,7 +441,7 @@ class Environment:
         if math.hypot(agent.x - door["x"], agent.y - door["y"]) > reach:
             return
 
-        door["locked"] = False
+        self._set_door_locked(door, False, "key", [agent_id], key_object_id)
         agent.inventory.remove(key)
 
     # Press a nearby button to toggle its linked door's locked state
@@ -282,7 +455,7 @@ class Environment:
 
         door = self.objects.get(button["linked_door_id"])
         if door is not None:
-            door["locked"] = not door["locked"]
+            self._set_door_locked(door, not door["locked"], "button", [agent_id], button_id)
 
     # Pull a nearby lever: flips its on/off state and locks/unlocks every
     # linked door to match (on -> unlocked). Unlike a button, the state
@@ -296,10 +469,11 @@ class Environment:
             return
 
         lever["on"] = not lever["on"]
+        self._log("lever_pulled", [agent_id], lever_id=lever_id, on=lever["on"])
         for door_id in lever["linked_door_ids"]:
             door = self.objects.get(door_id)
             if door is not None:
-                door["locked"] = not lever["on"]
+                self._set_door_locked(door, not lever["on"], "lever", [agent_id], lever_id)
 
     # Passive trigger, checked every step (no explicit action): a pressure
     # plate's linked door stays unlocked only while an agent is standing on it.
@@ -307,23 +481,41 @@ class Environment:
     # (AND 조건) 판정한다 - 서로 떨어진 위치의 판을 각자 다른 에이전트가 동시에 밟고
     # 있어야 하는 "무거운 문"류 협력 퍼즐을 add_pressure_plate를 여러 번 호출하는 것만으로
     # 만들 수 있게 하기 위함. 판이 하나뿐인 문은 기존과 동일하게 동작
+    # 판마다 위에 선 에이전트가 바뀌면 plate_entered/plate_left 이벤트를 남김. 문이 열리면 그
+    # 순간 연결된 판들을 밟고 있던 에이전트 전원을, 닫히면 이번에 판에서 내려간 에이전트를
+    # 원인으로 기록 (남아서 버티던 쪽이 아니라 이탈한 쪽이 문을 닫은 것이므로)
     def _update_pressure_plates(self) -> None:
         door_all_occupied: dict[str, bool] = {}
+        door_plates: dict[str, list[str]] = {}
+        door_occupants: dict[str, set[str]] = {}
+        door_leavers: dict[str, set[str]] = {}
         for obj in self.objects.values():
             if obj["type"] != "pressure_plate":
                 continue
 
-            occupied = any(
-                math.hypot(agent.x - obj["x"], agent.y - obj["y"]) <= obj["radius"]
-                for agent in self.agents.values()
-            )
+            plate_id = obj["object_id"]
+            occupants = {
+                agent.agent_id for agent in self.agents.values()
+                if math.hypot(agent.x - obj["x"], agent.y - obj["y"]) <= obj["radius"]
+            }
+            before = self._plate_occupants.get(plate_id, set())
+            for agent_id in sorted(occupants - before):
+                self._log("plate_entered", [agent_id], plate_id=plate_id)
+            for agent_id in sorted(before - occupants):
+                self._log("plate_left", [agent_id], plate_id=plate_id)
+            self._plate_occupants[plate_id] = occupants
+
             door_id = obj["linked_door_id"]
-            door_all_occupied[door_id] = door_all_occupied.get(door_id, True) and occupied
+            door_all_occupied[door_id] = door_all_occupied.get(door_id, True) and bool(occupants)
+            door_plates.setdefault(door_id, []).append(plate_id)
+            door_occupants.setdefault(door_id, set()).update(occupants)
+            door_leavers.setdefault(door_id, set()).update(before - occupants)
 
         for door_id, all_occupied in door_all_occupied.items():
             door = self.objects.get(door_id)
             if door is not None:
-                door["locked"] = not all_occupied
+                causers = door_occupants[door_id] if all_occupied else door_leavers[door_id]
+                self._set_door_locked(door, not all_occupied, "pressure_plate", sorted(causers), door_plates[door_id])
 
     # ---- Messaging ----
 
@@ -412,13 +604,48 @@ class Environment:
         angle_to_obj = math.degrees(math.atan2(dy, dx)) % 360
         facing = agent.facing % 360
         diff = abs((angle_to_obj - facing + 180) % 360 - 180)
-        return diff <= agent.view_angle / 2
+        if diff > agent.view_angle / 2:
+            return False
+        return self._has_line_of_sight(agent.x, agent.y, obj_x, obj_y)
+
+    # 시야를 가리는 벽 목록을 (x, y, width, height)로 반환. 벽 자체는 world_core 담당이므로
+    # game_map.walls를 읽기만 함 - 항목은 world_core.Wall처럼 .rect(pygame.Rect)를 가지거나,
+    # .x/.y/.width/.height를 직접 가진 객체. game_map에 walls가 없으면 가리는 것 없음
+    def _walls(self) -> list[tuple[float, float, float, float]]:
+        walls = []
+        for wall in getattr(self.game_map, "walls", None) or []:
+            rect = getattr(wall, "rect", wall)
+            walls.append((rect.x, rect.y, rect.width, rect.height))
+        return walls
+
+    # (x0, y0)에서 (x1, y1)까지의 선분이 어떤 벽도 통과하지 않으면 True (Liang-Barsky 선분 클리핑).
+    # 선분 양 끝이 벽 가장자리에 살짝 닿는 것(벽에 붙여 놓은 물체 등)은 가린 것으로 치지 않음
+    def _has_line_of_sight(self, x0: float, y0: float, x1: float, y1: float) -> bool:
+        dx, dy = x1 - x0, y1 - y0
+        eps = 1e-6
+        for wx, wy, ww, wh in self._walls():
+            t_enter, t_exit = 0.0, 1.0
+            for p, q in ((-dx, x0 - wx), (dx, wx + ww - x0), (-dy, y0 - wy), (dy, wy + wh - y0)):
+                if p == 0:
+                    if q < 0:  # 이 축과 평행하고 벽 범위 밖 -> 이 벽과는 만나지 않음
+                        t_enter, t_exit = 1.0, 0.0
+                        break
+                    continue
+                t = q / p
+                if p < 0:
+                    t_enter = max(t_enter, t)
+                else:
+                    t_exit = min(t_exit, t)
+            if t_exit - t_enter > eps and t_enter < 1 - eps and t_exit > eps:
+                return False
+        return True
 
     # Build one agent's observation: own state + visible objects only.
     # Other agents are intentionally NOT included, since MACI evaluates
     # whether agents can coordinate without directly reading each other's state.
     # Objects marked "hidden" (e.g. hidden doors) only appear once the agent
     # is within interact_radius, regardless of the normal view cone.
+    # 일반 물체든 hidden 물체든 벽에 가려지면 보이지 않음
     def get_observation(self, agent_id: str) -> dict:
         agent = self.agents[agent_id]
         visible_objects = []
@@ -426,10 +653,19 @@ class Environment:
         for obj in self.objects.values():
             if obj.get("hidden", False):
                 distance = math.hypot(obj["x"] - agent.x, obj["y"] - agent.y)
-                if distance <= self.interact_radius:
+                if distance <= self.interact_radius and self._has_line_of_sight(agent.x, agent.y, obj["x"], obj["y"]):
                     visible_objects.append(obj)
             elif self._is_visible(agent, obj["x"], obj["y"]):
                 visible_objects.append(obj)
+
+        # 위장된 trap은 관찰상 일반 물품으로 보이게 함 (실제 objects는 그대로)
+        visible_objects = [self._disguise(obj) for obj in visible_objects]
+
+        # 기억: 예전에 본 물체의 "마지막으로 본 상태"에 지금 보이는 것을 덮어씀. 저장은
+        # _record_sightings()가 step()에서 함 (여기서는 계산만 - Rule 검사용 관찰과 구분)
+        known_objects = copy.deepcopy(self._known.get(agent_id, {}))
+        for obj in visible_objects:
+            known_objects[obj["object_id"]] = {**copy.deepcopy(obj), "last_seen_step": self.step_count}
 
         return {
             "self": {
@@ -438,18 +674,58 @@ class Environment:
                 "facing": agent.facing,
                 # deep copy: policy 코드가 observation을 직접 mutate해서(예: inventory에
                 # 아이템을 그냥 append) pick_up 없이 인벤토리를 조작하는 걸 막기 위함
-                "inventory": copy.deepcopy(agent.inventory)
+                "inventory": [self._disguise(obj) for obj in agent.inventory],
+                "step": self.step_count,
+                "map_width": self.game_map.map_width,
+                "map_height": self.game_map.map_height
             },
             # deep copy: policy 코드가 visible_objects의 오브젝트를 직접 mutate해서(예:
             # door["locked"] = False) Rule/interact_radius 검사를 우회해 환경을 직접
             # 조작하는 걸 막기 위함 - 생성된 코드가 action(dict)만 반환하는 순수 함수여야
             # 한다는 전제를 실제로 강제함
-            "visible_objects": copy.deepcopy(visible_objects),
+            "visible_objects": visible_objects,  # _disguise()가 이미 deep copy함
+            # 지금까지 본 적 있는 모든 물체의 마지막으로 본 상태 (object_id -> 물체 + last_seen_step).
+            # CodePolicy 코드는 매 step 새 프로세스에서 실행되어 스스로 기억을 못 하므로 환경이 제공
+            "known_objects": known_objects,
+            # 시야 반경 안에 걸친 벽 [x, y, width, height] - 벽은 이동을 막으므로 길찾기용
+            "walls": self._walls_near(agent.x, agent.y, agent.view_radius),
+            # 에이전트가 직접 쓰는 메모장: action에 "memory": {...}를 넣어 반환하면 다음 step부터
+            # 여기로 돌아옴 (탐색한 곳, 계획 등 자유롭게 저장)
+            "memory": copy.deepcopy(agent.memory),
             # inbox는 참조를 그대로 유지: ObeyCommandRule이 처리한 명령 메시지에
             # message["handled"] = True를 표시해 같은 명령이 다시 실행되지 않도록 하는데,
             # 이게 실제 agent.inbox에 반영되려면 복사본이 아니라 같은 객체여야 함
             "inbox": agent.inbox
         }
+
+    # (x, y)에서 radius 안에 일부라도 걸친 벽 목록 [x, y, width, height]
+    def _walls_near(self, x: float, y: float, radius: float) -> list[list[float]]:
+        near = []
+        for wx, wy, ww, wh in self._walls():
+            nearest_x = min(max(x, wx), wx + ww)
+            nearest_y = min(max(y, wy), wy + wh)
+            if math.hypot(x - nearest_x, y - nearest_y) <= radius:
+                near.append([wx, wy, ww, wh])
+        return near
+
+    # deep copy를 반환. 위장된 trap이면 normal 물품과 구분되지 않게 trap 전용 필드를 제거
+    def _disguise(self, obj: dict) -> dict:
+        obj = copy.deepcopy(obj)
+        if obj.get("category") == ITEM_TRAP and obj.get("disguised"):
+            obj["category"] = ITEM_NORMAL
+            obj.pop("seals", None)
+            obj.pop("disguised", None)
+        return obj
+
+    # 에이전트가 실제로 받은 관찰(step()에서 만든 것)에 처음 나타난 물체마다 object_seen 이벤트를
+    # 남김. apply_action 안의 Rule 검사용 관찰은 에이전트에게 전달되지 않으므로 여기서 세지 않음
+    def _record_sightings(self, agent_id: str, observation: dict) -> None:
+        self._known[agent_id] = copy.deepcopy(observation["known_objects"])
+        seen = self._seen.setdefault(agent_id, set())
+        for obj in observation["visible_objects"]:
+            if obj["object_id"] not in seen:
+                seen.add(obj["object_id"])
+                self._log("object_seen", [agent_id], object_id=obj["object_id"], object_type=obj["type"])
 
     # ---- Action routing / simulation loop ----
 
@@ -465,6 +741,8 @@ class Environment:
 
         if action_type == "move":
             self.move_agent(agent_id, action.get("dx", 0), action.get("dy", 0))
+        elif action_type == "turn":
+            self.turn_agent(agent_id, action.get("facing", self.agents[agent_id].facing))
         elif action_type == "pick_up":
             self.pick_up(agent_id, action.get("object_id"))
         elif action_type == "drop":
@@ -500,6 +778,24 @@ class Environment:
         self._update_movers()
         for agent_id in list(self.agents.keys()):
             observation = self.get_observation(agent_id)
+            self._record_sightings(agent_id, observation)
             action = self.agents[agent_id].decide(observation)
             final_action = self.apply_action(agent_id, action)
+            self._store_memory(agent_id, action)
             self.decision_log.record(self.step_count, agent_id, observation, action, final_action)
+
+    # policy가 고른 action에 "memory": dict가 있으면 다음 관찰의 memory로 저장. Rule이 action을
+    # 바꿔치기해도 메모는 에이전트 자신의 기록이므로 원래 action 기준. 너무 크면(직렬화 20000자
+    # 초과) 무시해 관찰/로그가 비대해지는 것을 막음
+    MEMORY_MAX_CHARS = 20000
+
+    def _store_memory(self, agent_id: str, action) -> None:
+        memory = action.get("memory") if isinstance(action, dict) else None
+        if not isinstance(memory, dict):
+            return
+        try:
+            if len(json.dumps(memory)) > self.MEMORY_MAX_CHARS:
+                return
+        except (TypeError, ValueError):
+            return
+        self.agents[agent_id].memory = copy.deepcopy(memory)
