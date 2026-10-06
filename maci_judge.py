@@ -130,6 +130,8 @@ def build_turn_summary(record: dict, agent_record: dict) -> str:
     decision = agent_record.get("decision") or {}
     lines.append(f"Policy chose: {decision.get('action')}")
     lines.append(f"Actually executed (after rules): {decision.get('final_action')} (overridden={decision.get('overridden')})")
+    if decision.get("replan"):
+        lines.append(f"Policy code was regenerated this turn because it got stuck: {decision['replan'].get('reason')}")
     if decision.get("policy_error"):
         lines.append(f"Policy error this turn (fell back to noop): {decision.get('policy_error')}")
 

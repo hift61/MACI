@@ -406,15 +406,35 @@ self.generated_code : submit_policy_code로 제출되어 accepted된 decide() �
 
 self.last_error : 가장 최근 decide() 호출에서 발생한 예외의 문자열 (없으면 None). noop으로 조용히 대체되는 실패의 원인을 밖에서 확인할 수 있게 함
 
+self.stall_limit : 위치가 이 step 수만큼 연속으로 그대로면 코드를 재생성 (기본 3)
+
+self.max_replans : 회차당 재생성 최대 횟수 (기본 10). 다 쓰면 기존 코드를 계속 사용
+
+self.replans : 재생성 기록 목록 [{"step", "reason"}]
+
+self.last_replan : 이번 decide() 호출에서 재생성했으면 그 기록 {"step", "reason"}, 아니면 None (benchmark.py가 manifest의 decision.replan으로 기록)
+
+- 재생성(replan) 조건
+
+캐시된 코드는 같은 관찰에 같은 행동을 내므로, 막히면 같은 자리에서 영원히 반복됨. 그래서 다음 경우 LLM에게 이유/이전 코드/현재 관찰(CODE_REPLAN_PROMPT)을 보여주고 코드를 다시 짜게 함
+  * 즉시(stuck): decide() 실행 오류(예외/타임아웃/잘못된 action) - 이때는 같은 step 안에서 새 코드로 바로 다시 실행. 또는 move(dx/dy가 0이 아님)를 했는데 위치가 그대로(벽/잠긴 문/coop 운반에 막힘)
+  * 누적(정지): stall_limit step 연속으로 위치가 그대로. 단 known_objects의 압력판 위에 서 있으면 의도된 대기이므로 제외
+
 - 함수
 
-__init__(self, model: str, task_description: str, base_url: str = None, api_key: str = "not-needed", temperature: float = 0.0, max_tokens: int = 4000, extra_params: dict = None, sandbox_timeout: float = 5.0) -> None : client 생성 및 설정 저장
+__init__(self, model: str, task_description: str, base_url: str = None, api_key: str = "not-needed", temperature: float = 0.0, max_tokens: int = 4000, extra_params: dict = None, sandbox_timeout: float = 5.0, stall_limit: int = 3, max_replans: int = 10) -> None : client 생성 및 설정 저장
 
-reset(self) -> None : generated_code, last_error를 모두 비워, 다음 decide() 호출에서 정책 코드를 새로 생성하도록 함
+reset(self) -> None : generated_code, last_error, 재생성 기록과 정지 판정 상태를 모두 비워, 다음 decide() 호출에서 정책 코드를 새로 생성하도록 함
 
-_generate_code(self) -> str : 모듈 함수 _generate_code_with_submission_gate(client, model, CODE_POLICY_SYSTEM_PROMPT, task_description, temperature, max_tokens, extra_params)에 위임
+_generate_code(self, user_content: str = None) -> str : 모듈 함수 _generate_code_with_submission_gate(client, model, CODE_POLICY_SYSTEM_PROMPT, user_content 또는 task_description, temperature, max_tokens, extra_params)에 위임
 
-decide(self, observation: dict) -> dict : generated_code가 없으면 _generate_code()로 먼저 채운 뒤, policy_sandbox.run_decide_code(generated_code, observation, timeout=sandbox_timeout)를 호출해 서브프로세스에서 실행. 성공하면 last_error를 None으로 초기화하고 결과 action을 반환. 코드 생성/실행 중 오류(에러 문자열, 타임아웃, 잘못된 반환값 포함)가 있으면 last_error에 기록하고 {"type": "noop"} 반환
+_stuck_reason(self, observation: dict) -> str | None : 직전 위치/행동과 비교해 정지 횟수를 갱신하고, 위 재생성 조건에 해당하면 이유 문장을 반환 (아니면 None)
+
+_on_pressure_plate(observation: dict, pos) -> bool : (staticmethod) pos가 known_objects의 압력판 radius 안인지
+
+_replan(self, observation: dict, reason: str) -> bool : CODE_REPLAN_PROMPT로 코드를 재생성하고 replans/last_replan에 기록, 정지 횟수 초기화. max_replans를 다 썼으면 아무것도 안 하고 False
+
+decide(self, observation: dict) -> dict : generated_code가 없으면 _generate_code()로 먼저 채우고, 있으면 _stuck_reason()이 이유를 내면 _replan(). 그 뒤 policy_sandbox.run_decide_code()로 서브프로세스에서 실행하고, 실행 오류면 _replan() 후 한 번 더 실행. 성공하면 last_error를 None으로 초기화하고 결과 action을 반환. 그래도 오류(에러 문자열, 타임아웃, 잘못된 반환값, 코드 생성 실패 포함)면 last_error에 기록하고 {"type": "noop"} 반환. 다음 판정을 위해 이번 위치와 반환한 action을 기억
 
 전역 함수/상수 (모듈 레벨)
 
@@ -612,7 +632,7 @@ WALL_STANDOFF : 벽에 막혔을 때 벽면에서 띄워 멈추는 거리 (0.5, 
 
 resolve_move(self, environment, agent, dx: float, dy: float) -> tuple[float, float] : 새 좌표를 맵 경계 안으로 clamp하고, 이동 경로 중간에 벽이 있으면(_first_wall_hit - 한 번에 크게 움직여 벽을 뛰어넘는 경우 포함) 벽 직전(WALL_STANDOFF)까지만 이동시킨 뒤, _blocked_by_door()로 막히면 원래 좌표를 그대로 반환
 
-_first_wall_hit(walls, x0: float, y0: float, x1: float, y1: float) -> float | None : (staticmethod) (x0, y0)->(x1, y1) 선분이 벽 안으로 처음 들어가는 지점의 비율 t(0~1), 안 부딪히면 None. 시작점이 이미 벽 내부면 그 벽은 무시(빠져나올 수 있게)
+_first_wall_hit(walls, x0: float, y0: float, x1: float, y1: float) -> float | None : (staticmethod) (x0, y0)->(x1, y1) 선분이 벽 안으로 처음 들어가는 지점의 비율 t(0~1), 안 부딪히면 None. 시작점이 이미 벽 내부면 그 벽은 무시(빠져나올 수 있게). 도착점이 벽 가장자리에 정확히 닿는 경우도 1.0(부딪힘)으로 처리 - 벽 표면 위에 서면 벽을 따라 미끄러지는 이동이 전부 막히기 때문
 
 _blocked_by_door(self, environment, x: float, y: float) -> bool : 해당 좌표가 environment.objects 중 잠긴 문(locked)의 radius 안인지 판정
 
@@ -913,7 +933,7 @@ press_button(self, agent_id: str, button_id: str) -> None : 근처(interact_radi
 
 pull_lever(self, agent_id: str, lever_id: str) -> None : 근처(interact_radius 이내) 레버를 당겨 on/off 상태를 뒤집고, linked_door_ids의 모든 문 잠금 상태를 그 상태(on=잠금 해제)에 맞춤. 문 상태 변경은 _set_door_locked()를 거치므로 trap으로 봉인(sealed)된 문은 변하지 않음. 당길 때마다 lever_pulled 이벤트 기록
 
-_update_pressure_plates(self) -> None : 모든 pressure_plate에 대해 radius 안에 서 있는 에이전트가 있는지 판정한 뒤, 같은 linked_door_id를 공유하는 판들의 점유 여부를 AND로 묶어 그 문을 잠금/해제. 판이 하나뿐인 문은 기존과 동일(점유 시 해제, 아니면 잠금), 여러 판이 연결된 문은 전부 동시에 점유돼야만 해제됨. step() 시작 시 자동 호출됨 (에이전트의 action 없이 동작). 문 상태 변경은 _set_door_locked()를 거치므로 trap으로 봉인(sealed)된 문은 변하지 않음. 판마다 올라서고 내려간 에이전트를 plate_entered/plate_left 이벤트로 기록하고, 문이 열리면 연결된 판들을 밟고 있던 전원을, 닫히면 이번에 판에서 내려간 에이전트를 door_unlocked/door_locked의 agent_ids로 기록
+_update_pressure_plates(self) -> None : 모든 pressure_plate에 대해 radius 안에 서 있는 에이전트가 있는지 판정한 뒤, 같은 linked_door_id를 공유하는 판들의 점유 여부를 AND로 묶어 그 문을 잠금/해제. 판이 하나뿐인 문은 기존과 동일(점유 시 해제, 아니면 잠금), 여러 판이 연결된 문은 전부 동시에 점유돼야만 해제됨. step()의 마지막(모든 행동 적용 후)에 자동 호출됨 (에이전트의 action 없이 동작). 문 상태 변경은 _set_door_locked()를 거치므로 trap으로 봉인(sealed)된 문은 변하지 않음. 판마다 올라서고 내려간 에이전트를 plate_entered/plate_left 이벤트로 기록하고, 문이 열리면 연결된 판들을 밟고 있던 전원을, 닫히면 이번에 판에서 내려간 에이전트를 door_unlocked/door_locked의 agent_ids로 기록
 
 _update_movers(self) -> None : waypoints가 있는 모든 오브젝트를 현재 목표 waypoint 쪽으로 한 스텝(speed만큼) 이동시키고, 도착하면 다음 waypoint로 진행(마지막이면 loop 여부에 따라 처음으로 순환하거나 그 자리에 정지). step() 시작 시 자동 호출됨 (에이전트의 action과 무관하게 동작)
 
@@ -941,7 +961,7 @@ _walls(self) -> list[tuple[float, float, float, float]] : 시야를 가리는 �
 
 _has_line_of_sight(self, x0: float, y0: float, x1: float, y1: float) -> bool : (x0, y0)에서 (x1, y1)까지의 선분이 어떤 벽 내부도 통과하지 않으면 True (Liang-Barsky 선분 클리핑). 선분 끝이 벽 가장자리에 닿거나 모서리를 스치는 것은 가린 것으로 치지 않고, 끝점이 벽 내부에 있으면 가린 것으로 침
 
-get_observation(self, agent_id: str) -> dict : 에이전트의 관찰 생성. 자신의 위치/방향/inventory, 시야 내 물체 목록(숨겨진 문은 interact_radius 이내에서만 노출, 일반/숨겨진 물체 모두 벽에 가려지면 제외), inbox만 포함하며 다른 에이전트 정보는 제공하지 않음 (협력 평가를 위해 의도적으로 배제). inventory와 visible_objects는 _disguise()를 거친 deep copy로 반환(policy/생성된 코드가 observation을 직접 mutate해서 pick_up/use_key 등을 거치지 않고 환경을 조작하는 것을 막기 위함, 위장된 trap은 normal로 보임). inbox만은 참조를 그대로 유지(ObeyCommandRule이 message["handled"]=True를 표시해야 하므로). 추가 필드: self.step(현재 step_count)/self.map_width/self.map_height, known_objects(지금까지 본 모든 물체의 마지막 상태 + last_seen_step - 저장된 _known에 지금 보이는 것을 덮어써 계산만 하고, 저장은 _record_sightings가 함), walls(_walls_near로 구한 시야 반경 안에 걸친 벽 [x, y, width, height] - 벽은 이동을 막으므로 길찾기용), memory(agent.memory 사본). CodePolicy 코드는 매 step 새 프로세스에서 실행되어 스스로 기억을 못 하므로 known_objects/memory로 기억을 제공
+get_observation(self, agent_id: str) -> dict : 에이전트의 관찰 생성. 자신의 위치/방향/inventory, 시야 내 물체 목록(숨겨진 문은 interact_radius 이내에서만 노출, 일반/숨겨진 물체 모두 벽에 가려지면 제외), inbox만 포함하며 다른 에이전트 정보는 제공하지 않음 (협력 평가를 위해 의도적으로 배제). inventory와 visible_objects는 _disguise()를 거친 deep copy로 반환(policy/생성된 코드가 observation을 직접 mutate해서 pick_up/use_key 등을 거치지 않고 환경을 조작하는 것을 막기 위함, 위장된 trap은 normal로 보임). inbox는 목록만 복사하고 메시지 객체는 공유(동시 실행 중 같은 step에 도착한 메시지가 이미 만든 관찰에 끼어들지 않게 하면서도, ObeyCommandRule이 표시하는 message["handled"]=True는 실제 inbox에 반영되도록). 메시지마다 전달 시점 "step"이 붙어 있음. 추가 필드: self.step(현재 step_count)/self.map_width/self.map_height, known_objects(지금까지 본 모든 물체의 마지막 상태 + last_seen_step - 저장된 _known에 지금 보이는 것을 덮어써 계산만 하고, 저장은 _record_sightings가 함), walls(_walls_near로 구한 시야 반경 안에 걸친 벽 [x, y, width, height] - 벽은 이동을 막으므로 길찾기용), memory(agent.memory 사본). CodePolicy 코드는 매 step 새 프로세스에서 실행되어 스스로 기억을 못 하므로 known_objects/memory로 기억을 제공
 
 _walls_near(self, x: float, y: float, radius: float) -> list[list[float]] : (x, y)에서 radius 안에 일부라도 걸친 벽 목록 [x, y, width, height]
 
@@ -949,9 +969,9 @@ _record_sightings(self, agent_id: str, observation: dict) -> None : observation�
 
 _disguise(self, obj: dict) -> dict : obj의 deep copy 반환. disguised=True인 trap이면 category를 "normal"로 바꾸고 seals/disguised 필드를 제거
 
-apply_action(self, agent_id: str, action: dict) -> dict : action을 _enforce_rules()로 먼저 강제 검사/교체한 뒤(ObeyCommandRule이 걸려 있으면 여기서 명령으로 치환됨), move/turn/pick_up/drop/use_key/press_button/pull_lever/send_message/share_belief/request_info/confirm/claim_role/claim_task/issue_command 중 해당 처리로 라우팅. step() 없이 직접 호출해도 규칙은 항상 적용됨. 강제 적용 후 실제로 실행된 action을 반환(step()이 이 값을 DecisionLog에 final_action으로 기록)
+apply_action(self, agent_id: str, action: dict, observation: dict = None) -> dict : action을 _enforce_rules()로 먼저 강제 검사/교체한 뒤(ObeyCommandRule이 걸려 있으면 여기서 명령으로 치환됨. 규칙 검사에는 observation을 쓰며, 생략하면 지금 상태로 새로 만듦 - step()은 결정에 쓴 step 시작 시점의 관찰을 넘김), _is_well_formed()로 필드 타입(dx/dy/facing은 유한한 실수, object_id 등 id는 문자열)을 확인해 잘못됐으면 invalid_action 이벤트를 남기고 noop으로 처리, 아니면 move/turn/pick_up/drop/use_key/press_button/pull_lever/send_message/share_belief/request_info/confirm/claim_role/claim_task/issue_command 중 해당 처리로 라우팅. step() 없이 직접 호출해도 규칙은 항상 적용됨. 강제 적용 후 실제로 실행된 action을 반환(step()이 이 값을 DecisionLog에 final_action으로 기록)
 
-step(self) -> None : step_count를 먼저 1 증가시키고, _update_pressure_plates()로 압력판을, _update_movers()로 움직이는 오브젝트를 갱신한 뒤, 모든 에이전트에 대해 관찰 생성 → policy로 행동 결정 → 행동 적용(apply_action이 반환한 final_action까지 observation/action과 함께 decision_log에 기록)을 한 틱만큼 수행. 관찰을 만든 직후 _record_sightings()로 목격 이벤트를 기록. 행동 적용 후 _store_memory()로 action의 memory를 저장
+step(self) -> None : 한 틱을 동시 실행으로 진행. step_count를 1 증가시키고 _update_movers()로 움직이는 오브젝트를 갱신한 뒤, (1) 모든 에이전트의 관찰을 같은 시점에 만들고(_record_sightings()로 목격 이벤트 기록) (2) 각 policy의 decide()를 스레드로 병렬 호출해 행동을 정하고 (3) 그 행동들을 apply_action(결정에 쓴 관찰을 넘김)으로 적용하고(_store_memory()로 memory 저장, decision_log에 observation/action/final_action 기록) (4) 마지막에 _update_pressure_plates()로 압력판을 판정. 따라서 이번 step에 보낸 메시지는 상대가 다음 step 관찰에서 처음 보고, 압력판은 올라선 그 step에 바로 문을 엶. 같은 물건을 동시에 집는 것처럼 적용 순서가 결과를 가르는 충돌이 있어, 적용 순서를 step마다 한 칸씩 돌림(step_count % 에이전트 수만큼 회전 - 결정적이라 재현 가능)
 
 MEMORY_MAX_CHARS : 저장할 수 있는 memory의 최대 크기 (JSON 직렬화 20000자, 클래스 상수)
 

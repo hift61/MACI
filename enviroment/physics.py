@@ -62,6 +62,10 @@ class SimplePhysicsEngine(PhysicsEngine):
                     t_exit = min(t_exit, t)
             if hit and t_enter < t_exit and t_enter <= 1 and (first is None or t_enter < first):
                 first = t_enter
+            # 도착점이 벽 가장자리에 정확히 닿는 경우(겹치는 길이 0)도 부딪힌 것으로 침. 안 그러면
+            # 벽 표면 위에 서게 되어, 그다음부터 벽을 따라 미끄러지는 이동이 전부 막힘
+            elif first is None and wx <= x1 <= wx + ww and wy <= y1 <= wy + wh:
+                first = 1.0
         return first
 
     def _blocked_by_door(self, environment, x: float, y: float) -> bool:

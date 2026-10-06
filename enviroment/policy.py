@@ -438,6 +438,27 @@ def _generate_code_with_submission_gate(
     return _extract_code(response.choices[0].message.content)
 
 
+# 캐시된 코드가 막혔을 때 LLM에게 다시 짜게 하는(재생성) 조건:
+#   즉시 (stuck) - decide() 실행 오류(예외/타임아웃/잘못된 action), 또는 move를 했는데 위치가
+#                  그대로(벽/잠긴 문/coop 운반에 막힘). 코드는 같은 관찰에 같은 행동을 내므로
+#                  그대로 두면 같은 자리에서 영원히 반복됨
+#   누적 (정지) - stall_limit step 연속으로 위치가 그대로 (noop/turn만 반복 등). 단 압력판 위에서
+#                  기다리는 것은 의도된 대기이므로 제외
+# 재생성 때는 이유/이전 코드/현재 관찰을 함께 보여줌. 비용 폭주를 막기 위해 회차당 max_replans회까지
+CODE_REPLAN_PROMPT = """{task}
+
+Your previous decide() code got stuck at step {step}: {reason}
+Previous code:
+```python
+{code}
+```
+
+Current observation:
+{observation}
+
+Write an improved decide() that gets unstuck and keeps making progress on the task."""
+
+
 class CodePolicy(Policy):
     def __init__(
         self,
@@ -448,7 +469,9 @@ class CodePolicy(Policy):
         temperature: float = 0.0,
         max_tokens: int = 4000,
         extra_params: dict | None = None,
-        sandbox_timeout: float = 5.0
+        sandbox_timeout: float = 5.0,
+        stall_limit: int = 3,
+        max_replans: int = 10
     ) -> None:
         self.client = OpenAI(base_url=base_url, api_key=api_key)
         self.model = model
@@ -457,42 +480,108 @@ class CodePolicy(Policy):
         self.max_tokens = max_tokens        # 응답이 코드 완성 전에 잘리는 것을 막기 위한 여유값
         self.extra_params = extra_params or {}  # 프로바이더 전용 옵션 (예: gpt-oss의 reasoning_effort)
         self.sandbox_timeout = sandbox_timeout  # decide() 서브프로세스 실행 하드 타임아웃 (초)
-        self.generated_code = None   # LLM이 제출/수락한 코드 원문 (한 번만 생성, 매 스텝 재사용)
+        self.generated_code = None   # LLM이 제출/수락한 코드 원문 (처음 생성 후 재사용, stuck이면 재생성)
         self.last_error = None       # 가장 최근 decide() 호출에서 발생한 예외 (없으면 None)
+        self.stall_limit = stall_limit    # 위치가 이만큼 연속으로 그대로면 재생성
+        self.max_replans = max_replans    # 회차당 재생성 최대 횟수
+        self.replans: list[dict] = []     # 재생성 기록 [{"step", "reason"}]
+        self.last_replan = None           # 이번 decide() 호출에서 재생성했으면 그 기록 (manifest용)
+        self._last_pos = None             # 직전 관찰의 위치
+        self._last_action = None          # 직전에 반환한 action
+        self._stall_count = 0             # 위치가 연속으로 그대로였던 step 수
 
     # 다음 decide() 호출에서 정책 코드를 새로 생성하도록 캐시를 비움
     def reset(self) -> None:
         self.generated_code = None
         self.last_error = None
+        self.replans = []
+        self.last_replan = None
+        self._last_pos = None
+        self._last_action = None
+        self._stall_count = 0
 
-    def _generate_code(self) -> str:
+    def _generate_code(self, user_content: str = None) -> str:
         return _generate_code_with_submission_gate(
             self.client,
             self.model,
             CODE_POLICY_SYSTEM_PROMPT,
-            self.task_description,
+            user_content or self.task_description,
             self.temperature,
             self.max_tokens,
             self.extra_params,
         )
 
+    # 이번 관찰로 정지 횟수를 갱신하고, 재생성할 이유가 있으면 그 설명을 반환 (없으면 None)
+    def _stuck_reason(self, observation: dict) -> str | None:
+        me = observation["self"]
+        pos = (me["x"], me["y"])
+        if self._last_pos is None:
+            return None
+        if pos != self._last_pos:
+            self._stall_count = 0
+            return None
+        self._stall_count += 1
+
+        last = self._last_action or {}
+        if last.get("type") == "move" and (last.get("dx") or last.get("dy")):
+            return f"your last move {last} was blocked - your position {pos} did not change"
+        if self._stall_count >= self.stall_limit and not self._on_pressure_plate(observation, pos):
+            return f"you have not moved from {pos} for {self._stall_count} steps in a row"
+        return None
+
+    @staticmethod
+    def _on_pressure_plate(observation: dict, pos) -> bool:
+        return any(
+            obj.get("type") == "pressure_plate"
+            and math.hypot(obj["x"] - pos[0], obj["y"] - pos[1]) <= obj.get("radius", 0.0)
+            for obj in observation.get("known_objects", {}).values()
+        )
+
+    # 이유와 함께 코드를 새로 생성. max_replans를 다 썼으면 기존 코드를 유지하고 False
+    def _replan(self, observation: dict, reason: str) -> bool:
+        if len(self.replans) >= self.max_replans:
+            return False
+        step = observation["self"].get("step")
+        self.generated_code = self._generate_code(CODE_REPLAN_PROMPT.format(
+            task=self.task_description,
+            step=step,
+            reason=reason,
+            code=self.generated_code,
+            observation=json.dumps(observation, ensure_ascii=False),
+        ))
+        self.last_replan = {"step": step, "reason": reason}
+        self.replans.append(self.last_replan)
+        self._stall_count = 0
+        return True
+
     def decide(self, observation: dict) -> dict:
+        self.last_replan = None
+        action = {"type": "noop"}
         try:
             if self.generated_code is None:
                 self.generated_code = self._generate_code()
+            else:
+                reason = self._stuck_reason(observation)
+                if reason is not None:
+                    self._replan(observation, reason)
 
             result = run_decide_code(self.generated_code, observation, timeout=self.sandbox_timeout)
+            # 실행 오류도 stuck: 새 코드로 이번 step 안에서 바로 다시 실행 (한 step을 noop으로 버리지 않음)
+            if result.get("error") and self._replan(observation, f"decide() failed: {result['error']}"):
+                result = run_decide_code(self.generated_code, observation, timeout=self.sandbox_timeout)
+
             if result.get("error"):
                 self.last_error = result["error"]
-                return {"type": "noop"}
-
-            self.last_error = None
-            return result["action"]
+            else:
+                self.last_error = None
+                action = result["action"]
         except Exception:
             # 매 스텝 같은 버그로 계속 noop이 나와도 원인을 알 수 있도록 예외를 보존.
             # (여기서 noop으로 폴백하는 이유는 그대로: 시뮬레이션 자체는 멈추면 안 됨)
             self.last_error = traceback.format_exc()
-            return {"type": "noop"}
+        self._last_pos = (observation["self"]["x"], observation["self"]["y"])
+        self._last_action = action
+        return action
 
 
 # CodePolicy는 코드를 처음 한 번만 생성해 재사용하므로, 생성 이후 들어오는 메시지에
