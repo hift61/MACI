@@ -109,10 +109,10 @@ class EditorModel:
     def add_portal_pair(self, x1: float, y1: float, x2: float, y2: float) -> tuple[dict, dict]:
         (x1, y1), (x2, y2) = self._clamp(x1, y1), self._clamp(x2, y2)
         a = {"kind": "portal", "id": self._new_id("portal"), "x": x1, "y": y1,
-             "params": {"dest_x": x2, "dest_y": y2, "radius": 10.0}}
+            "params": {"dest_x": x2, "dest_y": y2, "radius": 10.0}}
         self.spec.objects.append(a)
         b = {"kind": "portal", "id": self._new_id("portal"), "x": x2, "y": y2,
-             "params": {"dest_x": x1, "dest_y": y1, "radius": 10.0}}
+            "params": {"dest_x": x1, "dest_y": y1, "radius": 10.0}}
         self.spec.objects.append(b)
         return a, b
 
