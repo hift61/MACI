@@ -27,8 +27,8 @@ class PolicyTemplateTests(unittest.TestCase):
         code = self.filled('    target = find_object("goal")\n    memory["phase"] = "approach"\n    return move_toward(target["x"], target["y"])')
         result = run_decide_code(code, self.observation())
         self.assertIsNone(result['error'])
-        self.assertEqual(result['action']['dx'], 20.)
-        self.assertEqual(result['action']['dy'], 0.)
+        self.assertEqual(result['action']['type'], 'move_forward')
+        self.assertEqual(result['action']['distance'], 20.)
         self.assertEqual(result['action']['memory'], {'previous': True, 'phase': 'approach'})
 
     def test_message_and_arrival_helpers(self):
@@ -37,6 +37,18 @@ class PolicyTemplateTests(unittest.TestCase):
         result = run_decide_code(self.filled('    return move_toward(x, y)'), self.observation())
         self.assertIsNone(result['error'])
         self.assertEqual(result['action']['type'], 'noop')
+
+    def test_move_helper_turns_before_advancing(self):
+        code = self.filled('    return move_toward(x, y + 30)')
+        obs = self.observation()
+        obs['self']['facing'] = 0
+        result = run_decide_code(code, obs)
+        self.assertEqual(result['action']['type'], 'turn')
+        self.assertEqual(result['action']['angle'], 90.)
+        obs['self']['facing'] = 90
+        result = run_decide_code(code, obs)
+        self.assertEqual(result['action']['type'], 'move_forward')
+        self.assertEqual(result['action']['distance'], 20.)
 
     def test_all_code_prompts_supply_same_layout(self):
         for prompt in (CODE_POLICY_SYSTEM_PROMPT, CODE_STEP_SYSTEM_PROMPT, HYBRID_POLICY_SYSTEM_PROMPT):

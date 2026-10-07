@@ -26,11 +26,12 @@ MAP_DATAS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 MAP_VIEW = 720       # 맵 영역 최대 크기 (픽셀)
 PAD = 20             # 맵 영역 바깥 여백
 SIDEBAR_W = 360
-SNAP = 5             # 좌표 격자 스냅 단위 (맵 좌표)
+FORWARD_STEP, TURN_STEP = 2.5, 15.0
+FINE_FORWARD_STEP, FINE_TURN_STEP = 0.25, 1.5
 VIEW_RADIUS, VIEW_ANGLE = 100.0, 90.0   # 미리보기용 시야 (Environment.add_agent 기본값)
 
 COLORS = {
-    "bg": (24, 26, 31), "map": (36, 39, 46), "grid": (46, 50, 58), "wall": (150, 155, 165),
+    "bg": (24, 26, 31), "map": (36, 39, 46), "wall": (150, 155, 165),
     "text": (225, 228, 235), "dim": (140, 145, 155), "warn": (240, 190, 80), "err": (240, 90, 90),
     "ok": (110, 210, 130), "goal": (255, 215, 0), "select": (255, 255, 255),
     "door": (190, 120, 60), "door_open": (110, 180, 110), "key": (240, 220, 80), "button": (80, 200, 230),
@@ -83,12 +84,15 @@ class EditorApp:
         self._layout()
         self.screen = pygame.display.set_mode((self.map_px_w + PAD * 2 + SIDEBAR_W, max(self.map_px_h + PAD * 2, 760)))
         pygame.display.set_caption("MACI Map Editor")
+        pygame.key.set_repeat(200, 30)
         self.font = self._font(15)
         self.small = self._font(12)
 
     @staticmethod
     def _font(size):
         for name in ("malgungothic", "applegothic", "nanumgothic", None):
+            if name and pygame.font.match_font(name) is None:
+                continue
             try:
                 return pygame.font.SysFont(name, size) if name else pygame.font.Font(None, size + 4)
             except Exception:
@@ -104,11 +108,8 @@ class EditorApp:
     def to_screen(self, x, y):
         return int(PAD + x * self.scale), int(PAD + y * self.scale)
 
-    def to_map(self, px, py, snap=True):
-        x, y = (px - PAD) / self.scale, (py - PAD) / self.scale
-        if snap:
-            x, y = round(x / SNAP) * SNAP, round(y / SNAP) * SNAP
-        return x, y
+    def to_map(self, px, py):
+        return (px - PAD) / self.scale, (py - PAD) / self.scale
 
     def in_map(self, px, py) -> bool:
         return PAD <= px <= PAD + self.map_px_w and PAD <= py <= PAD + self.map_px_h
@@ -168,7 +169,9 @@ class EditorApp:
         if event.type == pygame.MOUSEWHEEL:
             target = self.model.hit_test(*self.hover, radius=12 / self.scale + 6)
             if target and target[0] == "agent":
-                self.model.rotate_agent(target[1], -45 if event.y > 0 else 45)
+                fine = pygame.key.get_mods() & pygame.KMOD_SHIFT
+                self.model.rotate_agent(target[1], -event.y * (FINE_TURN_STEP if fine else TURN_STEP))
+                self.dirty = True
             return
 
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
@@ -183,8 +186,7 @@ class EditorApp:
         if event.type != pygame.MOUSEBUTTONDOWN or not self.in_map(*event.pos) or event.button not in (1, 3):
             return
         x, y = self.to_map(*event.pos)
-        raw_x, raw_y = self.to_map(*event.pos, snap=False)
-        target = self.model.hit_test(raw_x, raw_y, radius=12 / self.scale + 6)
+        target = self.model.hit_test(x, y, radius=12 / self.scale + 6)
 
         if event.button == 3:  # 우클릭: 진행 중인 작업 취소, 없으면 삭제
             if self.pending is not None:
@@ -294,7 +296,7 @@ class EditorApp:
             policies[agent_id] = ManualPolicy()
             agent.set_policy(policies[agent_id])
         self.play = {"env": env, "objectives": objectives, "policies": policies, "current": 0}
-        self.say("테스트 플레이: 방향키 이동, Q/E 회전, Space 상호작용, X 내려놓기, Tab 에이전트 전환, P 종료")
+        self.say("W/↑ 전진 · A/D 회전 · Shift 정밀 조작")
 
     def _current_agent_id(self):
         ids = list(self.play["env"].agents)
@@ -306,9 +308,9 @@ class EditorApp:
         env = self.play["env"]
         agent_id = self._current_agent_id()
         agent = env.agents[agent_id]
-        step = env.max_move or 20.0
-        moves = {pygame.K_LEFT: (-step, 0), pygame.K_RIGHT: (step, 0), pygame.K_UP: (0, -step), pygame.K_DOWN: (0, step),
-                 pygame.K_a: (-step, 0), pygame.K_d: (step, 0), pygame.K_w: (0, -step), pygame.K_s: (0, step)}
+        fine = event.mod & pygame.KMOD_SHIFT
+        distance = FINE_FORWARD_STEP if fine else FORWARD_STEP
+        angle = FINE_TURN_STEP if fine else TURN_STEP
         action = None
         if event.key in (pygame.K_p, pygame.K_ESCAPE):
             self.play = None
@@ -317,11 +319,12 @@ class EditorApp:
         if event.key == pygame.K_TAB:
             self.play["current"] += 1
             return
-        if event.key in moves:
-            dx, dy = moves[event.key]
-            action = {"type": "move", "dx": dx, "dy": dy}
-        elif event.key in (pygame.K_q, pygame.K_e):
-            action = {"type": "turn", "facing": agent.facing + (-45 if event.key == pygame.K_q else 45)}
+        if event.key in (pygame.K_w, pygame.K_UP):
+            action = {"type": "move_forward", "distance": distance}
+        elif event.key in (pygame.K_a, pygame.K_LEFT, pygame.K_q):
+            action = {"type": "turn", "angle": -angle}
+        elif event.key in (pygame.K_d, pygame.K_RIGHT, pygame.K_e):
+            action = {"type": "turn", "angle": angle}
         elif event.key == pygame.K_SPACE:
             action = self._smart_interact(env, agent)
         elif event.key == pygame.K_x and agent.inventory:
@@ -359,11 +362,6 @@ class EditorApp:
     def draw(self) -> None:
         self.screen.fill(COLORS["bg"])
         pygame.draw.rect(self.screen, COLORS["map"], (PAD, PAD, self.map_px_w, self.map_px_h))
-        spec = self.model.spec
-        for gx in range(0, spec.width + 1, 50):
-            pygame.draw.line(self.screen, COLORS["grid"], self.to_screen(gx, 0), self.to_screen(gx, spec.height))
-        for gy in range(0, spec.height + 1, 50):
-            pygame.draw.line(self.screen, COLORS["grid"], self.to_screen(0, gy), self.to_screen(spec.width, gy))
         if self.play is not None:
             self._draw_play()
         else:
@@ -470,7 +468,7 @@ class EditorApp:
             color = COLORS["goal"] if tool == self.tool else COLORS["text"]
             self.text(f"[{key}] {desc}", (x, y), color, self.small); y += 16
         y += 6
-        for s in ("우클릭: 삭제 / 진행 중 작업 취소", "휠: 에이전트 방향 회전 (45도)", "Ctrl+S: 저장   P: 테스트 플레이", "Esc: 선택 도구"):
+        for s in ("우클릭: 삭제 / 진행 중 작업 취소", "휠: 몸 회전 15° (Shift: 1.5°)", "격자 없이 자유 배치 (소수 좌표)", "Ctrl+S: 저장   P: 테스트 플레이", "Esc: 선택 도구"):
             self.text(s, (x, y), COLORS["dim"], self.small); y += 16
         y += 8
         self.text(f"저장 경로: {os.path.relpath(self.save_path)}", (x, y), COLORS["dim"], self.small); y += line
@@ -496,6 +494,9 @@ class EditorApp:
         agent = env.agents[current]
         self.text("테스트 플레이", (x, y)); y += line + 4
         self.text(f"step {env.step_count}   조작 중: {current}", (x, y)); y += line
+        self.text(f"위치 ({agent.x:.2f}, {agent.y:.2f})  방향 {agent.facing:.2f}°", (x, y), COLORS["dim"], self.small); y += line
+        hx, hy = agent.heading
+        self.text(f"heading ({hx:.3f}, {hy:.3f})", (x, y), COLORS["dim"], self.small); y += line
         inv = ", ".join(o["object_id"] for o in agent.inventory) or "없음"
         self.text(f"인벤토리: {inv}", (x, y), COLORS["dim"], self.small); y += line
         self.text("목표:", (x, y)); y += line
@@ -511,7 +512,7 @@ class EditorApp:
         for e in env.event_log.entries[-12:]:
             detail = e.get("door_id") or e.get("object_id") or e.get("plate_id") or e.get("portal_id") or e.get("lever_id") or ""
             self.text(f"{e['step']:>3} {e['type']} {','.join(e['agent_ids'])} {detail}", (x + 8, y), COLORS["dim"], self.small); y += 15
-        help_lines = ("방향키/WASD 이동, Q/E 회전", "Space 상호작용, X 내려놓기, . 대기", "Tab 에이전트 전환, P/Esc 편집으로")
+        help_lines = ("W/↑ 전진 2.5, A/D·←/→ 몸 회전 15°", "Shift: 전진 0.25 / 회전 1.5°", "Space 상호작용, X 내려놓기, . 대기", "Tab 에이전트 전환, P/Esc 편집으로")
         bottom = self.screen.get_height() - PAD - 18 - 16 * (len(help_lines) + 1)
         for i, s in enumerate(help_lines):
             self.text(s, (x, bottom + 16 * i), COLORS["dim"], self.small)

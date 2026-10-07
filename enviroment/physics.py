@@ -2,7 +2,7 @@ import math
 
 
 # 에이전트 이동을 실제로 어떻게 처리할지 결정하는 추상 인터페이스.
-# Environment.move_agent()는 이동 계산을 직접 하지 않고 이 인터페이스에 위임하므로,
+# Environment.move_forward()는 내부 _move_agent()를 통해 이 인터페이스에 위임하므로,
 # 나중에 팀원이 정교한 물리 엔진을 만들면 이 클래스를 상속한 구현체로 통째로 교체해
 # Environment.__init__(physics=...)에 넣기만 하면 됨 (agent/policy/rule/tools 쪽은
 # 그대로 두고 물리 계산만 바꿔 끼우는 구조).
@@ -16,25 +16,37 @@ class PhysicsEngine:
 
 # 실제 물리 엔진이 들어오기 전까지 쓰는 자리표시자(placeholder) 기본 구현.
 # 맵 경계 안으로 좌표를 clamp하고, 벽(environment._walls())에 닿으면 그 직전에서 멈추고,
-# 잠긴 문의 radius 안쪽으로는 진입을 막음 (에이전트끼리는 서로 통과 가능). 더 정교한 충돌
+# 잠긴 문의 radius와도 이동 선분 전체를 검사함 (에이전트끼리는 서로 통과 가능). 더 정교한 충돌
 # 처리가 필요하면 world_core 쪽 물리 엔진으로 교체.
 class SimplePhysicsEngine(PhysicsEngine):
     WALL_STANDOFF = 0.5  # 벽에 막혔을 때 벽면에서 띄워 멈추는 거리
 
     def resolve_move(self, environment, agent, dx: float, dy: float) -> tuple[float, float]:
-        new_x = min(max(agent.x + dx, 0), environment.game_map.map_width)
-        new_y = min(max(agent.y + dy, 0), environment.game_map.map_height)
+        # Stop at the first map edge along the requested direction, without bending
+        # a diagonal path by independently clamping its endpoint's x and y.
+        boundary_t = 1.0
+        for position, delta, limit in (
+            (agent.x, dx, environment.game_map.map_width),
+            (agent.y, dy, environment.game_map.map_height),
+        ):
+            if delta > 0:
+                boundary_t = min(boundary_t, max(0.0, (limit - position) / delta))
+            elif delta < 0:
+                boundary_t = min(boundary_t, max(0.0, -position / delta))
+        new_x = agent.x + dx * boundary_t
+        new_y = agent.y + dy * boundary_t
 
         # 이동 경로 중간에 벽이 있으면 (한 번에 크게 움직여 벽을 뛰어넘는 것 포함) 벽 직전까지만 이동
-        t = self._first_wall_hit(environment._walls(), agent.x, agent.y, new_x, new_y)
+        hits = [
+            self._first_wall_hit(environment._walls(), agent.x, agent.y, new_x, new_y),
+            self._first_door_hit(environment, agent.x, agent.y, new_x, new_y),
+        ]
+        t = min((hit for hit in hits if hit is not None), default=None)
         if t is not None:
             length = math.hypot(new_x - agent.x, new_y - agent.y)
             t = max(0.0, t - self.WALL_STANDOFF / length) if length > 0 else 0.0
             new_x = agent.x + (new_x - agent.x) * t
             new_y = agent.y + (new_y - agent.y) * t
-
-        if self._blocked_by_door(environment, new_x, new_y):
-            return agent.x, agent.y
 
         return new_x, new_y
 
@@ -68,9 +80,31 @@ class SimplePhysicsEngine(PhysicsEngine):
                 first = 1.0
         return first
 
-    def _blocked_by_door(self, environment, x: float, y: float) -> bool:
+    @staticmethod
+    def _first_door_hit(environment, x0: float, y0: float, x1: float, y1: float):
+        """Earliest segment/circle contact, including doors crossed mid-move."""
+        dx, dy = x1 - x0, y1 - y0
+        length_squared = dx * dx + dy * dy
+        if length_squared == 0:
+            return None
+        first = None
         for obj in environment.objects.values():
-            if obj["type"] == "door" and obj["locked"]:
-                if math.hypot(x - obj["x"], y - obj["y"]) <= obj["radius"]:
-                    return True
-        return False
+            if obj["type"] != "door" or not obj["locked"]:
+                continue
+            ox, oy = x0 - obj["x"], y0 - obj["y"]
+            c = ox * ox + oy * oy - obj["radius"] ** 2
+            projection = ox * dx + oy * dy
+            # If a door closes around the agent, allow movement out of it.
+            if c <= 0 and projection >= 0:
+                continue
+            if c <= 0:
+                hit = 0.0
+            else:
+                discriminant = projection * projection - length_squared * c
+                if discriminant < 0:
+                    continue
+                hit = (-projection - math.sqrt(discriminant)) / length_squared
+                if not 0 <= hit <= 1:
+                    continue
+            first = hit if first is None else min(first, hit)
+        return first

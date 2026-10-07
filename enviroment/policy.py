@@ -91,15 +91,19 @@ class NoopPolicy(Policy):
         return {"type": "noop"}
 
 
-# 무작위로 이동만 하는 정책. 실제 AI 붙이기 전 environment 동작 확인용
+def _random_motion(step_size: float) -> dict:
+    if random.random() < 0.3:
+        return {"type": "turn", "angle": random.uniform(-180.0, 180.0)}
+    return {"type": "move_forward", "distance": random.uniform(0.0, step_size)}
+
+
+# 무작위 회전/전진 정책. 실제 AI 붙이기 전 environment 동작 확인용
 class RandomPolicy(Policy):
     def __init__(self, step_size: float = 5.0) -> None:
         self.step_size = step_size
 
     def decide(self, observation: dict) -> dict:
-        dx = random.uniform(-self.step_size, self.step_size)
-        dy = random.uniform(-self.step_size, self.step_size)
-        return {"type": "move", "dx": dx, "dy": dy}
+        return _random_motion(self.step_size)
 
 
 # 관찰(observation)만 보고 실제로 도구를 쓰는 규칙 기반 정책.
@@ -156,12 +160,10 @@ class ToolUsePolicy(Policy):
         # 4) 목표(열쇠 > 버튼 > 레버 > 문)로 이동
         target = nearest_key or self._nearest(x, y, buttons) or self._nearest(x, y, levers) or self._nearest(x, y, doors)
         if target is not None:
-            return self._move_toward(x, y, target)
+            return self._move_toward(self_state, target)
 
         # 5) 할 일이 없으면 무작위 배회
-        dx = random.uniform(-self.step_size, self.step_size)
-        dy = random.uniform(-self.step_size, self.step_size)
-        return {"type": "move", "dx": dx, "dy": dy}
+        return _random_motion(self.step_size)
 
     def _distance(self, x: float, y: float, obj: dict) -> float:
         return math.hypot(obj["x"] - x, obj["y"] - y)
@@ -175,7 +177,8 @@ class ToolUsePolicy(Policy):
     # since a door also has its own blocking radius that can be larger and
     # would otherwise wedge the agent against it (move blocked -> same move
     # recomputed next step -> stuck forever).
-    def _move_toward(self, x: float, y: float, obj: dict) -> dict:
+    def _move_toward(self, self_state: dict, obj: dict) -> dict:
+        x, y = self_state["x"], self_state["y"]
         dx, dy = obj["x"] - x, obj["y"] - y
         distance = math.hypot(dx, dy)
 
@@ -186,9 +189,12 @@ class ToolUsePolicy(Policy):
         if distance <= stop_distance:
             return {"type": "noop"}
 
+        facing = math.degrees(math.atan2(dy, dx)) % 360
+        angle = (facing - self_state["facing"] + 180) % 360 - 180
+        if abs(angle) > 1e-7:
+            return {"type": "turn", "angle": angle}
         travel = min(self.step_size, distance - stop_distance)
-        scale = travel / distance
-        return {"type": "move", "dx": dx * scale, "dy": dy * scale}
+        return {"type": "move_forward", "distance": travel}
 
 
 # openai 파이썬 SDK로 로컬/오픈소스 tiny 모델을 호출하는 정책.
@@ -294,7 +300,8 @@ def _action_schema_docs() -> str:
 
 
 # CodePolicy/LiveCodePolicy 프롬프트에 들어가는 observation 형식 설명 (Environment.get_observation과 맞춰야 함)
-_OBSERVATION_DOC = """{"self": {"x", "y", "facing", "inventory": [...], "step", "map_width", "map_height"},
+_OBSERVATION_DOC = """{"self": {"x", "y", "facing", "heading": {"x", "y"}, "last_move", "max_move",
+ "inventory": [...], "step", "map_width", "map_height"},
  "visible_objects": [...], "known_objects": {object_id: {..., "last_seen_step"}},
  "walls": [[x, y, width, height], ...], "memory": {...}, "inbox": [...]}
 - Every object has "object_id", "type", "x", "y" plus type-specific fields (door: "locked"; key: "unlocks";
@@ -309,7 +316,19 @@ _OBSERVATION_DOC = """{"self": {"x", "y", "facing", "inventory": [...], "step", 
 - visible_objects: what you see right now (view cone around "facing"; walls block sight).
 - known_objects: last seen state of everything you have ever seen (it may be outdated).
 - walls: walls near you. Walls block movement - a move stops right before a wall.
-- facing is in degrees: 0 = +x (right), 90 = +y (down), 180 = left, 270 = up. Moving turns you toward the move.
+- Positions and distances are continuous world units, not integer screen pixels. Fractions such as 0.25 are valid.
+- facing is in degrees: 0 = +x (right), 90 = +y (down), 180 = left, 270 = up. Fractional angles are valid.
+- heading is the unit direction vector {x: cos(facing), y: sin(facing)}.
+- The ONLY movement action is move_forward(distance): advance along the body's heading.
+  Use turn(angle) to rotate the body in place first: positive = clockwise, negative = counterclockwise.
+  Rotation changes facing/heading and the view cone, but never position. Forward never changes heading.
+  To aim at an absolute target direction, turn by (target_facing - facing + 180) % 360 - 180.
+  Cartesian move(dx, dy), sideways motion, and backward motion are invalid.
+- max_move is the maximum distance per action (null means unlimited); smaller fractional moves are allowed.
+- last_move is null before any move, otherwise {step, requested_distance, distance, dx, dy, blocked, limited}.
+  distance/dx/dy describe actual movement after collision, excluding portal teleportation.
+  blocked means an obstacle/boundary/helper prevented the full capped move; limited means max_move capped it.
+  It persists through non-movement actions; compare its step to the current step before treating it as recent.
 - inbox: every message ever delivered to you (oldest first); each has "step" (when it arrived) and "from".
 - memory: your own notes. Add a "memory": {...} key to any returned action to replace it for the next step
   (your code runs fresh every step, so this is the only way to remember plans or explored places).
@@ -324,7 +343,8 @@ Keep sections 1 and 2 (observation setup and helpers) unchanged. Fill the DECISI
 region with your task-specific logic and any additional local helper functions.
 Return the COMPLETE decide(observation) function, including the supplied sections.
 Use finish(), move_toward(), or send_message() for all action returns so memory is saved.
-move_toward() is a direct movement helper, NOT a path planner: choose waypoints using walls;
+move_toward() first turns toward its target, then moves forward on a later call.
+It is a direct movement helper, NOT a path planner: choose waypoints using walls;
 avoid accidentally touching other number pads. Target coordinates may come from the task,
 memory or known objects even when a target is outside the current view.
 Find objects by object_id. Other agents are absent from objects; use their IDs from the task
@@ -524,7 +544,7 @@ def _text_history(messages):
 #   즉시 (stuck) - decide() 실행 오류(예외/타임아웃/잘못된 action), 또는 move를 했는데 위치가
 #                  그대로(벽/잠긴 문/coop 운반에 막힘). 코드는 같은 관찰에 같은 행동을 내므로
 #                  그대로 두면 같은 자리에서 영원히 반복됨
-#   누적 (정지) - stall_limit step 연속으로 위치가 그대로 (noop/turn만 반복 등). 단 압력판 위에서
+#   누적 (정지) - stall_limit step 연속으로 위치와 방향이 그대로. 단 압력판 위에서
 #                  기다리는 것은 의도된 대기이므로 제외
 # 재생성 때는 이유/이전 코드/현재 관찰을 함께 보여줌. 비용 폭주를 막기 위해 회차당 max_replans회까지
 CODE_REPLAN_PROMPT = """{task}
@@ -570,6 +590,7 @@ class CodePolicy(Policy):
         self.replans: list[dict] = []     # 재생성 기록 [{"step", "reason"}]
         self.last_replan = None           # 이번 decide() 호출에서 재생성했으면 그 기록 (manifest용)
         self._last_pos = None             # 직전 관찰의 위치
+        self._last_facing = None          # 제자리 회전도 진행으로 취급
         self._last_action = None          # 직전에 반환한 action
         self._stall_count = 0             # 위치가 연속으로 그대로였던 step 수
         self._repair_results = queue.Queue()
@@ -587,6 +608,7 @@ class CodePolicy(Policy):
         self.replans = []
         self.last_replan = None
         self._last_pos = None
+        self._last_facing = None
         self._last_action = None
         self._stall_count = 0
         self._repair_results = queue.Queue()
@@ -686,13 +708,18 @@ class CodePolicy(Policy):
         pos = (me["x"], me["y"])
         if self._last_pos is None:
             return None
-        if pos != self._last_pos:
+        if pos != self._last_pos or me["facing"] != self._last_facing:
             self._stall_count = 0
             return None
         self._stall_count += 1
 
         last = self._last_action or {}
-        if last.get("type") == "move" and (last.get("dx") or last.get("dy")):
+        forward_distance = last.get("distance", 0)
+        attempted_move = (
+            last.get("type") == "move_forward"
+            and isinstance(forward_distance, (int, float)) and forward_distance > 0
+        )
+        if attempted_move:
             return f"your last move {last} was blocked - your position {pos} did not change"
         if self._stall_count >= self.stall_limit and not self._on_pressure_plate(observation, pos):
             return f"you have not moved from {pos} for {self._stall_count} steps in a row"
@@ -750,6 +777,7 @@ class CodePolicy(Policy):
             self._execution_error = self.last_error
             action = self._wait_for_recovery(observation)
         self._last_pos = (observation["self"]["x"], observation["self"]["y"])
+        self._last_facing = observation["self"]["facing"]
         self._last_action = action
         return action
 
@@ -847,7 +875,7 @@ respond in ONE of two ways:
 
 1) Simple action (use this for most steps): if the right next action is obvious and \
 doesn't need ongoing tracking or multi-step logic, reply with a single JSON action object \
-and nothing else, e.g. {{"type": "move", "dx": 5, "dy": 0}}. This action is used for THIS \
+and nothing else, e.g. {{"type": "move_forward", "distance": 2.5}}. This action is used for THIS \
 step only - you will be asked again next step with a fresh observation.
 
 2) Reusable code (use this ONLY when the situation is genuinely complex - e.g. tracking or \

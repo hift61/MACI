@@ -12,6 +12,12 @@ from scoring import clear_step, score_episode  # noqa: E402
 from sequence_rooms import build_sequence_rooms  # noqa: E402
 
 
+def move_for_contact(env, aid, dx, dy):
+    """Set the test fixture heading, then exercise the real forward action."""
+    env.turn_agent(aid, math.degrees(math.atan2(dy, dx)) % 360)
+    env.apply_action(aid, {"type": "move_forward", "distance": math.hypot(dx, dy)})
+
+
 class TurnTakingPolicy:
     """Reads its room's clue, presses its numbers only when every earlier
     order has been reported, and announces each press to the partner."""
@@ -41,11 +47,18 @@ class TurnTakingPolicy:
             return {"type": "send_message", "receiver_id": self.partner_id,
                     "content": f"pressed order {nxt['order']}"}
         # Retreat below the row before horizontal travel to avoid touching decoys.
+        def steer(dx, dy):
+            facing = math.degrees(math.atan2(dy, dx)) % 360
+            angle = (facing - obs['self']['facing'] + 180) % 360 - 180
+            if abs(angle) > 0.001:
+                return {"type": "turn", "angle": angle}
+            return {"type": "move_forward", "distance": math.hypot(dx, dy)}
+
         if abs(dx) > 1:
             if obs['self']['y'] < 110:
-                return {"type": "move", "dx": 0, "dy": 110-obs['self']['y']}
-            return {"type": "move", "dx": dx, "dy": 0}
-        return {"type": "move", "dx": 0, "dy": dy}
+                return steer(0, 110-obs['self']['y'])
+            return steer(dx, 0)
+        return steer(0, dy)
 
 
 class SequenceRoomsTests(unittest.TestCase):
@@ -108,15 +121,15 @@ class SequenceRoomsTests(unittest.TestCase):
         aid = pad['room']
         agent = env.agents[aid]
         agent.x, agent.y = pad['x'], pad['y'] + 20
-        env.apply_action(aid, {'type': 'move', 'dx': 0, 'dy': -15})
+        move_for_contact(env, aid, 0, -15)
         self.assertEqual(env.progress, 1)
-        for action in ({'type': 'noop'}, {'type': 'press_button', 'button_id': first},
-                       {'type': 'move', 'dx': 0, 'dy': -2}):
+        for action in ({'type': 'noop'}, {'type': 'press_button', 'button_id': first}):
             env.apply_action(aid, action)
+        move_for_contact(env, aid, 0, -2)
         self.assertEqual(env.progress, 1)
         self.assertEqual(env.resets, 0)
-        env.apply_action(aid, {'type': 'move', 'dx': 0, 'dy': 20})
-        env.apply_action(aid, {'type': 'move', 'dx': 0, 'dy': -20})
+        move_for_contact(env, aid, 0, 20)
+        move_for_contact(env, aid, 0, -20)
         self.assertEqual(env.resets, 1)
 
     def test_crossing_pad_triggers_even_if_destination_is_outside(self):
@@ -125,7 +138,7 @@ class SequenceRoomsTests(unittest.TestCase):
         pad = env.objects[first]
         agent = env.agents[pad['room']]
         agent.x, agent.y = pad['x']-15, pad['y']
-        env.apply_action(pad['room'], {'type': 'move', 'dx': 20, 'dy': 0})
+        move_for_contact(env, pad['room'], 20, 0)
         self.assertEqual(env.progress, 1)
         # A longer permitted move passes entirely across the pad in one action.
         env, _, _ = build_sequence_rooms(seed=2, pads_per_room=2, presses_per_room=1)
@@ -133,7 +146,7 @@ class SequenceRoomsTests(unittest.TestCase):
         env.max_move = 40
         agent = env.agents[pad['room']]
         agent.x, agent.y = pad['x']-15, pad['y']
-        env.apply_action(pad['room'], {'type': 'move', 'dx': 30, 'dy': 0})
+        move_for_contact(env, pad['room'], 30, 0)
         self.assertEqual(env.progress, 1)
         self.assertGreater(abs(agent.x-pad['x']), pad['touch_radius'])
 

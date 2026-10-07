@@ -5,15 +5,14 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "move",
-            "description": "현재 위치에서 (dx, dy)만큼 이동한다(한 번에 최대 20, 더 크면 같은 방향으로 20만 이동). 벽에 닿으면 그 앞에서 멈춘다. 이동하려는 방향으로 바라보는 방향(facing)도 바뀐다",
+            "name": "move_forward",
+            "description": "현재 바라보는 방향(facing)을 유지하며 distance만큼 전진한다. 좌표/거리는 연속적인 월드 단위이며 0.25, 2.5 같은 소수를 지원한다. self.max_move를 넘으면 그 거리로 제한한다(기본 20). 벽/잠긴 문 앞에서 멈춘다. self.last_move로 실제 이동 거리와 막힘 여부를 확인한다",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "dx": {"type": "number", "description": "x축 이동량"},
-                    "dy": {"type": "number", "description": "y축 이동량"}
+                    "distance": {"type": "number", "minimum": 0, "description": "앞으로 이동할 거리(0 이상, 소수 허용)"}
                 },
-                "required": ["dx", "dy"]
+                "required": ["distance"]
             }
         }
     },
@@ -21,13 +20,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "turn",
-            "description": "제자리에서 바라보는 방향(facing)만 바꾼다. 시야는 facing을 중심으로 한 부채꼴이므로 주변을 둘러볼 때 사용",
+            "description": "제자리에서 몸을 angle도 회전해 heading과 시야 방향을 함께 바꾼다. 양수는 시계 방향, 음수는 반시계 방향이며 소수 각도를 허용한다. 이동하려는 방향으로 먼저 회전한 뒤 다음 행동에서 move_forward(distance)로 전진한다",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "facing": {"type": "number", "description": "바라볼 절대 방향(도). 0=오른쪽(+x), 90=아래(+y), 180=왼쪽, 270=위"}
+                    "angle": {"type": "number", "description": "현재 방향에서 회전할 각도(도). 예: 15.5=시계, -15.5=반시계"}
                 },
-                "required": ["facing"]
+                "required": ["angle"]
             }
         }
     },
@@ -199,7 +198,7 @@ TOOLS = [
                 "다른 에이전트에게 명령을 내린다. 그 에이전트가 이 명령을 따르도록 "
                 "설정되어 있다면(중심-주변 구조), 자신의 판단과 무관하게 command를 그대로 실행한다. "
                 "command는 수신자가 실행할 action이며 type 필드를 포함해야 한다 "
-                "(예: {\"type\": \"move\", \"dx\": 5, \"dy\": 0})"
+                "(예: {\"type\": \"move_forward\", \"distance\": 2.5})"
             ),
             "parameters": {
                 "type": "object",

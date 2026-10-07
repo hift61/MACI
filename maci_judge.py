@@ -126,6 +126,8 @@ def build_turn_summary(record: dict, agent_record: dict) -> str:
     lines = [f"Step {record.get('step')}"]
     lines.append(f"Task for this agent: {(record.get('task') or {}).get(agent_record.get('agent'), '')}")
     lines.append(f"Position: {agent_record.get('position')}")
+    if agent_record.get("spatial_state") is not None:
+        lines.append(f"Spatial state after action: {agent_record['spatial_state']}")
     lines.append(f"Objectives: {record.get('objectives')}  (all achieved so far: {record.get('cleared')})")
 
     decision = agent_record.get("decision") or {}

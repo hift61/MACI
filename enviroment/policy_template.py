@@ -28,8 +28,12 @@ def decide(observation):
         distance = math.hypot(dx, dy)
         if distance <= stop_radius or distance == 0:
             return finish()
+        target_facing = math.degrees(math.atan2(dy, dx)) % 360
+        angle = (target_facing - me.get("facing", 0) + 180) % 360 - 180
+        if abs(angle) > 0.001:
+            return finish("turn", angle=angle)
         travel = min(step_size, distance - stop_radius)
-        return finish("move", dx=dx / distance * travel, dy=dy / distance * travel)
+        return finish("move_forward", distance=travel)
 
     def send_message(receiver_id, content):
         return finish("send_message", receiver_id=receiver_id, content=content)
