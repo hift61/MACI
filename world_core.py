@@ -2,8 +2,6 @@
 import pygame
 import random
 
-import js
-
 # Console library
 from rich.console import Console
 from rich.panel import Panel

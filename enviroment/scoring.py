@@ -13,7 +13,7 @@ ATTEMPT_EFFECTS = {
     "pick_up": {"item_picked_up"},
     "drop": {"item_dropped"},
     "use_key": {"door_unlocked"},
-    "press_button": {"door_unlocked", "door_locked"},
+    "press_button": {"door_unlocked", "door_locked", "number_accepted"},  # number_accepted: sequence_rooms 번호판
     "pull_lever": {"lever_pulled"},
 }
 
@@ -29,8 +29,10 @@ class ScoreConfig:
     door_unlock_points: float = 10.0            # 문 열기 (압력판이면 밟고 있던 전원)
     plate_points: float = 2.0                   # 압력판에 올라서기
     portal_points: float = 1.0                  # 포탈 사용
+    number_points: float = 2.0                  # 번호판을 순서에 맞게 누름 (sequence_rooms)
     # ---- 개인 감점 (매번) ----
     trap_penalty: float = -30.0                 # trap 발동
+    sequence_reset_penalty: float = -3.0        # 번호판을 틀리게 눌러 전체 순서를 리셋시킴 (sequence_rooms)
     # ---- 단체 점수 ----
     clear_bonus: float = 50.0                   # 클리어하면
     time_bonus_max: float = 30.0                # 1 step 만에 클리어하면 전부, max_steps에 클리어하면 0에 가깝게 선형 감소
@@ -67,6 +69,10 @@ def _individual_points(event: dict, config: ScoreConfig):
         return config.portal_points, "포탈 사용"
     if event_type == "trap_triggered":
         return config.trap_penalty, "함정 발동"
+    if event_type == "number_accepted":
+        return config.number_points, "번호 순서 입력"
+    if event_type == "sequence_reset":
+        return config.sequence_reset_penalty, "순서 리셋"
     return None
 
 

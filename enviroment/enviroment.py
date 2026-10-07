@@ -127,6 +127,7 @@ class Environment:
             "type": object_type
         }
 
+
     # 분류가 있는 물품 배치. category:
     #   ITEM_NORMAL("normal") - 혼자 줍고 옮길 수 있는 일반 물품 (add_object로 만든 item과 동일)
     #   ITEM_COOP("coop")     - required_agents명(본인 포함)이 interact_radius 안에 함께 있어야만
@@ -823,6 +824,12 @@ class Environment:
             self.decision_log.record(self.step_count, agent_id, observations[agent_id], actions[agent_id], final_action)
 
         self._update_pressure_plates()
+        for agent_id in agent_ids:
+            policy = self.agents[agent_id].policy
+            if hasattr(policy, 'remember_step'):
+                policy.remember_step(observations[agent_id],
+                                     self.decision_log.filter(step=self.step_count, agent_id=agent_id)[-1]['final_action'],
+                                     self.get_observation(agent_id))
 
     # policy가 고른 action에 "memory": dict가 있으면 다음 관찰의 memory로 저장. Rule이 action을
     # 바꿔치기해도 메모는 에이전트 자신의 기록이므로 원래 action 기준. 너무 크면(직렬화 20000자

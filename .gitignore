@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 key.txt
 benchmark_runs/
+.venv/
+.venv-gui/
+.uv-cache/
+.python-runtime/

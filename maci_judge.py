@@ -59,18 +59,19 @@ SYSTEM_PROMPT = (
 )
 
 
-def read_secret(env_var: str, filename: str) -> str:
-    value = os.environ.get(env_var, "").strip()
-    if value:
-        return value
+def read_secret(filename: str = "key.txt") -> str:
+    """Read the API key from a file relative to this project's directory."""
+    filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
     try:
-        with open(filename, encoding="utf-8") as f:
-            return f.read().strip()
+        with open(filename, encoding="utf-8-sig") as f:
+            value = f.read().strip()
     except FileNotFoundError:
         raise SystemExit(
-            f"Missing credential: set the {env_var} environment variable, "
-            f"or create {filename} containing just the key."
+            f"Missing credential: create {filename} containing just the API key."
         )
+    if not value:
+        raise SystemExit(f"Empty credential file: put your API key in {filename}.")
+    return value
 
 
 def with_retry(fn, *args, retries=3, delay=2.0, **kwargs):
@@ -313,15 +314,14 @@ def main():
     parser.add_argument("--agent", default=None, help="only judge this agent label (e.g. A); default: all agents")
     parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL)
     parser.add_argument("--base-url", default="https://openrouter.ai/api/v1")
-    parser.add_argument("--api-key-env", default="OPENROUTER_API_KEY")
-    parser.add_argument("--api-key-file", default="key.txt")
+    parser.add_argument("--api-key-file", default="key.txt", help="API key file (relative paths use the project directory)")
     parser.add_argument("--max-turns", type=int, default=None, help="limit how many manifest lines to judge (for a quick check)")
     parser.add_argument("--baseline-model", default=DEFAULT_BASELINE_MODEL)
     parser.add_argument("--set-baseline", action="store_true", help="register this run's average as the --baseline-model's 100-point baseline")
     parser.add_argument("--force-baseline", action="store_true", help="allow --set-baseline even if the manifest's actor model doesn't look like --baseline-model")
     args = parser.parse_args()
 
-    api_key = read_secret(args.api_key_env, args.api_key_file)
+    api_key = read_secret(args.api_key_file)
     client = OpenAI(base_url=args.base_url, api_key=api_key)
     result = score_run(args.manifest, client, args.judge_model, agent_filter=args.agent, max_turns=args.max_turns)
 

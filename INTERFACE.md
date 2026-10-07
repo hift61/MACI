@@ -6,9 +6,25 @@ This document defines the functions shared between modules, including their para
 
 ## benchmark.py
 
+두 방 퍼즐 선택: `--environment sequence_rooms --sequence-seed 42 --pads-per-room 5 --presses-per-room 3`. `--steps`는 `max_turns`로 전달하고 `--max-resets`는 선택 사항입니다. 이 환경은 `--map-file`/`--map-seed`와 함께 사용할 수 없습니다. `run_episode()`의 추가 인자는 `environment_kind="map", sequence_seed=42, pads_per_room=5, presses_per_room=3, max_resets=None`입니다.
+
+번호판은 시드로 무작위 번호·정답 순서를 부여하고 실행/리셋 중에는 유지합니다. `number_pad.touch_radius=10` 범위에 진입하거나 이동 경로가 범위를 지나가면 자동 입력하며 머무르는 동안 반복하지 않습니다. 같은 번호판을 재입력하려면 범위를 벗어났다가 재진입해야 합니다. `press_button`은 번호판에 대한 추가 입력을 일으키지 않습니다. 접촉 검사에는 규칙 및 물리 엔진을 거친 실제 이동 경로를 사용합니다.
+
+관찰자용 출력: `<실행 이름>.scene.json`에는 초기 `world`(width/height/walls/objects)와 agents가 있습니다. JSONL 각 행에는 `environment`, `world`, `failure`와 각 agent의 `facing`도 기록하며 완료된 행은 즉시 flush합니다. 이 출력은 정책 observation과 별개이며 판정기의 기존 필드도 유지합니다.
+
+생성 코드 검사: `policy_sandbox.compile_policy_code()`가 `py_compile`로 문법을 검사하고 `run_decide_code(..., checks=...)`가 컴파일 성공 후 샌드박스 실행을 수행합니다. 제출 게이트에도 같은 컴파일 검사를 적용합니다. 에이전트별 `CodeChecks`는 컴파일과 실행의 attempts/successes/failures를 별도로 집계합니다. `<실행 이름>.code_checks.jsonl`에 각 검사 결과를 즉시 추가하고 `decision.code_checks`, 점수 파일의 `code_checks[agent_id]`에 누적값을 기록합니다. 제출/실행 직전 검사는 각각 카운트하며 컴파일 실패는 실행 시도로 세지 않습니다.
+
+실시간 디버깅: `run_episode(..., debug=True)` / `--debug`는 시간·step·에이전트·이벤트를 포함한 `[DEBUG]` 로그를 즉시 flush하고 `<실행 이름>.debug.jsonl`에도 저장합니다. LLM 요청 시작/완료/실패, 코드 검사, 복구 대기/성공, 행동·메시지·환경 이벤트를 기록하며 step이 끝나기 전에도 표시됩니다. GUI 실행 탭의 디버깅 토글을 켜면 디버그 탭으로 이동합니다. 결과 목록은 `.debug.jsonl` 및 `.code_checks.jsonl`을 제외합니다.
+
+누적 context: 각 Policy의 `conversation_history`는 에이전트별 리스트이며 코드 생성 게이트의 요청/응답/검사 결과를 유지합니다. 환경은 step 적용 후 `remember_step(observation, final_action, next_observation)`을 호출해 해당 에이전트의 허용된 관찰 및 실행 피드백만 추가합니다. CodePolicy의 코드 재사용 step에도 이력을 보관하며 다음 LLM 요청에 전체를 전달합니다. 도구 미지원 fallback도 과거 대화를 텍스트로 보존합니다. `decision.context_messages`에 이력 길이, `<실행 이름>.context.json`에 완료 시 전체 이력을 저장합니다.
+
+행동 함수 레이아웃: `policy_template.py`의 `decide(observation)` 소스를 `policy.POLICY_LAYOUT`으로 읽어 CodePolicy/LiveCodePolicy/HybridPolicy 코드 생성 프롬프트에 포함합니다. 관찰 준비 및 행동 헬퍼를 제공하고 판단 영역을 채운 전체 함수를 제출하도록 안내합니다. 반환 헬퍼 `finish(type, **fields)`는 항상 `memory`를 포함하며 `move_toward(tx, ty, stop_radius=0, step_size=20)`는 목표 방향으로 제한 거리만큼 이동합니다. 길찾기와 과제별 판단은 LLM이 작성하는 영역입니다.
+
+`viewer.py <manifest> [--live]`: 완료 로그 재생 또는 진행 중인 JSONL 읽기. 부분 행은 다음 읽기까지 보류하며 새 형식은 맵과 동적 오브젝트를, 이전 형식은 위치만 표시합니다. GUI 실행 시 자동으로 열고 결과 탭에서 다시 열 수 있습니다.
+
 CodePolicy 에이전트로 협력 에피소드 하나를 실행하고, 매 step의 결정/메시지/이벤트를 manifest.jsonl로 기록하는 실행 스크립트. 채점은 별도로 maci_judge.py가 manifest를 읽어서 함. 맵은 기본 압력판 맵(build_episode) 또는 mapgen으로 만든 무작위 맵(--map-seed/--map-file) 중 선택. --policy로 API 키 없이 규칙 기반 정책(tooluse/random/noop)으로도 전체 파이프라인(맵/로그/채점)을 실행해 볼 수 있음.
 
-read_secret(env_var: str, filename: str) -> str : 환경변수 env_var를 먼저 보고, 없으면 현재 작업 폴더의 filename(예: key.txt) 내용을 읽어 API 키 반환. 둘 다 없으면 SystemExit
+read_secret(filename: str = "key.txt") -> str : 프로젝트 폴더 기준 filename 내용을 읽어 API 키 반환. UTF-8 BOM과 앞뒤 공백을 제거하며 파일이 없거나 비어 있으면 SystemExit. 환경변수는 사용하지 않음. maci_judge.py도 동일한 방식으로 읽음
 
 build_episode() -> tuple[Environment, dict[str, str]] : 압력판 두 개를 동시에 밟아야 열리는 gate 맵과 에이전트 A/B를 만들고 (env, 에이전트별 과제 설명) 반환
 
@@ -20,7 +36,7 @@ make_policy(kind: str, model: str, description: str, base_url: str, api_key: str
 
 run_episode(model: str, base_url: str, api_key: str, extra_params: dict, steps: int, log_path: str, map_spec: MapSpec = None, policy_kind: str = "code") -> None : map_spec이 있으면 mapgen.builder.build_environment()로, 없으면 build_episode()로 환경을 만들고 에이전트마다 make_policy(policy_kind, ...)로 정책을 붙인 뒤 에피소드를 최대 steps만큼 진행하며 step마다 한 줄씩 log_path에 기록. objectives가 전부 충족되면(scoring.clear_step) 성공으로, trap이 발동하면(env.failure) 실패로 조기 종료. 각 줄의 필드: step, task, map_seed(기본 맵이면 None), objectives, cleared(지금까지 모든 objective 충족 여부), messages(이번 step의 MessageLog 항목), events(이번 step의 EventLog 항목), agents(에이전트별 model(code가 아니면 정책 이름)/position/generated_code(CodePolicy가 아니면 None)/decision). 회차가 끝나면 scoring.score_episode()로 점수를 매겨 manifest 옆에 <manifest 이름>.score.json으로 저장하고 총점/단체/에이전트별 점수를 출력 (manifest는 maci_judge.py가 step 단위로 읽으므로 같은 파일에 섞지 않음)
 
-main() -> None : 명령행 인자(--model, --steps, --base-url, --api-key-env, --api-key-file, --reasoning-effort, --out, --map-seed, --map-file, --policy)를 읽어 run_episode 실행. --map-file이 있으면 MapSpec.load()로 불러온 맵, --map-seed가 있으면 generate_map(seed)로 만든 맵을 사용 (둘 다 없으면 기본 맵). API 키는 --policy code(기본)일 때만 읽음
+main() -> None : 명령행 인자(--model, --steps, --base-url, --api-key-file, --reasoning-effort, --out, --map-seed, --map-file, --policy)를 읽어 run_episode 실행. --map-file이 있으면 MapSpec.load()로 불러온 맵, --map-seed가 있으면 generate_map(seed)로 만든 맵을 사용 (둘 다 없으면 기본 맵). API 키는 --policy code(기본)일 때만 프로젝트 폴더의 key.txt에서 읽음 (--api-key-file로 경로 변경 가능)
 
 ---
 

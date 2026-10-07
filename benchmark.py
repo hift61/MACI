@@ -19,6 +19,7 @@ import datetime
 import json
 import os
 import sys
+import threading
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENVIRONMENT_DIR = os.path.join(HERE, "enviroment")
@@ -31,24 +32,24 @@ from scoring import clear_step, score_episode  # noqa: E402
 from mapgen import MapSpec, generate_map  # noqa: E402
 from mapgen.builder import build_environment  # noqa: E402
 from world_core import GameMap  # noqa: E402
+from sequence_rooms import build_sequence_rooms  # noqa: E402
 
 RUNS_DIR = os.path.join(HERE, "benchmark_runs")
 
 
-def read_secret(env_var: str, filename: str) -> str:
-    """Reads a secret from an env var first, falling back to a local file
-    (e.g. key.txt) resolved relative to the current working directory."""
-    value = os.environ.get(env_var, "").strip()
-    if value:
-        return value
+def read_secret(filename: str = "key.txt") -> str:
+    """Read the API key from a file relative to this project's directory."""
+    filename = os.path.join(HERE, filename)
     try:
-        with open(filename, encoding="utf-8") as f:
-            return f.read().strip()
+        with open(filename, encoding="utf-8-sig") as f:
+            value = f.read().strip()
     except FileNotFoundError:
         raise SystemExit(
-            f"Missing credential: set the {env_var} environment variable, "
-            f"or create {filename} containing just the key."
+            f"Missing credential: create {filename} containing just the API key."
         )
+    if not value:
+        raise SystemExit(f"Empty credential file: put your API key in {filename}.")
+    return value
 
 
 def build_episode():
@@ -113,21 +114,79 @@ def make_policy(kind: str, model: str, description: str, base_url: str, api_key:
 
 
 def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, steps: int, log_path: str,
-                map_spec: MapSpec = None, policy_kind: str = "code") -> None:
-    if map_spec is not None:
+                map_spec: MapSpec = None, policy_kind: str = "code", environment_kind: str = "map",
+                sequence_seed: int = 42, pads_per_room: int = 5, presses_per_room: int = 3,
+                max_resets: int | None = None, debug: bool = False) -> None:
+    if steps < 1:
+        raise ValueError("steps must be at least 1")
+    if environment_kind == "sequence_rooms":
+        if map_spec is not None:
+            raise ValueError("sequence_rooms cannot be combined with a map")
+        env, task_descriptions, objectives = build_sequence_rooms(
+            seed=sequence_seed, pads_per_room=pads_per_room, presses_per_room=presses_per_room,
+            max_turns=steps, max_resets=max_resets)
+    elif environment_kind != "map":
+        raise ValueError(f"unknown environment: {environment_kind}")
+    elif map_spec is not None:
         env, task_descriptions, objectives = build_environment(map_spec)
     else:
         env, task_descriptions = build_episode()
         objectives = GATE_OBJECTIVES
 
+    os.makedirs(os.path.dirname(os.path.abspath(log_path)), exist_ok=True)
+    debug_path = os.path.splitext(log_path)[0] + ".debug.jsonl"
+    debug_lock = threading.Lock()
+    if debug:
+        with open(debug_path, 'w', encoding='utf-8'):
+            pass
+
+    def emit_debug(event, agent=None, **details):
+        if not debug:
+            return
+        record = {'time': datetime.datetime.now().astimezone().isoformat(timespec='milliseconds'),
+                  'step': env.step_count, 'event': event, 'agent': agent, **details}
+        line = json.dumps(record, ensure_ascii=False, default=str)
+        with debug_lock:
+            with open(debug_path, 'a', encoding='utf-8') as file:
+                file.write(line + '\n')
+            print('[DEBUG] ' + line, flush=True)
+
+    emit_debug('environment_ready', environment=environment_kind, steps=steps)
+    checks_path = os.path.splitext(log_path)[0] + ".code_checks.jsonl"
+    with open(checks_path, "w", encoding="utf-8"):
+        pass
+    checks_lock = threading.Lock()
+
+    def write_check(agent_id, event):
+        with checks_lock, open(checks_path, "a", encoding="utf-8") as checks_file:
+            checks_file.write(json.dumps({"agent": agent_id, **event}, ensure_ascii=False) + "\n")
+        emit_debug('code_check', agent_id, check=event)
+
     policies = {}
     for agent_id, description in task_descriptions.items():
         policies[agent_id] = make_policy(policy_kind, model, description, base_url, api_key, extra_params,
                                          env.interact_radius)
+        checks = getattr(policies[agent_id], "code_checks", None)
+        if checks is not None:
+            checks.sink = lambda event, aid=agent_id: write_check(aid, event)
+        policies[agent_id].debug_sink = lambda event, details, aid=agent_id: emit_debug(event, aid, **details)
         env.agents[agent_id].set_policy(policies[agent_id])
+
+    # Observer-only state; this is never added to the agents' observations.
+    def snapshot():
+        return {"width": env.game_map.map_width, "height": env.game_map.map_height,
+                "walls": env._walls(), "objects": list(env.objects.values())}
+
+    os.makedirs(os.path.dirname(os.path.abspath(log_path)), exist_ok=True)
+    scene_path = os.path.splitext(log_path)[0] + ".scene.json"
+    with open(scene_path, "w", encoding="utf-8") as scene:
+        json.dump({"environment": environment_kind, "world": snapshot(),
+                   "agents": [{"agent": aid, "position": [a.x, a.y], "facing": a.facing}
+                              for aid, a in env.agents.items()]}, scene, ensure_ascii=False)
 
     with open(log_path, "w", encoding="utf-8") as f:
         for step in range(1, steps + 1):
+            emit_debug('step_started', next_step=step)
             env.step()
 
             decisions_by_agent = {d["agent_id"]: d for d in env.decision_log.filter(step=step)}
@@ -136,7 +195,10 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
             record = {
                 "step": step,
                 "task": dict(task_descriptions),
-                "map_seed": map_spec.seed if map_spec is not None else None,
+                "map_seed": sequence_seed if environment_kind == "sequence_rooms" else (map_spec.seed if map_spec is not None else None),
+                "environment": environment_kind,
+                "world": snapshot(),
+                "failure": env.failure,
                 "objectives": objectives,
                 "cleared": clear_step(env.event_log.entries, objectives) is not None,
                 "messages": step_messages,
@@ -146,12 +208,17 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                         "agent": agent_id,
                         "model": model if policy_kind == "code" else policy_kind,
                         "position": [env.agents[agent_id].x, env.agents[agent_id].y],
+                        "facing": env.agents[agent_id].facing,
                         "generated_code": getattr(policies[agent_id], "generated_code", None),
                         "decision": {
                             "action": decisions_by_agent.get(agent_id, {}).get("action"),
                             "final_action": decisions_by_agent.get(agent_id, {}).get("final_action"),
                             "overridden": decisions_by_agent.get(agent_id, {}).get("overridden", False),
                             "policy_error": getattr(policies[agent_id], "last_error", None),
+                            "recovery": getattr(policies[agent_id], "last_recovery", None),
+                            "code_checks": (policies[agent_id].code_checks.snapshot()
+                                            if hasattr(policies[agent_id], "code_checks") else None),
+                            "context_messages": len(getattr(policies[agent_id], '_conversation_history', [])),
                             # CodePolicy가 이번 step에 stuck으로 코드를 재생성했으면 {"step", "reason"}
                             "replan": getattr(policies[agent_id], "last_replan", None),
                         },
@@ -160,6 +227,13 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                 ],
             }
             f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+            f.flush()  # Make completed steps available to the live viewer immediately.
+            for agent in record['agents']:
+                emit_debug('agent_action', agent['agent'], position=agent['position'], decision=agent['decision'])
+            for message in record['messages']:
+                emit_debug('message', message=message)
+            for event in record['events']:
+                emit_debug('environment_event', detail=event)
 
             errors = {a: p.last_error for a, p in policies.items() if getattr(p, "last_error", None)}
             replans = {a: p.last_replan["reason"] for a, p in policies.items() if getattr(p, "last_replan", None)}
@@ -176,18 +250,26 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                 and clear_step(env.event_log.entries, [objective]) is None
                 for objective in objectives
             ):
-                print(f"\nFAILED at step {step}: trap '{env.failure['object_id']}' triggered by "
-                      f"{env.failure['agent_id']} sealed {env.failure['sealed_doors']}.")
+                print(f"\nFAILED at step {step}: {env.failure.get('reason', 'trap')} "
+                      f"({env.failure['object_id']}); sealed {env.failure['sealed_doors']}.")
                 break
 
     # 회차 점수: manifest는 maci_judge.py가 step 단위로 읽으므로 같은 파일에 섞지 않고 옆에 따로 저장
     score = score_episode(env, max_steps=steps, objectives=objectives)
+    score["code_checks"] = {aid: p.code_checks.snapshot() for aid, p in policies.items()
+                            if hasattr(p, "code_checks")}
     score_path = os.path.splitext(log_path)[0] + ".score.json"
     with open(score_path, "w", encoding="utf-8") as f:
         json.dump(score, f, ensure_ascii=False, indent=2, default=str)
     agent_scores = "  ".join(f"{a}={v['score']}" for a, v in score["agents"].items())
     print(f"\nScore: total={score['total']}  team={score['team']['score']}  {agent_scores}")
     print(f"Wrote score: {score_path}")
+    print(f"Wrote code checks: {checks_path}")
+    context_path = os.path.splitext(log_path)[0] + '.context.json'
+    with open(context_path, 'w', encoding='utf-8') as context_file:
+        json.dump({aid: getattr(p, '_conversation_history', []) for aid, p in policies.items()},
+                  context_file, ensure_ascii=False, indent=2)
+    emit_debug('episode_finished', cleared=score['team']['cleared'], failure=env.failure, total=score['total'])
 
 
 def main():
@@ -195,15 +277,28 @@ def main():
     parser.add_argument("--model", default="upstage/solar-pro4")
     parser.add_argument("--steps", type=int, default=40)
     parser.add_argument("--base-url", default="https://openrouter.ai/api/v1")
-    parser.add_argument("--api-key-env", default="OPENROUTER_API_KEY")
-    parser.add_argument("--api-key-file", default="key.txt")
+    parser.add_argument("--api-key-file", default="key.txt", help="API key file (relative paths use the project directory)")
     parser.add_argument("--reasoning-effort", default=None, help="passed through as extra_params.reasoning_effort (e.g. 'low' for Groq gpt-oss models)")
     parser.add_argument("--out", default=None, help="manifest.jsonl output path (default: benchmark_runs/<timestamp>.jsonl)")
     parser.add_argument("--map-seed", type=int, default=None, help="mapgen으로 이 시드의 무작위 맵을 만들어 사용 (기본 GenConfig)")
     parser.add_argument("--map-file", default=None, help="저장된 맵 JSON(python -m mapgen --save로 생성)을 사용")
+    parser.add_argument("--environment", choices=("map", "sequence_rooms"), default="map")
+    parser.add_argument("--sequence-seed", type=int, default=42)
+    parser.add_argument("--pads-per-room", type=int, default=5)
+    parser.add_argument("--presses-per-room", type=int, default=3)
+    parser.add_argument("--max-resets", type=int, default=None, help="허용 리셋 횟수 (생략하면 제한 없음)")
+    parser.add_argument('--debug', action='store_true', help='실시간 상세 로그 출력 및 .debug.jsonl 저장')
     parser.add_argument("--policy", choices=POLICY_CHOICES, default="code",
                         help="code(기본, LLM이 정책 코드 작성 - API 키 필요) 또는 API 키 없이 실행 확인용 규칙 기반 정책")
     args = parser.parse_args()
+    if args.steps < 1:
+        parser.error("--steps must be at least 1")
+    if args.environment == "sequence_rooms" and (args.map_file or args.map_seed is not None):
+        parser.error("sequence_rooms cannot be combined with --map-file or --map-seed")
+    if not 1 <= args.presses_per_room <= args.pads_per_room <= 5:
+        parser.error("need 1 <= presses-per-room <= pads-per-room <= 5")
+    if args.max_resets is not None and args.max_resets < 0:
+        parser.error("--max-resets must be nonnegative")
 
     map_spec = None
     if args.map_file:
@@ -211,7 +306,7 @@ def main():
     elif args.map_seed is not None:
         map_spec = generate_map(args.map_seed)
 
-    api_key = read_secret(args.api_key_env, args.api_key_file) if args.policy == "code" else ""
+    api_key = read_secret(args.api_key_file) if args.policy == "code" else ""
     extra_params = {"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}
 
     out_path = args.out
@@ -220,7 +315,8 @@ def main():
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         out_path = os.path.join(RUNS_DIR, f"{timestamp}.jsonl")
 
-    run_episode(args.model, args.base_url, api_key, extra_params, args.steps, out_path, map_spec, args.policy)
+    run_episode(args.model, args.base_url, api_key, extra_params, args.steps, out_path, map_spec, args.policy,
+                args.environment, args.sequence_seed, args.pads_per_room, args.presses_per_room, args.max_resets, args.debug)
     print(f"\nWrote manifest: {out_path}")
     print(f"Score it with: python maci_judge.py {out_path}")
 

@@ -3,11 +3,15 @@ import math
 import random
 import time
 import traceback
+import copy
+import queue
+import threading
+from pathlib import Path
 
 from openai import OpenAI, RateLimitError
 
 from _policy_harness import _check_code_safety  # 생성 단계와 실행 단계가 같은 검사를 쓰도록
-from policy_sandbox import run_decide_code
+from policy_sandbox import run_decide_code, compile_policy_code, CodeChecks
 from tools import TOOLS
 
 _RATE_LIMIT_MAX_RETRIES = 3
@@ -37,6 +41,44 @@ def _create_with_retry(client, **kwargs):
 
 
 class Policy:
+    @property
+    def conversation_history(self):
+        if not hasattr(self, '_conversation_history'):
+            self._conversation_history = []
+        return self._conversation_history
+
+    def remember_step(self, observation, action, next_observation):
+        if not hasattr(self, '_conversation_history'):
+            return
+        self.conversation_history.append({'role': 'user', 'content': 'Simulation step result:\n' + json.dumps(
+            {'observation': observation, 'executed_action': action, 'next_observation': next_observation,
+             'policy_error': getattr(self, 'last_error', None)},
+            ensure_ascii=False, default=str)})
+
+    def _debug(self, event, **details):
+        callback = getattr(self, 'debug_sink', None)
+        if callback:
+            callback(event, details)
+
+    def _generate_tracked(self, *args, **kwargs):
+        kwargs['history'] = self.conversation_history
+        self._debug('llm_request_started', context_messages=len(self.conversation_history))
+        started = time.monotonic()
+        try:
+            code = _generate_code_with_submission_gate(*args, **kwargs)
+            self._debug('code_generated', elapsed_seconds=round(time.monotonic()-started, 3), code=code,
+                        context_messages=len(self.conversation_history))
+            return code
+        except Exception:
+            self._debug('llm_request_failed', error=traceback.format_exc())
+            raise
+
+    @property
+    def code_checks(self):
+        if not hasattr(self, '_code_checks'):
+            self._code_checks = CodeChecks()
+        return self._code_checks
+
     # AI가 탑재되는 지점의 추상 인터페이스.
     # 실제 AI(규칙 기반, 강화학습, LLM 등)는 이 클래스를 상속해 decide()만 구현하면 됨.
     def decide(self, observation: dict) -> dict:
@@ -179,19 +221,25 @@ class LLMPolicy(Policy):
 
     def decide(self, observation: dict) -> dict:
         try:
+            history = self.conversation_history
+            if not history:
+                history.append({'role': 'system', 'content': self.system_prompt})
+            history.append({'role': 'user', 'content': json.dumps(observation, ensure_ascii=False)})
             response = _create_with_retry(
                 self.client,
                 model=self.model,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": json.dumps(observation, ensure_ascii=False)}
-                ],
+                messages=copy.deepcopy(history),
                 tools=TOOLS,
                 tool_choice="required",
                 **self.extra_params
             )
+            message = response.choices[0].message
+            history.append({'role': 'assistant', 'content': json.dumps(
+                {'content': message.content, 'tool_calls': [
+                    {'name': call.function.name, 'arguments': call.function.arguments}
+                    for call in (message.tool_calls or [])]}, ensure_ascii=False)})
             if response.choices[0].finish_reason == "length":
                 self.last_error = (
                     "LLM response was cut off before finishing (finish_reason='length'); "
@@ -251,7 +299,13 @@ _OBSERVATION_DOC = """{"self": {"x", "y", "facing", "inventory": [...], "step", 
  "walls": [[x, y, width, height], ...], "memory": {...}, "inbox": [...]}
 - Every object has "object_id", "type", "x", "y" plus type-specific fields (door: "locked"; key: "unlocks";
   button: "linked_door_id"; lever: "on", "linked_door_ids"; pressure_plate: "linked_door_id", "radius";
-  item: "category" ("normal" or "coop"); portal: "dest_x", "dest_y"; clue: "content").
+  item: "category" ("normal" or "coop"); portal: "dest_x", "dest_y"; clue: "content";
+  number_pad: "number", "room", "touch_radius"; display: "room", "last_press", "resets").
+- number_pad activates automatically when you enter its touch_radius, including crossing it during a move.
+  No press_button is needed. Staying inside does not repeat; leave and re-enter for another input.
+- In sequence_rooms, clue.content has total_presses and your_presses [{order, number}].
+  display.last_press is null or {pad_id, number, step, result: accepted or wrong_reset}.
+  The display gives no global progress; coordinate the shared order using messages.
 - visible_objects: what you see right now (view cone around "facing"; walls block sight).
 - known_objects: last seen state of everything you have ever seen (it may be outdated).
 - walls: walls near you. Walls block movement - a move stops right before a wall.
@@ -262,12 +316,25 @@ _OBSERVATION_DOC = """{"self": {"x", "y", "facing", "inventory": [...], "step", 
 - Interactions (pick_up, use_key, press_button, pull_lever) only work within about 15 units."""
 
 
-CODE_POLICY_SYSTEM_PROMPT = f"""You write Python policy code for an agent in a multi-agent \
-simulation. Define exactly one function:
+POLICY_LAYOUT = Path(__file__).with_name('policy_template.py').read_text(encoding='utf-8')
+# Strip the module description: models receive the actual executable function layout.
+POLICY_LAYOUT = POLICY_LAYOUT[POLICY_LAYOUT.index('def decide(observation):'):]
+POLICY_LAYOUT_INSTRUCTIONS = """Use the supplied action-function layout below.
+Keep sections 1 and 2 (observation setup and helpers) unchanged. Fill the DECISION START/END
+region with your task-specific logic and any additional local helper functions.
+Return the COMPLETE decide(observation) function, including the supplied sections.
+Use finish(), move_toward(), or send_message() for all action returns so memory is saved.
+move_toward() is a direct movement helper, NOT a path planner: choose waypoints using walls;
+avoid accidentally touching other number pads. Target coordinates may come from the task,
+memory or known objects even when a target is outside the current view.
+Find objects by object_id. Other agents are absent from objects; use their IDs from the task
+when sending messages. Follow the task's interaction rules and check inbox/reset state.
 
-def decide(observation):
-    ...
-    return action
+Base action-function layout:
+```python
+""" + POLICY_LAYOUT + "\n```"
+
+CODE_POLICY_SYSTEM_PROMPT = f"""Complete the provided Python action-function layout for an agent in a multi-agent simulation.
 
 decide() is called once per simulation step with an observation dict shaped like:
 {_OBSERVATION_DOC}
@@ -281,15 +348,7 @@ Rules:
 - The `math` module is already available as `math` (no import needed).
 - Only output one fenced ```python code block containing the decide() function, nothing else.
 
-Example:
-```python
-def decide(observation):
-    x = observation["self"]["x"]
-    y = observation["self"]["y"]
-    dx = -5 if x > 0 else 5
-    dy = -5 if y > 0 else 5
-    return {{"type": "move", "dx": dx, "dy": dy}}
-```"""
+{POLICY_LAYOUT_INSTRUCTIONS}"""
 
 def _extract_code(text: str) -> str:
     if "```" not in text:
@@ -301,10 +360,13 @@ def _extract_code(text: str) -> str:
     return fenced.strip()
 
 
-def _safety_check_error(code: str) -> str | None:
+def _safety_check_error(code: str, checks=None) -> str | None:
     """Compile+safety-check `code` without running it (used by the
     submit_policy_code gate below). Returns None if it's fine to accept, or
     a short error string to hand back to the model as a tool result."""
+    error = compile_policy_code(code, checks, context='submission')
+    if error:
+        return error
     try:
         _check_code_safety(code)  # ast.parse() inside raises SyntaxError on bad syntax too
         return None
@@ -343,6 +405,8 @@ def _generate_code_with_submission_gate(
     temperature: float,
     max_tokens: int,
     extra_params: dict,
+    checks=None,
+    history=None,
 ) -> str:
     """Drives the submit_policy_code tool-call loop: the model must call the
     tool to answer, and its code is compile+safety-checked before being
@@ -353,10 +417,10 @@ def _generate_code_with_submission_gate(
     extraction path (no tool calling at all) if the provider never returns a
     tool call, or outright rejects the tools/tool_choice parameters (some
     OpenRouter free models don't support function-calling reliably)."""
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_content},
-    ]
+    messages = history if history is not None else []
+    if not messages:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": user_content})
 
     try:
         for _round in range(MAX_TOOL_ROUNDS):
@@ -365,13 +429,14 @@ def _generate_code_with_submission_gate(
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                messages=messages,
+                messages=copy.deepcopy(messages),
                 tools=[SUBMIT_POLICY_TOOL_SCHEMA],
                 tool_choice="required",
                 **extra_params,
             )
             choice = response.choices[0]
             if choice.finish_reason == "length":
+                messages.append({'role': 'assistant', 'content': choice.message.content or '(response truncated)'})
                 raise ValueError(
                     "LLM response was cut off before finishing (finish_reason='length'); "
                     "the generated code may be incomplete. Increase max_tokens."
@@ -404,7 +469,7 @@ def _generate_code_with_submission_gate(
                 except Exception:
                     args = {}
                 code = _extract_code(str(args.get("code", "")))
-                error = _safety_check_error(code)
+                error = _safety_check_error(code, checks)
                 if error is None:
                     result = {"accepted": True}
                     accepted_code = accepted_code if accepted_code is not None else code
@@ -423,19 +488,36 @@ def _generate_code_with_submission_gate(
         model=model,
         temperature=temperature,
         max_tokens=max_tokens,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
-        ],
+        messages=_text_history(messages),
         **extra_params,
     )
+    messages.append({'role': 'assistant', 'content': response.choices[0].message.content or ''})
     if response.choices[0].finish_reason == "length":
         raise ValueError(
             "LLM response was cut off before finishing (finish_reason='length'); "
             "the generated code is incomplete. Increase max_tokens or shorten "
             "the system/task prompt."
         )
-    return _extract_code(response.choices[0].message.content)
+    code = _extract_code(response.choices[0].message.content)
+    error = _safety_check_error(code, checks)
+    if error:
+        messages.append({'role': 'user', 'content': 'Code validation failed: ' + error})
+        raise ValueError(error)
+    return code
+
+
+def _text_history(messages):
+    """Retain prior tool exchanges as text for providers without tool support."""
+    result = []
+    for message in messages:
+        if message['role'] == 'tool':
+            result.append({'role': 'user', 'content': 'Code validation result: ' + message['content']})
+        elif message.get('tool_calls'):
+            result.append({'role': 'assistant', 'content': (message.get('content') or '') + '\n' +
+                           json.dumps(message['tool_calls'], ensure_ascii=False)})
+        else:
+            result.append(copy.deepcopy(message))
+    return result
 
 
 # 캐시된 코드가 막혔을 때 LLM에게 다시 짜게 하는(재생성) 조건:
@@ -456,7 +538,8 @@ Previous code:
 Current observation:
 {observation}
 
-Write an improved decide() that gets unstuck and keeps making progress on the task."""
+Fill the supplied base layout's decision region to fix this failure and continue the task.
+Keep the observation setup and action helpers from the system prompt, and return the complete decide()."""
 
 
 class CodePolicy(Policy):
@@ -483,15 +566,22 @@ class CodePolicy(Policy):
         self.generated_code = None   # LLM이 제출/수락한 코드 원문 (처음 생성 후 재사용, stuck이면 재생성)
         self.last_error = None       # 가장 최근 decide() 호출에서 발생한 예외 (없으면 None)
         self.stall_limit = stall_limit    # 위치가 이만큼 연속으로 그대로면 재생성
-        self.max_replans = max_replans    # 회차당 재생성 최대 횟수
+        self.max_replans = max_replans    # 일반 정체 재계획 최대 횟수 (실행 오류 복구는 별도)
         self.replans: list[dict] = []     # 재생성 기록 [{"step", "reason"}]
         self.last_replan = None           # 이번 decide() 호출에서 재생성했으면 그 기록 (manifest용)
         self._last_pos = None             # 직전 관찰의 위치
         self._last_action = None          # 직전에 반환한 action
         self._stall_count = 0             # 위치가 연속으로 그대로였던 step 수
+        self._repair_results = queue.Queue()
+        self._repair_thread = None
+        self._repair_wait = 0
+        self._repair_attempts = 0
+        self._execution_error = None
+        self.last_recovery = None
 
     # 다음 decide() 호출에서 정책 코드를 새로 생성하도록 캐시를 비움
     def reset(self) -> None:
+        self._conversation_history = []
         self.generated_code = None
         self.last_error = None
         self.replans = []
@@ -499,9 +589,87 @@ class CodePolicy(Policy):
         self._last_pos = None
         self._last_action = None
         self._stall_count = 0
+        self._repair_results = queue.Queue()
+        self._repair_thread = None
+        self._repair_wait = 0
+        self._repair_attempts = 0
+        self._execution_error = None
+        self.last_recovery = None
+
+    def _start_repair(self, observation):
+        """Generate a replacement off the simulation thread; only one request at a time."""
+        if self._repair_thread is not None:
+            return
+        self._repair_attempts += 1
+        reason = f"decide() failed: {self._execution_error}"
+        prompt = CODE_REPLAN_PROMPT.format(
+            task=self.task_description, step=observation["self"].get("step"), reason=reason,
+            code=self.generated_code, observation=json.dumps(copy.deepcopy(observation), ensure_ascii=False))
+        self.last_replan = {"step": observation["self"].get("step"), "reason": reason,
+                            "kind": "execution_repair"}
+        self.replans.append(self.last_replan)
+        results = self._repair_results
+
+        def repair():
+            try:
+                results.put((self._generate_code(prompt), None))
+            except Exception:
+                results.put((None, traceback.format_exc()))
+
+        self._repair_thread = threading.Thread(target=repair, daemon=True)
+        self._repair_thread.start()
+
+    def _recover(self, observation):
+        if self._repair_thread is not None:
+            try:
+                code, error = self._repair_results.get_nowait()
+            except queue.Empty:
+                code, error = None, None
+            else:
+                self._repair_thread = None
+                if code is not None:
+                    self.generated_code = code
+                    # A repair must execute successfully against the *current* observation.
+                    result = run_decide_code(code, observation, timeout=self.sandbox_timeout, checks=self.code_checks)
+                    if not result.get("error"):
+                        self._execution_error = None
+                        self.last_error = None
+                        self._stall_count = 0
+                        self.last_recovery = {"status": "recovered", "attempts": self._repair_attempts}
+                        return result["action"]
+                    error = result["error"]
+                self._execution_error = error
+                self._repair_wait = 3
+        if self._repair_thread is None:
+            if self._repair_wait:
+                self._repair_wait -= 1
+            else:
+                # Runtime repair retries are not stopped by the normal stall replan budget.
+                self._start_repair(observation)
+        self.last_error = self._execution_error
+        self.last_recovery = {"status": "regenerating" if self._repair_thread else "retry_wait",
+                              "attempts": self._repair_attempts, "waiting": True}
+        return {"type": "noop"}
+
+    def _wait_for_recovery(self, observation):
+        self._debug('recovery_wait_started', step=observation['self'].get('step'), error=self._execution_error)
+        print(f"[CODE RECOVERY] step {observation['self'].get('step')}: waiting for working code", flush=True)
+        while True:
+            try:
+                action = self._recover(observation)
+                if self._execution_error is None:
+                    self._debug('recovery_succeeded', step=observation['self'].get('step'), attempts=self._repair_attempts)
+                    print(f"[CODE RECOVERY] recovered after {self._repair_attempts} attempt(s)", flush=True)
+                    return action
+            except Exception:
+                self._execution_error = traceback.format_exc()
+                self.last_error = self._execution_error
+                self._repair_wait = 3
+            # No action is applied and no additional simulation step is consumed here.
+            time.sleep(1.0)
 
     def _generate_code(self, user_content: str = None) -> str:
-        return _generate_code_with_submission_gate(
+        return self._generate_tracked(
             self.client,
             self.model,
             CODE_POLICY_SYSTEM_PROMPT,
@@ -509,6 +677,7 @@ class CodePolicy(Policy):
             self.temperature,
             self.max_tokens,
             self.extra_params,
+            checks=self.code_checks,
         )
 
     # 이번 관찰로 정지 횟수를 갱신하고, 재생성할 이유가 있으면 그 설명을 반환 (없으면 None)
@@ -539,7 +708,7 @@ class CodePolicy(Policy):
 
     # 이유와 함께 코드를 새로 생성. max_replans를 다 썼으면 기존 코드를 유지하고 False
     def _replan(self, observation: dict, reason: str) -> bool:
-        if len(self.replans) >= self.max_replans:
+        if sum(r.get("kind") != "execution_repair" for r in self.replans) >= self.max_replans:
             return False
         step = observation["self"].get("step")
         self.generated_code = self._generate_code(CODE_REPLAN_PROMPT.format(
@@ -556,29 +725,30 @@ class CodePolicy(Policy):
 
     def decide(self, observation: dict) -> dict:
         self.last_replan = None
+        self.last_recovery = None
         action = {"type": "noop"}
         try:
-            if self.generated_code is None:
+            if self._execution_error is not None:
+                action = self._wait_for_recovery(observation)
+            elif self.generated_code is None:
                 self.generated_code = self._generate_code()
             else:
                 reason = self._stuck_reason(observation)
                 if reason is not None:
                     self._replan(observation, reason)
 
-            result = run_decide_code(self.generated_code, observation, timeout=self.sandbox_timeout)
-            # 실행 오류도 stuck: 새 코드로 이번 step 안에서 바로 다시 실행 (한 step을 noop으로 버리지 않음)
-            if result.get("error") and self._replan(observation, f"decide() failed: {result['error']}"):
-                result = run_decide_code(self.generated_code, observation, timeout=self.sandbox_timeout)
-
-            if result.get("error"):
-                self.last_error = result["error"]
-            else:
-                self.last_error = None
-                action = result["action"]
+            if self.last_recovery is None:
+                result = run_decide_code(self.generated_code, observation, timeout=self.sandbox_timeout, checks=self.code_checks)
+                if result.get("error"):
+                    self._execution_error = result["error"]
+                    action = self._wait_for_recovery(observation)
+                else:
+                    self.last_error = None
+                    action = result["action"]
         except Exception:
-            # 매 스텝 같은 버그로 계속 noop이 나와도 원인을 알 수 있도록 예외를 보존.
-            # (여기서 noop으로 폴백하는 이유는 그대로: 시뮬레이션 자체는 멈추면 안 됨)
             self.last_error = traceback.format_exc()
+            self._execution_error = self.last_error
+            action = self._wait_for_recovery(observation)
         self._last_pos = (observation["self"]["x"], observation["self"]["y"])
         self._last_action = action
         return action
@@ -589,12 +759,7 @@ class CodePolicy(Policy):
 # 매 decide() 호출마다 그 시점의 observation(및 inbox 메시지)을 LLM에게 보여주고 코드를
 # 새로 쓰게 해서, 매 스텝 "대화하며" 판단을 바꿀 수 있게 한다. 대신 스텝마다 LLM 호출이
 # 발생하므로 LLMPolicy와 비슷한 속도/비용 특성을 가진다.
-CODE_STEP_SYSTEM_PROMPT = f"""You write Python policy code for ONE agent's decision at a \
-single simulation step in a multi-agent simulation. Define exactly one function:
-
-def decide(observation):
-    ...
-    return action
+CODE_STEP_SYSTEM_PROMPT = f"""Complete the supplied action-function layout for ONE agent's decision at a single simulation step.
 
 You will be called again on the very next step with a FRESH observation (including any \
 new inbox messages from other agents), so only decide the single best next action for \
@@ -611,7 +776,9 @@ shapes (the "type" field is required):
 Rules:
 - No import statements, no exec/eval/open, no names starting with __.
 - The `math` module is already available as `math` (no import needed).
-- Only output one fenced ```python code block containing the decide() function, nothing else."""
+- Only output one fenced ```python code block containing the decide() function, nothing else.
+
+{POLICY_LAYOUT_INSTRUCTIONS}"""
 
 
 class LiveCodePolicy(Policy):
@@ -637,7 +804,7 @@ class LiveCodePolicy(Policy):
         self.last_error = None       # 가장 최근 decide() 호출에서 발생한 예외 (없으면 None)
 
     def _generate_code(self, observation: dict) -> str:
-        return _generate_code_with_submission_gate(
+        return self._generate_tracked(
             self.client,
             self.model,
             CODE_STEP_SYSTEM_PROMPT,
@@ -645,6 +812,7 @@ class LiveCodePolicy(Policy):
             self.temperature,
             self.max_tokens,
             self.extra_params,
+            checks=self.code_checks,
         )
 
     def decide(self, observation: dict) -> dict:
@@ -652,7 +820,7 @@ class LiveCodePolicy(Policy):
             code = self._generate_code(observation)
             self.generated_code = code  # 실행 실패해도 원문은 남김
 
-            result = run_decide_code(code, observation, timeout=self.sandbox_timeout)
+            result = run_decide_code(code, observation, timeout=self.sandbox_timeout, checks=self.code_checks)
             if result.get("error"):
                 self.last_error = result["error"]
                 return {"type": "noop"}
@@ -709,7 +877,7 @@ Rules for code:
 Reply with EITHER one JSON object OR one ```python code block. Nothing else, no explanation."""
 
 
-HYBRID_POLICY_SYSTEM_PROMPT = _hybrid_policy_system_prompt()
+HYBRID_POLICY_SYSTEM_PROMPT = _hybrid_policy_system_prompt() + "\n\nWhen choosing reusable code:\n" + POLICY_LAYOUT_INSTRUCTIONS
 
 
 class HybridPolicy(Policy):
@@ -735,20 +903,20 @@ class HybridPolicy(Policy):
         self.last_error = None       # 가장 최근 decide() 호출에서 발생한 예외/사유 (없으면 None)
 
     def _ask_llm(self, observation: dict) -> str:
+        history = self.conversation_history
+        if not history:
+            history.append({'role': 'system', 'content': HYBRID_POLICY_SYSTEM_PROMPT})
+        history.append({'role': 'user', 'content': f'Task: {self.task_description}\n\nCurrent observation:\n' +
+                        json.dumps(observation, ensure_ascii=False)})
         response = _create_with_retry(
             self.client,
             model=self.model,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
-            messages=[
-                {"role": "system", "content": HYBRID_POLICY_SYSTEM_PROMPT},
-                {"role": "user", "content": (
-                    f"Task: {self.task_description}\n\n"
-                    f"Current observation:\n{json.dumps(observation, ensure_ascii=False)}"
-                )}
-            ],
+            messages=copy.deepcopy(history),
             **self.extra_params
         )
+        history.append({'role': 'assistant', 'content': response.choices[0].message.content or ''})
         if response.choices[0].finish_reason == "length":
             raise ValueError(
                 "LLM response was cut off before finishing (finish_reason='length'); "
@@ -760,7 +928,7 @@ class HybridPolicy(Policy):
     def decide(self, observation: dict) -> dict:
         try:
             if self.generated_code is not None:
-                result = run_decide_code(self.generated_code, observation, timeout=self.sandbox_timeout)
+                result = run_decide_code(self.generated_code, observation, timeout=self.sandbox_timeout, checks=self.code_checks)
                 if result.get("error"):
                     self.last_error = f"cached decide() failed: {result['error']}"
                     self.generated_code = None
@@ -777,12 +945,12 @@ class HybridPolicy(Policy):
             stripped = _extract_code(reply)
 
             if "def decide(" in stripped:
-                safety_error = _safety_check_error(stripped)
+                safety_error = _safety_check_error(stripped, self.code_checks)
                 if safety_error is not None:
                     self.last_error = f"generated code rejected: {safety_error}"
                     return {"type": "noop"}
 
-                result = run_decide_code(stripped, observation, timeout=self.sandbox_timeout)
+                result = run_decide_code(stripped, observation, timeout=self.sandbox_timeout, checks=self.code_checks)
                 action = result.get("action")
                 if result.get("error") or not isinstance(action, dict) or "type" not in action or action["type"] == "replan":
                     self.last_error = f"generated decide()'s first action was invalid: {result.get('error') or action!r}"
