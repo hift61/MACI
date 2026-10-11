@@ -1,0 +1,125 @@
+{
+  "seed": 0,
+  "width": 460,
+  "height": 320,
+  "walls": [
+    [
+      150,
+      70,
+      10,
+      90
+    ],
+    [
+      300,
+      70,
+      10,
+      90
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 215,
+      "y": 250,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 245,
+      "y": 250,
+      "facing": 270
+    }
+  ],
+  "objects": [
+    {
+      "kind": "item",
+      "id": "crate",
+      "x": 230,
+      "y": 150,
+      "params": {
+        "category": "coop",
+        "required_agents": 2
+      }
+    },
+    {
+      "kind": "receptacle",
+      "id": "dock",
+      "x": 410,
+      "y": 280,
+      "params": {
+        "accepts": [
+          "crate"
+        ],
+        "target": 1,
+        "radius": 20.0,
+        "label": "loading dock"
+      }
+    },
+    {
+      "kind": "bonus_item",
+      "id": "gem_1",
+      "x": 30,
+      "y": 30,
+      "params": {
+        "points": 25.0,
+        "expires_at": 40
+      }
+    },
+    {
+      "kind": "bonus_item",
+      "id": "gem_2",
+      "x": 430,
+      "y": 30,
+      "params": {
+        "points": 25.0,
+        "expires_at": 40
+      }
+    },
+    {
+      "kind": "bonus_item",
+      "id": "gem_3",
+      "x": 30,
+      "y": 290,
+      "params": {
+        "points": 25.0,
+        "expires_at": 40
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "notice",
+      "x": 230,
+      "y": 300,
+      "params": {
+        "hidden": false,
+        "content": {
+          "team_goal": "Deliver the crate to the dock (drop it inside the dock's radius). The crate is a coop item: it can only be picked up while BOTH of you stand within about 15 units of it, and its carrier cannot move unless the other agent stays within about 15 units.",
+          "gems": "Three gems lie in the far corners. A gem is worth 25 personal points to whoever picks it up, but every gem vanishes at step 40.",
+          "scoring": "Your own score counts gems. The team score counts whether and how fast the crate reaches the dock."
+        }
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "delivery_complete",
+      "receptacle_id": "dock"
+    }
+  ],
+  "puzzles": [
+    "s07_me_vs_us"
+  ],
+  "hints": [
+    "Deliver the coop item 'crate' to the receptacle 'dock'."
+  ],
+  "config": {
+    "recommended_steps": 120,
+    "source": "scenarios/s07_me_vs_us.py"
+  },
+  "scenario": "s07_me_vs_us",
+  "rules": {},
+  "briefings": {
+    "A": "You and your teammate start in the middle of a hall. Read the clue 'notice'. Object guide: receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal). item with \"bonus\": true: picking it up gives YOU personal points; it disappears at step 'expires_at' if nobody takes it.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "You and your teammate start in the middle of a hall. Read the clue 'notice'. Object guide: receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal). item with \"bonus\": true: picking it up gives YOU personal points; it disappears at step 'expires_at' if nobody takes it.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

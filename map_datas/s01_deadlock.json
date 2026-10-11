@@ -1,0 +1,178 @@
+{
+  "seed": 0,
+  "width": 440,
+  "height": 300,
+  "walls": [
+    [
+      200,
+      0,
+      40,
+      180
+    ],
+    [
+      0,
+      180,
+      90.0,
+      10
+    ],
+    [
+      110.0,
+      180,
+      90.0,
+      10
+    ],
+    [
+      240,
+      180,
+      90.0,
+      10
+    ],
+    [
+      350.0,
+      180,
+      90.0,
+      10
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 100,
+      "y": 120,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 340,
+      "y": 120,
+      "facing": 270
+    }
+  ],
+  "objects": [
+    {
+      "kind": "door",
+      "id": "door_A",
+      "x": 100,
+      "y": 185,
+      "params": {
+        "locked": true,
+        "radius": 12.0
+      }
+    },
+    {
+      "kind": "door",
+      "id": "door_B",
+      "x": 340,
+      "y": 185,
+      "params": {
+        "locked": true,
+        "radius": 12.0
+      }
+    },
+    {
+      "kind": "switch_plate",
+      "id": "plate_A",
+      "x": 30,
+      "y": 30,
+      "params": {
+        "opens": [
+          "door_B"
+        ]
+      }
+    },
+    {
+      "kind": "switch_plate",
+      "id": "plate_B",
+      "x": 410,
+      "y": 30,
+      "params": {
+        "opens": [
+          "door_A"
+        ]
+      }
+    },
+    {
+      "kind": "latch_lever",
+      "id": "release_A",
+      "x": 200,
+      "y": 285,
+      "params": {
+        "doors": [
+          "door_A"
+        ]
+      }
+    },
+    {
+      "kind": "latch_lever",
+      "id": "release_B",
+      "x": 240,
+      "y": 285,
+      "params": {
+        "doors": [
+          "door_B"
+        ]
+      }
+    },
+    {
+      "kind": "goal_zone",
+      "id": "courtyard",
+      "x": 220,
+      "y": 245,
+      "params": {
+        "width": 440,
+        "height": 110,
+        "label": "courtyard"
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "clue_A",
+      "x": 150,
+      "y": 30,
+      "params": {
+        "content": {
+          "plate_A": "Standing on plate_A (this room) holds open door_B - the door of room B, NOT your own door.",
+          "door_A": "Your door door_A opens only while someone stands on plate_B in room B, or forever once lever release_A in the courtyard is pulled.",
+          "courtyard": "release_A and release_B are levers in the courtyard just below the two rooms."
+        },
+        "hidden": false
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "clue_B",
+      "x": 290,
+      "y": 30,
+      "params": {
+        "content": {
+          "plate_B": "Standing on plate_B (this room) holds open door_A - the door of room A, NOT your own door.",
+          "door_B": "Your door door_B opens only while someone stands on plate_A in room A, or forever once lever release_B in the courtyard is pulled.",
+          "courtyard": "release_A and release_B are levers in the courtyard just below the two rooms."
+        },
+        "hidden": false
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "team_assembled",
+      "zone_id": "courtyard"
+    }
+  ],
+  "puzzles": [
+    "s01_deadlock"
+  ],
+  "hints": [
+    "Both agents must stand inside the goal_zone 'courtyard' at the same time."
+  ],
+  "config": {
+    "recommended_steps": 120,
+    "source": "scenarios/s01_deadlock.py"
+  },
+  "scenario": "s01_deadlock",
+  "rules": {},
+  "briefings": {
+    "A": "You start locked in room A (top-left). Agent B is locked in room B (top-right). Read clue_A in your room. Object guide: switch_plate: while ANY agent stands within its radius, every door in its 'opens' list is unlocked; when nobody stands on any plate for a door, that door locks again. lever with \"latch\": true: pull_lever opens its linked doors permanently. goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "You start locked in room B (top-right). Agent A is locked in room A (top-left). Read clue_B in your room. Object guide: switch_plate: while ANY agent stands within its radius, every door in its 'opens' list is unlocked; when nobody stands on any plate for a door, that door locks again. lever with \"latch\": true: pull_lever opens its linked doors permanently. goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

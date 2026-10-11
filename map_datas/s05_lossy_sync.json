@@ -1,0 +1,112 @@
+{
+  "seed": 0,
+  "width": 440,
+  "height": 240,
+  "walls": [
+    [
+      210,
+      0,
+      20,
+      240
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 105,
+      "y": 180,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 335,
+      "y": 180,
+      "facing": 270
+    }
+  ],
+  "objects": [
+    {
+      "kind": "sync_pad",
+      "id": "pad_A",
+      "x": 105,
+      "y": 60,
+      "params": {
+        "group": "sync",
+        "tolerance": 0,
+        "return_x": 105,
+        "return_y": 110,
+        "cooldown": 3
+      }
+    },
+    {
+      "kind": "sync_pad",
+      "id": "pad_B",
+      "x": 335,
+      "y": 60,
+      "params": {
+        "group": "sync",
+        "tolerance": 0,
+        "return_x": 335,
+        "return_y": 110,
+        "cooldown": 3
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "manual_A",
+      "x": 40,
+      "y": 200,
+      "params": {
+        "content": {
+          "pads": "sync_pad pad_A (room A) and pad_B (room B) must be entered in the SAME step. Entering means moving onto the pad from outside its radius.",
+          "failure": "If only one pad is entered, both pads reject: whoever stands on a pad is pushed back a few units and both pads ignore entries for 3 steps ('armed' becomes false).",
+          "radio": "The radio is unreliable: roughly one message in three is lost without notice, and others arrive up to 2 steps late. Every observation contains the shared step number (self.step)."
+        },
+        "hidden": false
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "manual_B",
+      "x": 400,
+      "y": 200,
+      "params": {
+        "content": {
+          "pads": "sync_pad pad_A (room A) and pad_B (room B) must be entered in the SAME step. Entering means moving onto the pad from outside its radius.",
+          "failure": "If only one pad is entered, both pads reject: whoever stands on a pad is pushed back a few units and both pads ignore entries for 3 steps ('armed' becomes false).",
+          "radio": "The radio is unreliable: roughly one message in three is lost without notice, and others arrive up to 2 steps late. Every observation contains the shared step number (self.step)."
+        },
+        "hidden": false
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "sync_success",
+      "group": "sync"
+    }
+  ],
+  "puzzles": [
+    "s05_lossy_sync"
+  ],
+  "hints": [
+    "Enter pad_A and pad_B in exactly the same step."
+  ],
+  "config": {
+    "recommended_steps": 150,
+    "source": "scenarios/s05_lossy_sync.py"
+  },
+  "scenario": "s05_lossy_sync",
+  "rules": {
+    "message_loss": 0.35,
+    "message_delay": [
+      0,
+      2
+    ],
+    "seed": 11
+  },
+  "briefings": {
+    "A": "You are in room A (left) with pad_A. Agent B is in room B (right) with pad_B. A wall separates you. Read manual_A. Object guide: sync_pad: pads of the same 'group' must all be entered (walked onto) close together in time. 'armed' false means the pad currently ignores entries.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "You are in room B (right) with pad_B. Agent A is in room A (left) with pad_A. A wall separates you. Read manual_B. Object guide: sync_pad: pads of the same 'group' must all be entered (walked onto) close together in time. 'armed' false means the pad currently ignores entries.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

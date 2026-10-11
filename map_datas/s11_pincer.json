@@ -1,0 +1,114 @@
+{
+  "seed": 0,
+  "width": 460,
+  "height": 320,
+  "walls": [
+    [
+      180,
+      110,
+      100,
+      100
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 60,
+      "y": 160,
+      "facing": 0
+    },
+    {
+      "id": "B",
+      "x": 400,
+      "y": 160,
+      "facing": 180
+    }
+  ],
+  "objects": [
+    {
+      "kind": "mover",
+      "id": "core",
+      "x": 130,
+      "y": 60,
+      "params": {
+        "waypoints": [
+          [
+            330,
+            60
+          ],
+          [
+            330,
+            260
+          ],
+          [
+            130,
+            260
+          ],
+          [
+            130,
+            60
+          ]
+        ],
+        "speed": 12.0,
+        "object_type": "item",
+        "loop": true,
+        "extra": {
+          "category": "coop",
+          "required_agents": 2,
+          "label": "power core",
+          "_hide_path": true
+        }
+      }
+    },
+    {
+      "kind": "receptacle",
+      "id": "dock",
+      "x": 420,
+      "y": 295,
+      "params": {
+        "accepts": [
+          "core"
+        ],
+        "target": 1,
+        "radius": 20.0,
+        "label": "core dock"
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "notice",
+      "x": 60,
+      "y": 300,
+      "params": {
+        "hidden": false,
+        "content": {
+          "core": "The power core (a coop item) keeps moving on its own around the central pillar. Its path is not shown; you can only watch where it is while it is in your view.",
+          "catch": "It can only be picked up while BOTH of you are within about 15 units of it at the same moment. It moves about 12 units per step - faster than you can turn and follow.",
+          "deliver": "Once picked up, carry it together to the dock (south-east) and drop it there. If you drop it anywhere else it starts running around again."
+        }
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "delivery_complete",
+      "receptacle_id": "dock"
+    }
+  ],
+  "puzzles": [
+    "s11_pincer"
+  ],
+  "hints": [
+    "Catch the moving coop item 'core' together and deliver it to the receptacle 'dock'."
+  ],
+  "config": {
+    "recommended_steps": 200,
+    "source": "scenarios/s11_pincer.py"
+  },
+  "scenario": "s11_pincer",
+  "rules": {},
+  "briefings": {
+    "A": "You and your teammate start on opposite sides of a pillar. Read the clue 'notice'. Object guide: receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal).\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "You and your teammate start on opposite sides of a pillar. Read the clue 'notice'. Object guide: receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal).\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

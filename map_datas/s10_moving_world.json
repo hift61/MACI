@@ -1,0 +1,153 @@
+{
+  "seed": 0,
+  "width": 440,
+  "height": 260,
+  "walls": [
+    [
+      210,
+      0,
+      20,
+      260
+    ],
+    [
+      0,
+      100,
+      95.0,
+      10
+    ],
+    [
+      115.0,
+      100,
+      95.0,
+      10
+    ],
+    [
+      230,
+      100,
+      95.0,
+      10
+    ],
+    [
+      345.0,
+      100,
+      95.0,
+      10
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 105,
+      "y": 200,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 335,
+      "y": 200,
+      "facing": 270
+    }
+  ],
+  "objects": [
+    {
+      "kind": "periodic_door",
+      "id": "gate_A",
+      "x": 105,
+      "y": 105,
+      "params": {
+        "radius": 12.0,
+        "period": 7,
+        "open_steps": 2,
+        "phase": 0
+      }
+    },
+    {
+      "kind": "sync_pad",
+      "id": "pad_A",
+      "x": 105,
+      "y": 70,
+      "params": {
+        "group": "crossing",
+        "tolerance": 1,
+        "return_x": 105,
+        "return_y": 135,
+        "cooldown": 3
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "manual_A",
+      "x": 40,
+      "y": 220,
+      "params": {
+        "content": {
+          "gate": "The gate in front of you opens and closes by itself on a fixed repeating schedule. The other room's gate follows a DIFFERENT schedule that only your teammate can watch.",
+          "pads": "Behind each gate is a sync_pad (pad_A, pad_B). Both pads must be entered within 1 step of each other. A lone entry pushes that agent back out in front of the gate and disables both pads for 3 steps.",
+          "tip": "Gates only stay open for a short time, so be right in front of your gate when it opens. Every observation contains the shared step number (self.step)."
+        },
+        "hidden": false
+      }
+    },
+    {
+      "kind": "periodic_door",
+      "id": "gate_B",
+      "x": 335,
+      "y": 105,
+      "params": {
+        "radius": 12.0,
+        "period": 5,
+        "open_steps": 2,
+        "phase": 3
+      }
+    },
+    {
+      "kind": "sync_pad",
+      "id": "pad_B",
+      "x": 335,
+      "y": 70,
+      "params": {
+        "group": "crossing",
+        "tolerance": 1,
+        "return_x": 335,
+        "return_y": 135,
+        "cooldown": 3
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "manual_B",
+      "x": 400,
+      "y": 220,
+      "params": {
+        "content": {
+          "gate": "The gate in front of you opens and closes by itself on a fixed repeating schedule. The other room's gate follows a DIFFERENT schedule that only your teammate can watch.",
+          "pads": "Behind each gate is a sync_pad (pad_A, pad_B). Both pads must be entered within 1 step of each other. A lone entry pushes that agent back out in front of the gate and disables both pads for 3 steps.",
+          "tip": "Gates only stay open for a short time, so be right in front of your gate when it opens. Every observation contains the shared step number (self.step)."
+        },
+        "hidden": false
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "sync_success",
+      "group": "crossing"
+    }
+  ],
+  "puzzles": [
+    "s10_moving_world"
+  ],
+  "hints": [
+    "Enter pad_A and pad_B (behind the two timed gates) within 1 step of each other."
+  ],
+  "config": {
+    "recommended_steps": 150,
+    "source": "scenarios/s10_moving_world.py"
+  },
+  "scenario": "s10_moving_world",
+  "rules": {},
+  "briefings": {
+    "A": "You are in room A (left), south of gate_A. Agent B is in the other room behind a wall. Read manual_A. Object guide: sync_pad: pads of the same 'group' must all be entered (walked onto) close together in time. 'armed' false means the pad currently ignores entries.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "You are in room B (right), south of gate_B. Agent A is in the other room behind a wall. Read manual_B. Object guide: sync_pad: pads of the same 'group' must all be entered (walked onto) close together in time. 'armed' false means the pad currently ignores entries.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}
