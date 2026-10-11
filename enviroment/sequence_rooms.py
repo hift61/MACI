@@ -2,6 +2,7 @@ import random
 import math
 
 from enviroment import Environment
+from environment_prompt import environment_description
 
 # 두 방 순서 퍼즐 환경.
 # 가운데 벽으로 완전히 나뉜 두 방에 에이전트가 한 명씩 갇혀 있고, 방마다 숫자가 적힌 번호판
@@ -43,6 +44,7 @@ class SequenceRoomsEnvironment(Environment):
         self.solved = False
         self._contributors: list[str] = []  # 이번 시도에서 맞게 누른 에이전트 (문 열림 공로자)
         self._pads_inside: dict[str, set[str]] = {}
+        self._pending_contacts = None
 
     # number: 번호판에 적힌 숫자, room: 이 번호판이 있는 방 id
     def add_number_pad(self, pad_id: str, x: float, y: float, number: int, room: str) -> None:
@@ -81,6 +83,8 @@ class SequenceRoomsEnvironment(Environment):
 
     # Detect contact after the rule-filtered action; number pads need no press action.
     def apply_action(self, agent_id: str, action: dict, observation: dict = None) -> dict:
+        if self.finished:
+            return {"type": "noop"}
         agent = self.agents[agent_id]
         start = (agent.x, agent.y)
         final_action = super().apply_action(agent_id, action, observation)
@@ -114,10 +118,43 @@ class SequenceRoomsEnvironment(Environment):
             if entry is not None:
                 entered.append((entry, pad_id))
         self._pads_inside[agent_id] = inside
-        for _, pad_id in sorted(entered):
-            if self.finished:
-                break
-            self.press_number_pad(agent_id, pad_id, contact=True)
+        contacts = [(agent_id, pad_id) for _, pad_id in sorted(entered)]
+        if self._pending_contacts is not None:
+            self._pending_contacts.extend(contacts)
+        else:
+            self._resolve_contacts(contacts)
+
+    def _after_actions(self):
+        self._resolve_contacts(self._pending_contacts or [])
+
+    def _resolve_contacts(self, contacts):
+        # A simulation step is simultaneous: Python application order is not a
+        # player-established ordering. Multiple inputs cannot count as turns.
+        if len(contacts) > 1:
+            self._reset_sequence(contacts, "simultaneous_input")
+        elif contacts:
+            aid, pad_id = contacts[0]
+            self.press_number_pad(aid, pad_id, contact=True)
+
+    def _reset_sequence(self, contacts, reason):
+        if self.finished:
+            return
+        expected_order = self.progress + 1
+        for aid, pad_id in contacts:
+            pad = self.objects[pad_id]
+            self._show(pad["room"], {"pad_id": pad_id, "number": pad["number"],
+                                    "step": self.step_count, "result": "wrong_reset"})
+        self._log("sequence_reset", sorted({aid for aid, _ in contacts}),
+                  object_id=contacts[0][1], reason=reason,
+                  inputs=[{"agent_id": aid, "pad_id": pad_id} for aid, pad_id in contacts],
+                  expected_order=expected_order)
+        self.progress = 0
+        self.resets += 1
+        self._contributors = []
+        for display in self._displays():
+            display["resets"] = self.resets
+        if self.max_resets is not None and self.resets > self.max_resets:
+            self._fail("too_many_resets", contacts[0][0])
 
     def press_number_pad(self, agent_id: str, pad_id: str, contact: bool = False) -> None:
         agent = self.agents[agent_id]
@@ -131,15 +168,7 @@ class SequenceRoomsEnvironment(Environment):
         self._show(pad["room"], {"pad_id": pad_id, "number": pad["number"], "step": self.step_count,
                                  "result": "accepted" if correct else "wrong_reset"})
         if not correct:
-            self._log("sequence_reset", [agent_id], object_id=pad_id, number=pad["number"],
-                      expected_order=self.progress + 1)
-            self.progress = 0
-            self.resets += 1
-            self._contributors = []
-            for display in self._displays():
-                display["resets"] = self.resets
-            if self.max_resets is not None and self.resets > self.max_resets:
-                self._fail("too_many_resets", agent_id)
+            self._reset_sequence([(agent_id, pad_id)], "wrong_order")
             return
 
         self.progress += 1
@@ -181,7 +210,11 @@ class SequenceRoomsEnvironment(Environment):
     def step(self) -> None:
         if self.finished:
             return
-        super().step()
+        self._pending_contacts = []
+        try:
+            super().step()
+        finally:
+            self._pending_contacts = None
         if not self.finished and self.max_turns is not None and self.step_count >= self.max_turns:
             self._fail("turn_limit", None)
 
@@ -192,7 +225,7 @@ class SequenceRoomsEnvironment(Environment):
 #   presses_per_room: 방마다 눌러야 하는 횟수 (전체 순서 길이 = 이 값 x 2)
 def build_sequence_rooms(seed: int = 0, pads_per_room: int = 5, presses_per_room: int = 3,
                          max_turns: int = 60, max_resets: int | None = None,
-                         interact_radius: float = 15.0):
+                         interact_radius: float = 15.0, reveal_goal: bool = True):
     if not 1 <= presses_per_room <= pads_per_room <= 5:
         raise ValueError("need 1 <= presses_per_room <= pads_per_room <= 5")
     rng = random.Random(seed)
@@ -238,32 +271,26 @@ def build_sequence_rooms(seed: int = 0, pads_per_room: int = 5, presses_per_room
     env.add_door(env.vault_id, x=wall_x + wall_w / 2, y=height - 15, locked=True, radius=10.0)
 
     objectives = [{"type": "door_unlocked", "door_id": env.vault_id}]
-    return env, sequence_task_descriptions(env), objectives
+    return env, sequence_task_descriptions(env, reveal_goal=reveal_goal), objectives
 
 
-def sequence_task_descriptions(env: SequenceRoomsEnvironment) -> dict[str, str]:
-    total = len(env.sequence)
-    limit = f"within {env.max_turns} steps" if env.max_turns is not None else "as fast as you can"
-    descriptions = {}
-    for room in ROOM_IDS:
-        other = next(r for r in ROOM_IDS if r != room)
-        descriptions[room] = (
-            f"You are agent {room}, locked in room {room} (the left room is A, the right room is B; a wall "
-            f"separates them and you cannot see or enter the other room). Agent {other} is in room {other}. "
-            f"Both rooms have number pads (objects of type 'number_pad' with a 'number' field). The team must "
-            f"press {total} pads in ONE shared order that alternates between the two rooms irregularly. The "
-            f"clue 'clue_{room}' in your room (field 'content') lists only YOUR presses: which overall order "
-            f"positions are yours and which number to press at each. {other}'s clue lists theirs, with "
-            f"different numbers. Numbers and the shared order are randomized by the seed and stay fixed "
-            f"throughout this episode, including after resets. Entering a pad's touch_radius (10 units) "
-            f"AUTOMATICALLY presses it; press_button is unnecessary. Staying on it does not repeat the input; "
-            f"leave and re-enter to press again. Crossing a pad while moving also presses it, so travel below "
-            f"the pad row before approaching your target vertically to avoid other pads. "
-            f"Only touch your target when every earlier position has been pressed - "
-            f"use send_message to tell {other} each time you press (e.g. 'pressed order 3') and wait for "
-            f"their message before pressing after their turn. Any wrong or early press resets the WHOLE "
-            f"sequence for both rooms; 'display_{room}' shows your room's last press result and the reset "
-            f"count. Pressing all {total} correctly unlocks door '{env.vault_id}'. You must finish {limit} "
-            f"or the door is sealed forever."
-        )
-    return descriptions
+def sequence_task_descriptions(env: SequenceRoomsEnvironment, reveal_goal: bool = True) -> dict[str, str]:
+    goal = f" Goal: unlock door '{env.vault_id}'." if reveal_goal else ''
+    rules = (
+        " Number pads use one shared input order. "
+        "Press the required number pads strictly in overall order: first position 1, then position 2, "
+        "and so on through the final position. Do not skip positions or press a later position early. "
+        "Each room's clue contains only that room's part of the required order. "
+        "Entering a number pad's touch_radius automatically inputs its number, including crossing it; "
+        "press_button is unnecessary. Staying inside does not repeat the input; leave and re-enter to input again. "
+        "Only one pad input is allowed per step across both agents. A wrong or early input, or multiple "
+        "inputs in the same step, resets the entire sequence for both rooms. "
+        "A display shows its room's last input result and the reset count, not global progress."
+    )
+    if env.max_turns is not None:
+        rules += f" Finish within {env.max_turns} steps or the door is permanently sealed."
+    if env.max_resets is not None:
+        rules += f" More than {env.max_resets} resets permanently seals the door."
+    return {aid: environment_description(aid, list(env.agents),
+                                        env.game_map.map_width, env.game_map.map_height) + goal + rules
+            for aid in env.agents}

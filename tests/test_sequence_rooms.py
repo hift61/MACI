@@ -62,6 +62,119 @@ class TurnTakingPolicy:
 
 
 class SequenceRoomsTests(unittest.TestCase):
+    def test_goal_toggle_changes_only_prompt_goal(self):
+        from benchmark import build_episode
+        from mapgen import generate_map
+        from mapgen.builder import build_environment
+        builders = (lambda enabled: build_sequence_rooms(seed=3, reveal_goal=enabled),
+                    lambda enabled: build_environment(generate_map(seed=3), reveal_goal=enabled),
+                    lambda enabled: build_episode(reveal_goal=enabled))
+        for build in builders:
+            shown, hidden = build(True), build(False)
+            self.assertEqual(shown[0].objects, hidden[0].objects)
+            for aid in shown[1]:
+                self.assertIn('Goal:', shown[1][aid])
+                self.assertNotIn('Goal:', hidden[1][aid])
+                self.assertIn('Other agents:', hidden[1][aid])
+            if len(shown) == 3:
+                self.assertEqual(shown[2], hidden[2])
+        _, tasks, _ = build_sequence_rooms(seed=3, reveal_goal=False)
+        for text in tasks.values():
+            self.assertIn('strictly in overall order', text)
+            self.assertIn('resets the entire sequence', text)
+            self.assertNotIn("unlock door 'vault'", text)
+
+    def test_prompts_give_minimal_rules_without_solution_strategy(self):
+        from policy import CODE_POLICY_SYSTEM_PROMPT, CODE_STEP_SYSTEM_PROMPT, HYBRID_POLICY_SYSTEM_PROMPT
+        from benchmark import build_episode
+        from mapgen import generate_map
+        from mapgen.builder import task_descriptions
+        env, tasks, _ = build_sequence_rooms(seed=3)
+        for descriptions in (tasks, build_episode()[1], task_descriptions(generate_map(seed=3))):
+            for aid, text in descriptions.items():
+                self.assertIn(f"You are agent {aid}", text)
+                self.assertIn("Other agents:", text)
+                self.assertIn("move_forward", text)
+                self.assertIn('Goal:', text)
+                for hint in ("your_presses", "pressure plate", "clue_A",
+                             "ALL of these goals"):
+                    self.assertNotIn(hint, text)
+                for strategy in ('travel below', 'approaching your target vertically',
+                                 'pressed order 3', 'wait for their message', 'approximately ('):
+                    self.assertNotIn(strategy, text)
+        for text in tasks.values():
+            self.assertIn('strictly in overall order: first position 1, then position 2', text)
+            self.assertIn('automatically inputs', text)
+            self.assertIn('Only one pad input is allowed per step', text)
+            self.assertIn('resets the entire sequence', text)
+            self.assertIn('60 steps', text)
+        for prompt in (CODE_POLICY_SYSTEM_PROMPT, CODE_STEP_SYSTEM_PROMPT, HYBRID_POLICY_SYSTEM_PROMPT):
+            for hint in ("your_presses", "sequence_rooms", "avoid accidentally touching", "global progress"):
+                self.assertNotIn(hint, prompt)
+        # Local clues remain discoverable through the environment, not the prompt.
+        self.assertIn("your_presses", env.objects['clue_A']['content'])
+
+    def test_simultaneous_presses_cannot_clear_by_application_order(self):
+        for agent_order in (("A", "B"), ("B", "A")):
+            env, _, objectives = build_sequence_rooms(seed=2, pads_per_room=2, presses_per_room=1)
+            env.agents = {aid: env.agents[aid] for aid in agent_order}
+            # Arrange the answer in exactly the engine's step-1 application order.
+            order = agent_order[1:] + agent_order[:1]
+            pads = {aid: next(pid for pid in env.sequence if env.objects[pid]['room'] == aid)
+                    for aid in agent_order}
+            env.set_sequence([pads[aid] for aid in order])
+            for aid in agent_order:
+                pad = env.objects[pads[aid]]
+                env.agents[aid].x, env.agents[aid].y = pad['x'], pad['y'] + 15
+                env.turn_agent(aid, 270)
+                class EnterPad:
+                    def decide(self, obs):
+                        return {'type': 'move_forward', 'distance': 10}
+                env.agents[aid].set_policy(EnterPad())
+            env.step()
+            self.assertEqual((env.progress, env.resets), (0, 1))
+            self.assertFalse(env.solved)
+            self.assertTrue(env.objects['vault']['locked'])
+            self.assertIsNone(clear_step(env.event_log.entries, objectives))
+            resets = [e for e in env.event_log.entries if e['type'] == 'sequence_reset']
+            self.assertEqual(resets[0]['reason'], 'simultaneous_input')
+            self.assertFalse(any(e['type'] == 'number_accepted' for e in env.event_log.entries))
+
+    def test_every_out_of_order_contact_resets_and_requires_full_retry(self):
+        for seed in range(10):
+            env, _, objectives = build_sequence_rooms(seed=seed)
+            for pid in env.sequence[1:]:
+                pad = env.objects[pid]
+                aid = pad['room']
+                # Approach afresh, so each assertion tests an actual entry.
+                env.agents[aid].x, env.agents[aid].y = pad['x'], pad['y'] + 15
+                env._pads_inside[aid] = set()
+                move_for_contact(env, aid, 0, -10)
+                self.assertEqual(env.progress, 0, (seed, pid))
+                self.assertTrue(env.objects['vault']['locked'])
+                self.assertIsNone(clear_step(env.event_log.entries, objectives))
+            for index, pid in enumerate(env.sequence):
+                pad = env.objects[pid]
+                aid = pad['room']
+                env.agents[aid].x, env.agents[aid].y = pad['x'], pad['y'] + 15
+                env._pads_inside[aid] = set()
+                move_for_contact(env, aid, 0, -10)
+                self.assertEqual(env.progress, index + 1)
+            self.assertTrue(env.solved)
+
+    def test_one_move_across_multiple_pads_cannot_submit_a_sequence(self):
+        env, _, _ = build_sequence_rooms(seed=2, pads_per_room=2, presses_per_room=2)
+        pads = sorted((p for p in env.objects.values()
+                       if p['type'] == 'number_pad' and p['room'] == 'A'), key=lambda p: p['x'])
+        env.set_sequence([p['object_id'] for p in pads])
+        agent = env.agents['A']
+        agent.x, agent.y = pads[0]['x'] - 15, pads[0]['y']
+        env.max_move = 200
+        move_for_contact(env, 'A', pads[-1]['x'] - agent.x + 15, 0)
+        self.assertEqual((env.progress, env.resets), (0, 1))
+        self.assertFalse(env.solved)
+        self.assertTrue(env.objects['vault']['locked'])
+
     def test_rooms_use_different_numbers_and_clues_are_visible(self):
         env, tasks, _ = build_sequence_rooms(seed=3)
         numbers = {room: {o["number"] for o in env.objects.values() if o["type"] == "number_pad" and o["room"] == room}

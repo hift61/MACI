@@ -9,6 +9,7 @@ import queue
 import subprocess
 import sys
 import threading
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent
 
@@ -45,6 +46,7 @@ class Launcher:
         self.environment = "map"
         self.auto_view = True
         self.debug = False
+        self.reveal_goal = True
         self.viewers = []
         self.reveal = False
         self.focus = None
@@ -69,7 +71,8 @@ class Launcher:
     def refresh(self):
         self.maps = sorted((ROOT / "map_datas").glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
         self.runs = sorted((p for p in (ROOT / "benchmark_runs").glob("*.jsonl")
-                            if not p.name.endswith(('.code_checks.jsonl', '.debug.jsonl'))),
+                            if not p.name.endswith(('.code_checks.jsonl', '.debug.jsonl', '.context_archive.jsonl',
+                                                    '.context_compressions.jsonl', '.actions.jsonl'))),
                            key=lambda p: p.stat().st_mtime, reverse=True)
 
     def path(self, name):
@@ -186,8 +189,14 @@ class Launcher:
             args += ["--load", str(source)]
         self.start(args, "맵 편집", output)
 
+    def select_curriculum(self):
+        self.environment = 'curriculum'
+        if self.fields['steps'] == '150':
+            self.fields['steps'] = '600'
+
     def run_episode(self):
-        if self.policy == "code" and not self.key_ready():
+        local = urlparse(self.fields['url'].strip()).hostname in ('127.0.0.1', 'localhost', '::1')
+        if self.policy in ("code", "hybrid") and not local and not self.key_ready():
             raise ValueError("프로젝트의 key.txt에 API 키를 입력하세요.")
         output_dir = ROOT / "benchmark_runs"
         output_dir.mkdir(exist_ok=True)
@@ -195,11 +204,15 @@ class Launcher:
         args = ["benchmark.py", "--policy", self.policy, "--steps", self.number("steps"), "--out", str(output)]
         if self.debug:
             args.append('--debug')
-        if self.policy == "code":
+        if not self.reveal_goal:
+            args.append('--hide-goal')
+        if self.policy in ("code", "hybrid"):
             if not self.fields["model"].strip() or not self.fields["url"].strip():
                 raise ValueError("모델과 API 주소를 입력하세요.")
             args += ["--model", self.fields["model"].strip(), "--base-url", self.fields["url"].strip()]
-        if self.environment == "sequence_rooms":
+        if self.environment in ('blind_code', 'curriculum'):
+            args += ['--environment', self.environment, '--sequence-seed', self.number('seed', 0)]
+        elif self.environment == "sequence_rooms":
             pads, presses = self.number("pads"), self.number("presses")
             if not 1 <= int(presses) <= int(pads) <= 5:
                 raise ValueError("각 방의 입력 수 ≤ 번호판 수 ≤ 5여야 합니다.")
@@ -228,6 +241,12 @@ class Launcher:
             args.append("--live")
         self.viewers = [p for p in self.viewers if p.poll() is None]
         self.viewers.append(subprocess.Popen(args, cwd=ROOT, creationflags=flags))
+
+    def use_local_model(self):
+        self.fields['url'] = 'http://127.0.0.1:8080/v1'
+        self.fields['model'] = 'models/Ternary-Bonsai-2-27B-PTQ1_0.gguf'
+        self.policy = 'code'
+        self.status = '로컬 모델 설정됨 · 8080 서버는 key.txt 없이 실행합니다.'
 
     def judge(self, baseline=False):
         source = self.path("manifest")
@@ -341,11 +360,15 @@ class Launcher:
             for i, path in enumerate(self.maps[self.list_scroll:self.list_scroll + 5]):
                 self.button(path.name, (24, 378 + i * 35, 1128, 30), lambda p=path: self.select_map(p), self.fields['map'] == str(path.relative_to(ROOT)))
         elif self.tab == "실행":
-            self.button("일반 맵 / 압력판", (24, 122, 360, 36), lambda: setattr(self, 'environment', 'map'), self.environment == 'map')
-            self.button("두 방 순서 퍼즐", (400, 122, 360, 36), lambda: setattr(self, 'environment', 'sequence_rooms'), self.environment == 'sequence_rooms')
-            self.text("선택 환경: " + ("두 방 순서 퍼즐" if self.environment == 'sequence_rooms' else (self.fields['map'] or "기본 맵 (압력판 2개)")), 24, 174, width=1110)
-            for i, (policy, label) in enumerate((("tooluse", "규칙 기반 (무료)"), ("code", "LLM 코드 정책"), ("random", "무작위 이동"), ("noop", "행동 없음"))):
-                self.button(label, (24 + i * 280, 208, 265, 40), lambda p=policy: setattr(self, 'policy', p), self.policy == policy)
+            self.button("일반 맵", (24, 122, 180, 36), lambda: setattr(self, 'environment', 'map'), self.environment == 'map')
+            self.button("두 방 순서", (215, 122, 180, 36), lambda: setattr(self, 'environment', 'sequence_rooms'), self.environment == 'sequence_rooms')
+            self.button("힌트 없는 10자리", (406, 122, 180, 36), lambda: setattr(self, 'environment', 'blind_code'), self.environment == 'blind_code')
+            self.button("5단계 학습 퍼즐", (597, 122, 195, 36), self.select_curriculum, self.environment == 'curriculum')
+            self.text("선택 환경: " + ({'curriculum': '5단계 학습 퍼즐', 'sequence_rooms': '두 방 순서 퍼즐', 'blind_code': '힌트 없는 10자리 협력 코드'}.get(self.environment, self.fields['map'] or "기본 맵 (압력판 2개)")), 24, 174, width=1110)
+            self.button("목표 알려주기: " + ("켜짐" if self.reveal_goal else "꺼짐"), (806, 122, 345, 36),
+                        lambda: setattr(self, 'reveal_goal', not self.reveal_goal), self.reveal_goal)
+            for i, (policy, label) in enumerate((("tooluse", "규칙 기반 (무료)"), ("code", "LLM 코드 필수 / 재사용"), ("random", "무작위 이동"), ("noop", "행동 없음"))):
+                self.button(label, (24 + i * 286, 208, 270, 40), lambda p=policy: setattr(self, 'policy', p), self.policy == policy)
             self.field("steps", "최대 step / 두 방 퍼즐 턴 제한", 24, 268, 265)
             self.field("model", "에이전트 모델", 310, 268, 842)
             if self.environment == 'sequence_rooms':
@@ -353,12 +376,19 @@ class Launcher:
                 self.field('pads', '방마다 번호판 (1~5)', 265, 350, 240)
                 self.field('presses', '방마다 정답 입력 수', 526, 350, 260)
                 self.field('resets', '허용 리셋 (빈칸: 무제한)', 807, 350, 345)
+            elif self.environment == 'curriculum':
+                self.field('seed', '퍼즐 시드', 24, 350, 265)
+                self.text('1개 버튼 → 짧은 순서 → 협력 → 6자리 → 10자리 · 입력 피드백 / 학습 유지', 310, 374, self.small, DIM)
+            elif self.environment == 'blind_code':
+                self.field('seed', '배치 시드 (정답과 무관)', 24, 350, 265)
+                self.text('clue / display 없음 · A와 B 각 5자리 · 오입력은 시작 상태 복귀 / 감점', 310, 374, self.small, DIM)
             else:
                 self.text('맵은 맵 탭에서 선택합니다. 실행 중 별도 창에서 에이전트 이동을 볼 수 있습니다.', 24, 371, self.small, DIM)
             self.field("url", "OpenAI 호환 API 주소", 24, 430, 736)
             self.button("에피소드 실행", (790, 454, 362, 40), self.run_episode)
             self.button('이동 창 자동 열기: ' + ('켜짐' if self.auto_view else '꺼짐'), (790, 506, 362, 36), lambda: setattr(self, 'auto_view', not self.auto_view))
             self.button('디버깅: ' + ('켜짐' if self.debug else '꺼짐'), (24, 506, 240, 36), lambda: setattr(self, 'debug', not self.debug))
+            self.button('로컬 모델 (8080) 사용', (280, 506, 480, 36), self.use_local_model)
             self.text("결과 자동 저장 · 이동 창에서 재생 속도 / 일시정지 / 이전·다음 step 조절", 24, 566, self.small, DIM)
         elif self.tab == "결과":
             self.field("manifest", "결과 JSONL 경로", 24, 122, 736)

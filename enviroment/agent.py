@@ -12,7 +12,7 @@ class Agent:
         x: float,
         y: float,
         facing: float = 0.0,
-        view_radius: float = 100.0,
+        view_radius: float = 200.0,
         view_angle: float = 90.0
     ) -> None:
         self.agent_id = agent_id

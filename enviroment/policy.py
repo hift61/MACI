@@ -6,6 +6,7 @@ import traceback
 import copy
 import queue
 import threading
+import ast
 from pathlib import Path
 
 from openai import OpenAI, RateLimitError
@@ -13,6 +14,8 @@ from openai import OpenAI, RateLimitError
 from _policy_harness import _check_code_safety  # 생성 단계와 실행 단계가 같은 검사를 쓰도록
 from policy_sandbox import run_decide_code, compile_policy_code, CodeChecks
 from tools import TOOLS
+from token_usage import TokenUsage, tracker
+from context_memory import ContextHistory, ContextMemory, MANAGEMENT_INSTRUCTIONS
 
 _RATE_LIMIT_MAX_RETRIES = 3
 _RATE_LIMIT_DEFAULT_DELAY_SEC = 5.0
@@ -25,7 +28,18 @@ _RATE_LIMIT_DEFAULT_DELAY_SEC = 5.0
 def _create_with_retry(client, **kwargs):
     for attempt in range(_RATE_LIMIT_MAX_RETRIES):
         try:
-            return client.chat.completions.create(**kwargs)
+            response = client.chat.completions.create(**kwargs)
+            tracker(client).record(response)
+            if not getattr(response, 'choices', None):
+                extra = getattr(response, 'model_extra', None) or {}
+                error = extra.get('error') or {}
+                if isinstance(error, dict):
+                    metadata = error.get('metadata') or {}
+                    code = metadata.get('provider_code', error.get('code', 'unknown'))
+                    message = error.get('message', 'No completion choices returned')
+                    raise ValueError(f'LLM provider error ({code}): {message}')
+                raise ValueError('LLM provider returned no completion choices')
+            return response
         except RateLimitError as exc:
             if attempt == _RATE_LIMIT_MAX_RETRIES - 1:
                 raise
@@ -42,10 +56,104 @@ def _create_with_retry(client, **kwargs):
 
 class Policy:
     @property
+    def token_usage(self):
+        client = getattr(self, 'client', None)
+        return tracker(client).snapshot() if client is not None else TokenUsage().snapshot()
+
+    def _new_messages(self, observation):
+        inbox = observation.get('inbox', [])
+        reviewed = getattr(self, '_reviewed_inbox_count', 0)
+        return inbox[reviewed:]
+
+    def _message_interrupt(self, observation, messages):
+        self.last_message_interrupt = {'step': observation['self']['step'], 'count': len(messages)}
+        self._debug('message_interrupt', **self.last_message_interrupt)
+
+    def _acknowledge_inbox(self, observation):
+        self._reviewed_inbox_count = len(observation.get('inbox', []))
+
+    @property
+    def next_review_step(self):
+        return getattr(self, '_next_review_step', None)
+
+    def _review_due(self, observation):
+        return self.next_review_step is not None and observation['self']['step'] >= self.next_review_step
+
+    def _schedule_review(self, action, observation):
+        interval = action.get('recheck_after')
+        if interval is None:
+            return
+        if isinstance(interval, bool) or not isinstance(interval, int) or interval < 1:
+            self._debug('invalid_review_interval', value=interval)
+            return
+        deadline = observation['self']['step'] + interval
+        # Repeated returns must not postpone a review indefinitely.
+        if self.next_review_step is None or deadline < self.next_review_step:
+            self._next_review_step = deadline
+            self._debug('review_scheduled', step=observation['self']['step'],
+                        recheck_after=interval, next_review_step=deadline)
+
+    def _code_key(self, code):
+        # Comments/formatting changes alone do not create a new policy.
+        try:
+            return ast.dump(ast.parse(code), include_attributes=False)
+        except SyntaxError:
+            return code
+
+    def _code_steps(self, code):
+        if not hasattr(self, '_code_turns'):
+            self._code_turns = {}
+        return self._code_turns.setdefault(self._code_key(code), set())
+
+    @property
+    def code_turns(self):
+        code = getattr(self, 'generated_code', None)
+        return len(self._code_steps(code)) if code else 0
+
+    def _execute_code(self, code, observation):
+        self._code_steps(code).add(observation['self']['step'])
+        result = run_decide_code(code, observation, timeout=self.sandbox_timeout, checks=self.code_checks)
+        if not result.get('error') and isinstance(result.get('action'), dict):
+            self._schedule_review(result['action'], observation)
+        return result
+
+    @property
     def conversation_history(self):
-        if not hasattr(self, '_conversation_history'):
-            self._conversation_history = []
+        if not isinstance(getattr(self, '_conversation_history', None), ContextHistory):
+            self._conversation_history = ContextHistory(getattr(self, '_conversation_history', []))
         return self._conversation_history
+
+    @property
+    def context_memory(self):
+        if not hasattr(self, '_context_memory'):
+            self._context_memory = ContextMemory()
+        return self._context_memory
+
+    @property
+    def context_stats(self):
+        return self.context_memory.snapshot(self.conversation_history)
+
+    def _prepare_context(self, history, output_tokens, tools=()):
+        self.context_memory.prepare(history, output_tokens, tools)
+
+    def _manage_context(self, **args):
+        result = self.context_memory.compact(self.conversation_history, **args)
+        if args.get('inbox_recent_messages') is not None:
+            self._context_inbox_recent = args['inbox_recent_messages']
+        self._debug('context_compressed', **self.context_memory.events[-1])
+        return result
+
+    def _prompt_observation(self, observation):
+        result = copy.deepcopy(observation)
+        inbox = observation.get('inbox', [])
+        reviewed = min(getattr(self, '_reviewed_inbox_count', 0), len(inbox))
+        keep = getattr(self, '_context_inbox_recent', None)
+        if keep is not None:
+            start = max(0, reviewed - keep)
+            result['inbox'] = list(inbox[start:])
+            if start:
+                result['older_inbox_messages_in_archive'] = start
+        return result
 
     def remember_step(self, observation, action, next_observation):
         if not hasattr(self, '_conversation_history'):
@@ -54,6 +162,13 @@ class Policy:
             {'observation': observation, 'executed_action': action, 'next_observation': next_observation,
              'policy_error': getattr(self, 'last_error', None)},
             ensure_ascii=False, default=str)})
+        if getattr(self, '_context_inbox_recent', None) is not None:
+            # Apply the model's inbox choice to step feedback too. The archive
+            # above still contains the complete original observations.
+            self.conversation_history[-1] = {'role': 'user', 'content': 'Simulation step result:\n' + json.dumps(
+                {'observation': self._prompt_observation(observation), 'executed_action': action,
+                 'next_observation': self._prompt_observation(next_observation),
+                 'policy_error': getattr(self, 'last_error', None)}, ensure_ascii=False, default=str)}
 
     def _debug(self, event, **details):
         callback = getattr(self, 'debug_sink', None)
@@ -62,6 +177,8 @@ class Policy:
 
     def _generate_tracked(self, *args, **kwargs):
         kwargs['history'] = self.conversation_history
+        kwargs['prepare_context'] = self._prepare_context
+        kwargs['manage_context'] = self._manage_context
         self._debug('llm_request_started', context_messages=len(self.conversation_history))
         started = time.monotonic()
         try:
@@ -230,7 +347,8 @@ class LLMPolicy(Policy):
             history = self.conversation_history
             if not history:
                 history.append({'role': 'system', 'content': self.system_prompt})
-            history.append({'role': 'user', 'content': json.dumps(observation, ensure_ascii=False)})
+            history.append({'role': 'user', 'content': 'Current observation:\n' + json.dumps(self._prompt_observation(observation), ensure_ascii=False)})
+            self._prepare_context(history, self.max_tokens, TOOLS)
             response = _create_with_retry(
                 self.client,
                 model=self.model,
@@ -308,11 +426,6 @@ _OBSERVATION_DOC = """{"self": {"x", "y", "facing", "heading": {"x", "y"}, "last
   button: "linked_door_id"; lever: "on", "linked_door_ids"; pressure_plate: "linked_door_id", "radius";
   item: "category" ("normal" or "coop"); portal: "dest_x", "dest_y"; clue: "content";
   number_pad: "number", "room", "touch_radius"; display: "room", "last_press", "resets").
-- number_pad activates automatically when you enter its touch_radius, including crossing it during a move.
-  No press_button is needed. Staying inside does not repeat; leave and re-enter for another input.
-- In sequence_rooms, clue.content has total_presses and your_presses [{order, number}].
-  display.last_press is null or {pad_id, number, step, result: accepted or wrong_reset}.
-  The display gives no global progress; coordinate the shared order using messages.
 - visible_objects: what you see right now (view cone around "facing"; walls block sight).
 - known_objects: last seen state of everything you have ever seen (it may be outdated).
 - walls: walls near you. Walls block movement - a move stops right before a wall.
@@ -343,12 +456,17 @@ Keep sections 1 and 2 (observation setup and helpers) unchanged. Fill the DECISI
 region with your task-specific logic and any additional local helper functions.
 Return the COMPLETE decide(observation) function, including the supplied sections.
 Use finish(), move_toward(), or send_message() for all action returns so memory is saved.
+Set recheck_after in the decision region to a positive integer: it is the number of
+turns before the LLM reviews the current execution state and decides again.
+For example, recheck_after = 3 at step 1 schedules review BEFORE executing step 4.
+finish() includes this field automatically. Default is 5; choose an interval for your plan.
+This does not limit code reuse: the reviewer may keep the same code after reassessment.
 move_toward() first turns toward its target, then moves forward on a later call.
 It is a direct movement helper, NOT a path planner: choose waypoints using walls;
-avoid accidentally touching other number pads. Target coordinates may come from the task,
+Target coordinates may come from observations,
 memory or known objects even when a target is outside the current view.
 Find objects by object_id. Other agents are absent from objects; use their IDs from the task
-when sending messages. Follow the task's interaction rules and check inbox/reset state.
+when sending messages. Read object content from observations and check inbox for new messages.
 
 Base action-function layout:
 ```python
@@ -364,6 +482,11 @@ shapes (the "type" field is required):
 {_action_schema_docs()}
 
 Rules:
+- Code submission and execution are mandatory; direct JSON replies are not actions.
+- Write reusable logic for multiple steps using each call's observation and memory,
+  not a one-step wrapper that asks the LLM again every turn.
+- Cached code runs without an API call. Choose recheck_after for your plan; new
+  incoming messages trigger immediate LLM review. Avoid unnecessary messages.
 - No import statements, no exec/eval/open, no names starting with __.
 - The `math` module is already available as `math` (no import needed).
 - Only output one fenced ```python code block containing the decide() function, nothing else.
@@ -387,6 +510,9 @@ def _safety_check_error(code: str, checks=None) -> str | None:
     error = compile_policy_code(code, checks, context='submission')
     if error:
         return error
+    if not any(isinstance(node, ast.FunctionDef) and node.name == 'decide'
+               for node in ast.parse(code).body):
+        return 'Code must define decide(observation); direct JSON actions are not accepted.'
     try:
         _check_code_safety(code)  # ast.parse() inside raises SyntaxError on bad syntax too
         return None
@@ -416,6 +542,24 @@ SUBMIT_POLICY_TOOL_SCHEMA = {
     },
 }
 
+MANAGE_CONTEXT_TOOL_SCHEMA = {
+    'type': 'function',
+    'function': {
+        'name': 'manage_context',
+        'description': 'Optionally replace older history with YOUR summary and choose retained recent history. You decide when and what to compress. Current observation, rules and pending tool transaction are protected.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'summary': {'type': 'string', 'description': 'Your replacement memory, including useful prior summaries. Used verbatim.'},
+                'keep_recent_messages': {'type': 'integer', 'minimum': 0, 'description': 'Additional recent historical messages to retain; complete tool groups are retained together.'},
+                'inbox_recent_messages': {'type': 'integer', 'minimum': 0, 'description': 'Optional number of already-reviewed inbox messages to include in future observations. All new messages remain.'},
+            },
+            'required': ['summary', 'keep_recent_messages'],
+            'additionalProperties': False,
+        },
+    },
+}
+
 
 def _generate_code_with_submission_gate(
     client,
@@ -427,6 +571,8 @@ def _generate_code_with_submission_gate(
     extra_params: dict,
     checks=None,
     history=None,
+    prepare_context=None,
+    manage_context=None,
 ) -> str:
     """Drives the submit_policy_code tool-call loop: the model must call the
     tool to answer, and its code is compile+safety-checked before being
@@ -439,18 +585,21 @@ def _generate_code_with_submission_gate(
     OpenRouter free models don't support function-calling reliably)."""
     messages = history if history is not None else []
     if not messages:
-        messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "system", "content": system_prompt + ('\n\n' + MANAGEMENT_INSTRUCTIONS if manage_context else '')})
     messages.append({"role": "user", "content": user_content})
+    available_tools = [SUBMIT_POLICY_TOOL_SCHEMA] + ([MANAGE_CONTEXT_TOOL_SCHEMA] if manage_context else [])
 
     try:
         for _round in range(MAX_TOOL_ROUNDS):
+            if prepare_context:
+                prepare_context(messages, max_tokens, available_tools)
             response = _create_with_retry(
                 client,
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 messages=copy.deepcopy(messages),
-                tools=[SUBMIT_POLICY_TOOL_SCHEMA],
+                tools=available_tools,
                 tool_choice="required",
                 **extra_params,
             )
@@ -488,13 +637,21 @@ def _generate_code_with_submission_gate(
                     args = json.loads(tc.function.arguments or "{}")
                 except Exception:
                     args = {}
-                code = _extract_code(str(args.get("code", "")))
-                error = _safety_check_error(code, checks)
-                if error is None:
-                    result = {"accepted": True}
-                    accepted_code = accepted_code if accepted_code is not None else code
+                if tc.function.name == 'manage_context' and manage_context:
+                    try:
+                        result = manage_context(**args)
+                    except (ValueError, TypeError) as exc:
+                        result = {'applied': False, 'error': str(exc)}
+                elif tc.function.name == 'submit_policy_code':
+                    code = _extract_code(str(args.get("code", "")))
+                    error = _safety_check_error(code, checks)
+                    if error is None:
+                        result = {"accepted": True}
+                        accepted_code = accepted_code if accepted_code is not None else code
+                    else:
+                        result = {"accepted": False, "error": f"NOT accepted - {error}. Fix it and call submit_policy_code again."}
                 else:
-                    result = {"accepted": False, "error": f"NOT accepted - {error}. Fix it and call submit_policy_code again."}
+                    result = {'accepted': False, 'error': 'Unknown tool'}
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(result)})
 
             if accepted_code is not None:
@@ -503,6 +660,8 @@ def _generate_code_with_submission_gate(
     except Exception:
         pass  # provider rejected tools/tool_choice outright - fall back below
 
+    if prepare_context:
+        prepare_context(messages, max_tokens)
     response = _create_with_retry(
         client,
         model=model,
@@ -602,7 +761,14 @@ class CodePolicy(Policy):
 
     # 다음 decide() 호출에서 정책 코드를 새로 생성하도록 캐시를 비움
     def reset(self) -> None:
-        self._conversation_history = []
+        self._conversation_history = ContextHistory()
+        self._context_memory = ContextMemory(self.context_memory.config)
+        self._context_inbox_recent = None
+        self.client._maci_token_usage = TokenUsage()
+        self._code_turns = {}
+        self._next_review_step = None
+        self._reviewed_inbox_count = 0
+        self.last_message_interrupt = None
         self.generated_code = None
         self.last_error = None
         self.replans = []
@@ -626,7 +792,7 @@ class CodePolicy(Policy):
         reason = f"decide() failed: {self._execution_error}"
         prompt = CODE_REPLAN_PROMPT.format(
             task=self.task_description, step=observation["self"].get("step"), reason=reason,
-            code=self.generated_code, observation=json.dumps(copy.deepcopy(observation), ensure_ascii=False))
+            code=self.generated_code, observation=json.dumps(self._prompt_observation(observation), ensure_ascii=False))
         self.last_replan = {"step": observation["self"].get("step"), "reason": reason,
                             "kind": "execution_repair"}
         self.replans.append(self.last_replan)
@@ -651,8 +817,9 @@ class CodePolicy(Policy):
                 self._repair_thread = None
                 if code is not None:
                     self.generated_code = code
+                    self._next_review_step = None
                     # A repair must execute successfully against the *current* observation.
-                    result = run_decide_code(code, observation, timeout=self.sandbox_timeout, checks=self.code_checks)
+                    result = self._execute_code(code, observation)
                     if not result.get("error"):
                         self._execution_error = None
                         self.last_error = None
@@ -721,7 +888,9 @@ class CodePolicy(Policy):
         )
         if attempted_move:
             return f"your last move {last} was blocked - your position {pos} did not change"
-        if self._stall_count >= self.stall_limit and not self._on_pressure_plate(observation, pos):
+        intentional = last.get('type') in (
+            'noop', 'send_message', 'request_info', 'confirm', 'claim_role', 'claim_task', 'issue_command')
+        if not intentional and self._stall_count >= self.stall_limit and not self._on_pressure_plate(observation, pos):
             return f"you have not moved from {pos} for {self._stall_count} steps in a row"
         return None
 
@@ -734,8 +903,8 @@ class CodePolicy(Policy):
         )
 
     # 이유와 함께 코드를 새로 생성. max_replans를 다 썼으면 기존 코드를 유지하고 False
-    def _replan(self, observation: dict, reason: str) -> bool:
-        if sum(r.get("kind") != "execution_repair" for r in self.replans) >= self.max_replans:
+    def _replan(self, observation: dict, reason: str, scheduled: bool = False, trigger: str = None) -> bool:
+        if not scheduled and sum(r.get("kind") not in ("execution_repair", "scheduled_review", "message_received") for r in self.replans) >= self.max_replans:
             return False
         step = observation["self"].get("step")
         self.generated_code = self._generate_code(CODE_REPLAN_PROMPT.format(
@@ -743,29 +912,46 @@ class CodePolicy(Policy):
             step=step,
             reason=reason,
             code=self.generated_code,
-            observation=json.dumps(observation, ensure_ascii=False),
+            observation=json.dumps(self._prompt_observation(observation), ensure_ascii=False),
         ))
         self.last_replan = {"step": step, "reason": reason}
+        if scheduled:
+            self.last_replan['kind'] = trigger or 'scheduled_review'
         self.replans.append(self.last_replan)
+        self._next_review_step = None
         self._stall_count = 0
         return True
 
     def decide(self, observation: dict) -> dict:
         self.last_replan = None
         self.last_recovery = None
+        self.last_message_interrupt = None
+        messages = self._new_messages(observation)
         action = {"type": "noop"}
         try:
             if self._execution_error is not None:
+                if messages:
+                    self._message_interrupt(observation, messages)
                 action = self._wait_for_recovery(observation)
+            elif messages:
+                self._message_interrupt(observation, messages)
+                self._replan(observation, 'New incoming messages require immediate LLM review before this turn\'s action. Read the inbox and current observation, then decide how to respond.',
+                             scheduled=True, trigger='message_received')
             elif self.generated_code is None:
-                self.generated_code = self._generate_code()
+                self._next_review_step = None
+                self.generated_code = self._generate_code(
+                    self.task_description + '\n\nCurrent observation:\n' + json.dumps(self._prompt_observation(observation), ensure_ascii=False))
+            elif self._review_due(observation):
+                self._debug('review_started', step=observation['self']['step'])
+                self._replan(observation, 'The code-defined review interval has elapsed. Check the current execution state and observations, then keep or revise the policy.',
+                             scheduled=True)
             else:
                 reason = self._stuck_reason(observation)
                 if reason is not None:
                     self._replan(observation, reason)
 
             if self.last_recovery is None:
-                result = run_decide_code(self.generated_code, observation, timeout=self.sandbox_timeout, checks=self.code_checks)
+                result = self._execute_code(self.generated_code, observation)
                 if result.get("error"):
                     self._execution_error = result["error"]
                     action = self._wait_for_recovery(observation)
@@ -779,6 +965,8 @@ class CodePolicy(Policy):
         self._last_pos = (observation["self"]["x"], observation["self"]["y"])
         self._last_facing = observation["self"]["facing"]
         self._last_action = action
+        if self.last_error is None:
+            self._acknowledge_inbox(observation)
         return action
 
 
@@ -836,7 +1024,7 @@ class LiveCodePolicy(Policy):
             self.client,
             self.model,
             CODE_STEP_SYSTEM_PROMPT,
-            f"Task: {self.task_description}\n\nCurrent observation:\n{json.dumps(observation, ensure_ascii=False)}",
+            f"Task: {self.task_description}\n\nCurrent observation:\n{json.dumps(self._prompt_observation(observation), ensure_ascii=False)}",
             self.temperature,
             self.max_tokens,
             self.extra_params,
@@ -848,7 +1036,9 @@ class LiveCodePolicy(Policy):
             code = self._generate_code(observation)
             self.generated_code = code  # 실행 실패해도 원문은 남김
 
-            result = run_decide_code(code, observation, timeout=self.sandbox_timeout, checks=self.code_checks)
+            result = self._execute_code(code, observation)
+            # LiveCodePolicy already requests a fresh decision every turn.
+            self._next_review_step = observation['self']['step'] + 1
             if result.get("error"):
                 self.last_error = result["error"]
                 return {"type": "noop"}
@@ -870,42 +1060,10 @@ class LiveCodePolicy(Policy):
 # OpenAI의 tools(function-calling) API는 전혀 안 쓰고 텍스트만 파싱하므로, tool-calling을
 # 지원 안 하는 모델(OpenRouter 무료 모델 등)에서도 동작한다.
 def _hybrid_policy_system_prompt() -> str:
-    return f"""You control one agent in a multi-agent simulation. Each time you are asked, \
-respond in ONE of two ways:
-
-1) Simple action (use this for most steps): if the right next action is obvious and \
-doesn't need ongoing tracking or multi-step logic, reply with a single JSON action object \
-and nothing else, e.g. {{"type": "move_forward", "distance": 2.5}}. This action is used for THIS \
-step only - you will be asked again next step with a fresh observation.
-
-2) Reusable code (use this ONLY when the situation is genuinely complex - e.g. tracking or \
-intercepting a moving target, navigating around several obstacles, evaluating many \
-candidates, multi-step conditional planning): reply with a single fenced ```python code \
-block defining:
-
-def decide(observation):
-    ...
-    return action
-
-This function will be CACHED and reused every subsequent step WITHOUT calling you again, \
-until it itself returns {{"type": "replan"}} - call for that from inside the code whenever \
-the situation no longer matches what the code was written for (e.g. task done, unexpected \
-obstacle, needs a new plan). When that happens you will be asked again with the current \
-observation.
-
-Valid action shapes (the "type" field is required):
-{_action_schema_docs()}
-Plus the special {{"type": "replan"}} action, only meaningful when returned FROM INSIDE \
-generated code (never as your direct top-level reply).
-
-Rules for code:
-- No import statements, no exec/eval/open, no names starting with __.
-- The `math` module is already available as `math` (no import needed).
-
-Reply with EITHER one JSON object OR one ```python code block. Nothing else, no explanation."""
+    return CODE_POLICY_SYSTEM_PROMPT
 
 
-HYBRID_POLICY_SYSTEM_PROMPT = _hybrid_policy_system_prompt() + "\n\nWhen choosing reusable code:\n" + POLICY_LAYOUT_INSTRUCTIONS
+HYBRID_POLICY_SYSTEM_PROMPT = CODE_POLICY_SYSTEM_PROMPT
 
 
 class HybridPolicy(Policy):
@@ -931,35 +1089,39 @@ class HybridPolicy(Policy):
         self.last_error = None       # 가장 최근 decide() 호출에서 발생한 예외/사유 (없으면 None)
 
     def _ask_llm(self, observation: dict) -> str:
-        history = self.conversation_history
-        if not history:
-            history.append({'role': 'system', 'content': HYBRID_POLICY_SYSTEM_PROMPT})
-        history.append({'role': 'user', 'content': f'Task: {self.task_description}\n\nCurrent observation:\n' +
-                        json.dumps(observation, ensure_ascii=False)})
-        response = _create_with_retry(
+        return self._generate_tracked(
             self.client,
-            model=self.model,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            messages=copy.deepcopy(history),
-            **self.extra_params
+            self.model,
+            HYBRID_POLICY_SYSTEM_PROMPT,
+            f'Task: {self.task_description}\n\nCurrent observation:\n' + json.dumps(self._prompt_observation(observation), ensure_ascii=False),
+            self.temperature,
+            self.max_tokens,
+            self.extra_params,
+            checks=self.code_checks,
         )
-        history.append({'role': 'assistant', 'content': response.choices[0].message.content or ''})
-        if response.choices[0].finish_reason == "length":
-            raise ValueError(
-                "LLM response was cut off before finishing (finish_reason='length'); "
-                "the reply is incomplete. Increase max_tokens or shorten "
-                "task_description / HYBRID_POLICY_SYSTEM_PROMPT."
-            )
-        return response.choices[0].message.content
 
     def decide(self, observation: dict) -> dict:
+        self.last_message_interrupt = None
         try:
+            messages = self._new_messages(observation)
+            if messages:
+                self._message_interrupt(observation, messages)
+                self.generated_code = None
+                self._next_review_step = None
+            elif self.generated_code is not None and self._review_due(observation):
+                self._debug('review_started', step=observation['self']['step'])
+                if not self.conversation_history:
+                    self.conversation_history.append({'role': 'system', 'content': HYBRID_POLICY_SYSTEM_PROMPT})
+                self.conversation_history.append({'role': 'user', 'content':
+                    'The code-defined review interval has elapsed. Review the current execution state and decide again; you may keep the same code.'})
+                self.generated_code = None
+                self._next_review_step = None
             if self.generated_code is not None:
-                result = run_decide_code(self.generated_code, observation, timeout=self.sandbox_timeout, checks=self.code_checks)
+                result = self._execute_code(self.generated_code, observation)
                 if result.get("error"):
                     self.last_error = f"cached decide() failed: {result['error']}"
                     self.generated_code = None
+                    self._next_review_step = None
                     return {"type": "noop"}
                 action = result["action"]
                 if action["type"] != "replan":
@@ -968,33 +1130,35 @@ class HybridPolicy(Policy):
                 # 코드가 스스로 재계획을 요청함: 캐시를 비우고 이번 호출 안에서 바로
                 # LLM에게 다시 물어봄 (한 스텝을 그냥 버리지 않기 위해)
                 self.generated_code = None
+                self._next_review_step = None
 
+            self._next_review_step = None
             reply = self._ask_llm(observation)
             stripped = _extract_code(reply)
 
             if "def decide(" in stripped:
+                self._next_review_step = None
                 safety_error = _safety_check_error(stripped, self.code_checks)
                 if safety_error is not None:
                     self.last_error = f"generated code rejected: {safety_error}"
                     return {"type": "noop"}
 
-                result = run_decide_code(stripped, observation, timeout=self.sandbox_timeout, checks=self.code_checks)
+                result = self._execute_code(stripped, observation)
                 action = result.get("action")
                 if result.get("error") or not isinstance(action, dict) or "type" not in action or action["type"] == "replan":
                     self.last_error = f"generated decide()'s first action was invalid: {result.get('error') or action!r}"
+                    self._next_review_step = None
                     return {"type": "noop"}
                 self.generated_code = stripped
                 self.last_error = None
+                self._acknowledge_inbox(observation)
                 return action
 
             self.generated_code = None
-            action = json.loads(stripped)
-            if not isinstance(action, dict) or "type" not in action:
-                self.last_error = f"LLM returned invalid direct action: {action!r}"
-                return {"type": "noop"}
-            self.last_error = None
-            return action
+            self.last_error = 'Code execution is required; direct JSON actions are not accepted.'
+            return {"type": "noop"}
         except Exception:
             self.last_error = traceback.format_exc()
             self.generated_code = None
+            self._next_review_step = None
             return {"type": "noop"}

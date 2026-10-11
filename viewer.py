@@ -63,6 +63,11 @@ class TraceReader:
         initial = [dict(self.scene, step=0, events=[], messages=[], cleared=False)] if self.scene else []
         return initial + self.records
 
+    def messages_through(self, index):
+        """Only include communication delivered by the selected replay frame."""
+        return [message for frame in self.frames()[:index + 1]
+                for message in frame.get('messages', [])]
+
 
 class Viewer:
     def __init__(self, path, live=False):
@@ -81,6 +86,7 @@ class Viewer:
         self.speed_index = 2
         self.elapsed = 0.0
         self.scroll = 0
+        self.panel_tab = 'messages'
         self.widgets = []
         self.last_poll = 0
 
@@ -105,6 +111,63 @@ class Viewer:
     def pause(self):
         self.playing = not self.playing
         self.elapsed = 0
+
+    def select_tab(self, tab):
+        self.panel_tab = tab
+        self.scroll = 0
+
+    def panel_lines(self, frame):
+        if self.panel_tab == 'messages':
+            messages = self.reader.messages_through(self.index)
+            if not messages:
+                return ['아직 주고받은 메시지가 없습니다.']
+            lines = []
+            for entry in reversed(messages):
+                message = entry.get('message', entry)
+                sender = message.get('from', '?')
+                receiver = entry.get('receiver_id', entry.get('receiver', '?'))
+                lines.append(f"step {entry.get('step', message.get('step', '?'))}  {sender} → {receiver}")
+                if message.get('type') == 'text':
+                    lines.extend(str(message.get('content', '')).splitlines() or ['(빈 메시지)'])
+                else:
+                    lines.append(json.dumps(message, ensure_ascii=False))
+                lines.append('')
+            return lines
+        details = []
+        if frame.get('failure'):
+            details.append('실패: ' + str(frame['failure'].get('reason', 'trap')))
+        for agent in frame.get('agents', []):
+            details.append(f"{agent['agent']} 위치 {agent['position']}")
+            decision = agent.get('decision', {})
+            if 'code_turns' in decision:
+                details.append(f"현재 코드 사용 {decision['code_turns']}턴")
+            if decision.get('next_review_step') is not None:
+                details.append(f"LLM 상태 재확인: step {decision['next_review_step']}")
+            if decision.get('message_interrupt'):
+                details.append(f"새 연락 {decision['message_interrupt']['count']}개 → LLM 즉시 확인")
+            usage = decision.get('token_usage')
+            if usage:
+                details.append(f"누적 API 토큰 {usage.get('total_tokens', 0):,}")
+                if usage.get('unreported_requests'):
+                    details.append(f"사용량 미보고 요청 {usage['unreported_requests']}회")
+            details.append('행동: ' + json.dumps(decision.get('final_action') or {}, ensure_ascii=False))
+            if decision.get('policy_error'):
+                details.append('오류: ' + decision['policy_error'])
+            if decision.get('recovery'):
+                details.append('코드 복구: ' + json.dumps(decision['recovery'], ensure_ascii=False))
+            checks = decision.get('code_checks')
+            if checks:
+                details.append(f"컴파일 {checks['compile_attempts']}회 / 실패 {checks['compile_failures']}회")
+                details.append(f"실행 {checks['execution_attempts']}회 / 실패 {checks['execution_failures']}회")
+        details.append('── 현재 step 이벤트 ──')
+        details.extend(json.dumps(e, ensure_ascii=False) for e in frame.get('events', []))
+        score = frame.get('score', {})
+        details.append('── 누적 점수 내역 ──')
+        for aid, data in score.get('agents', {}).items():
+            for item in data.get('items', []):
+                details.append(f"{aid} · step {item['step']} · {item['reason']} "
+                               f"{item.get('target', '')} {item['points']:+g}점")
+        return details
 
     def tick(self, dt):
         if time.monotonic() - self.last_poll > .15:
@@ -192,40 +255,53 @@ class Viewer:
 
         pygame.draw.rect(self.screen, PANEL, (788, 130, 365, 650), border_radius=8)
         state = '성공' if frame.get('cleared') else ('실패' if frame.get('failure') else '진행 중')
+        if self.index == len(frames) - 1 and self.reader.path.with_suffix('.termination.json').is_file():
+            state = 'API 오류로 중단'
         self.text(f"step {frame['step']} · {state}", 802, 144)
-        self.text(f"수신 로그 {len(self.reader.records)} step", 802, 174, small=True, color=DIM)
-        details = []
-        if frame.get('failure'):
-            details.append('실패: ' + str(frame['failure'].get('reason', 'trap')))
-        for agent in frame.get('agents', []):
-            details.append(f"{agent['agent']} 위치 {agent['position']}")
-            decision = agent.get('decision', {})
-            action = decision.get('final_action') or {}
-            details.append('행동: ' + json.dumps(action, ensure_ascii=False))
-            if decision.get('policy_error'):
-                details.append('오류: ' + decision['policy_error'])
-            if decision.get('recovery'):
-                details.append('코드 복구: ' + json.dumps(decision['recovery'], ensure_ascii=False))
-            checks = decision.get('code_checks')
-            if checks:
-                details.append(f"컴파일 {checks['compile_attempts']}회 / 실패 {checks['compile_failures']}회")
-                details.append(f"실행 {checks['execution_attempts']}회 / 실패 {checks['execution_failures']}회")
-        for label, entries in [('메시지', frame.get('messages', [])), ('이벤트', frame.get('events', []))]:
-            details.append(f'── {label} ──')
-            details.extend(json.dumps(e, ensure_ascii=False) for e in entries)
+        levels = frame.get('world', {}).get('level_state')
+        subtitle = (f"단계 {levels['level']}/{levels['total_levels']} · 완료 {len(levels['completed_levels'])} · 리셋 {levels['resets']}"
+                    if levels else f"수신 로그 {len(self.reader.records)} step")
+        self.text(subtitle, 802, 174, small=True, color=DIM)
+        score = frame.get('score')
+        if score:
+            self.text(f"누적 총점 {score['total']:g}점", 802, 200)
+            self.text(f"개인 합계 {score['individual_total']:g} · 팀 {score['team']['score']:g}",
+                      802, 228, small=True, color=DIM)
+            agent_scores = list(score.get('agents', {}).items())
+            for i, (aid, data) in enumerate(agent_scores):
+                self.text(f"{aid}: {data['score']:g}점", 802 + (i % 2) * 170,
+                          252 + (i // 2) * 22, small=True,
+                          color=AGENT_COLORS[i % len(AGENT_COLORS)], width=160)
+            tab_y = 282 + max(0, (len(agent_scores) - 1) // 2) * 22
+        else:
+            self.text('이 로그에는 실시간 점수 정보가 없습니다.', 802, 210, small=True, color=DIM)
+            tab_y = 252
+        for i, (tab, label) in enumerate((('messages', '소통 메시지'), ('details', '행동 / 점수 내역'))):
+            rect = pygame.Rect(802 + i * 170, tab_y, 164, 32)
+            pygame.draw.rect(self.screen, (57, 77, 104) if self.panel_tab == tab else BG,
+                             rect, border_radius=5)
+            self.text(label, rect.x + 9, rect.y + 6, small=True)
+            self.widgets.append((rect, lambda selected=tab: self.select_tab(selected)))
+        details = self.panel_lines(frame)
         # Wrap long action/message lines so complete contents can be inspected by scrolling.
         wrapped = []
         for line in details:
             rest = str(line).replace('\n', ' ')
+            if not rest:
+                wrapped.append('')
             while rest:
                 take = min(len(rest), 65)
                 while take > 1 and self.small.size(rest[:take])[0] > 330:
                     take -= 1
                 wrapped.append(rest[:take])
                 rest = rest[take:]
-        self.scroll = min(self.scroll, max(0, len(wrapped) - 24))
-        for i, line in enumerate(wrapped[self.scroll:self.scroll + 24]):
-            self.text(line, 802, 210 + i * 22, small=True, width=330)
+        body_y = tab_y + 44
+        visible_lines = max(1, (746 - body_y) // 22)
+        self.scroll = min(self.scroll, max(0, len(wrapped) - visible_lines))
+        for i, line in enumerate(wrapped[self.scroll:self.scroll + visible_lines]):
+            self.text(line, 802, body_y + i * 22, small=True, width=330)
+        self.text('최신 메시지가 위에 표시됩니다 · 휠로 스크롤' if self.panel_tab == 'messages'
+                  else '휠로 스크롤하여 전체 내역 확인', 802, 754, small=True, color=DIM, width=330)
         at_end = self.index == len(frames) - 1
         done = frame.get('cleared') or frame.get('failure') or self.reader.path.with_suffix('.score.json').is_file()
         note = '실행 완료 · 처음 버튼으로 다시 재생할 수 있습니다.' if at_end and done else (

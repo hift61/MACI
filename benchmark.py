@@ -20,6 +20,7 @@ import json
 import os
 import sys
 import threading
+from urllib.parse import urlparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENVIRONMENT_DIR = os.path.join(HERE, "enviroment")
@@ -27,14 +28,22 @@ if ENVIRONMENT_DIR not in sys.path:
     sys.path.insert(0, ENVIRONMENT_DIR)  # enviroment/*.py use flat sibling imports (from policy import ...)
 
 from enviroment import Environment  # noqa: E402
-from policy import CodePolicy, NoopPolicy, RandomPolicy, ToolUsePolicy  # noqa: E402
+from policy import CodePolicy, HybridPolicy, NoopPolicy, RandomPolicy, ToolUsePolicy  # noqa: E402
 from scoring import clear_step, score_episode  # noqa: E402
+from context_memory import ContextMemory, ContextConfig  # noqa: E402
 from mapgen import MapSpec, generate_map  # noqa: E402
 from mapgen.builder import build_environment  # noqa: E402
 from world_core import GameMap  # noqa: E402
 from sequence_rooms import build_sequence_rooms  # noqa: E402
+from blind_code import build_blind_code  # noqa: E402
+from curriculum import build_curriculum  # noqa: E402
+from environment_prompt import environment_description  # noqa: E402
 
 RUNS_DIR = os.path.join(HERE, "benchmark_runs")
+
+
+def is_local_endpoint(base_url):
+    return urlparse(base_url).hostname in ('127.0.0.1', 'localhost', '::1')
 
 
 def read_secret(filename: str = "key.txt") -> str:
@@ -52,7 +61,7 @@ def read_secret(filename: str = "key.txt") -> str:
     return value
 
 
-def build_episode():
+def build_episode(reveal_goal: bool = True):
     """A door that only unlocks while an agent stands on each of two
     separated pressure plates AT THE SAME TIME (see enviroment.py's
     add_pressure_plate AND-condition note) - neither agent can solve this
@@ -68,24 +77,9 @@ def build_episode():
     env.add_agent("A", x=40, y=460)
     env.add_agent("B", x=460, y=40)
 
-    task_descriptions = {
-        "A": (
-            "You are agent A in a 500x500 area. You and agent B must unlock the "
-            "door 'gate' by BOTH standing on your own pressure plate AT THE SAME "
-            "TIME - stepping off releases it immediately. Your plate 'plate_a' is "
-            "at approximately (40, 40); B's plate 'plate_b' is at approximately "
-            "(460, 460). Move to your plate, use send_message to agree on timing "
-            "with B, then stay there until you both confirm you're ready."
-        ),
-        "B": (
-            "You are agent B in a 500x500 area. You and agent A must unlock the "
-            "door 'gate' by BOTH standing on your own pressure plate AT THE SAME "
-            "TIME - stepping off releases it immediately. Your plate 'plate_b' is "
-            "at approximately (460, 460); A's plate 'plate_a' is at approximately "
-            "(40, 40). Move to your plate, use send_message to agree on timing "
-            "with A, then stay there until you both confirm you're ready."
-        ),
-    }
+    task_descriptions = {aid: environment_description(aid, list(env.agents), 500, 500)
+                              + (" Goal: unlock door 'gate'." if reveal_goal else '')
+                         for aid in env.agents}
     return env, task_descriptions
 
 
@@ -96,14 +90,18 @@ GATE_OBJECTIVES = [{"type": "door_unlocked", "door_id": "gate"}]
 # map_spec이 있으면 mapgen으로 만든 맵, 없으면 기본 압력판 맵(build_episode)으로 진행
 # --policy 선택지. code만 LLM(API 키 필요)을 쓰고, 나머지는 API 키 없이 파이프라인 전체(맵/로그/
 # 채점)가 도는지 확인하는 용도의 규칙 기반 정책
-POLICY_CHOICES = ("code", "tooluse", "random", "noop")
+POLICY_CHOICES = ("code", "hybrid", "tooluse", "random", "noop")
 
 
 def make_policy(kind: str, model: str, description: str, base_url: str, api_key: str, extra_params: dict,
                 interact_radius: float):
-    if kind == "code":
-        return CodePolicy(model=model, task_description=description, base_url=base_url,
-                          api_key=api_key, extra_params=extra_params)
+    if kind in ('code', 'hybrid'):
+        # Keep old command lines usable, but every LLM run must submit reusable code.
+        policy = CodePolicy(model=model, task_description=description, base_url=base_url,
+                            api_key=api_key, extra_params=extra_params)
+        if is_local_endpoint(base_url):
+            policy.client = policy.client.with_options(timeout=60, max_retries=0)
+        return policy
     if kind == "tooluse":
         return ToolUsePolicy(interact_radius=interact_radius, step_size=10.0)
     if kind == "random":
@@ -116,22 +114,46 @@ def make_policy(kind: str, model: str, description: str, base_url: str, api_key:
 def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, steps: int, log_path: str,
                 map_spec: MapSpec = None, policy_kind: str = "code", environment_kind: str = "map",
                 sequence_seed: int = 42, pads_per_room: int = 5, presses_per_room: int = 3,
-                max_resets: int | None = None, debug: bool = False) -> None:
+                max_resets: int | None = None, debug: bool = False, reveal_goal: bool = True,
+                reward_visible: bool = False, context_max_tokens: int = 64_000) -> None:
     if steps < 1:
         raise ValueError("steps must be at least 1")
-    if environment_kind == "sequence_rooms":
+    if environment_kind == "curriculum":
+        if map_spec is not None:
+            raise ValueError('curriculum cannot be combined with a map')
+        env, task_descriptions, objectives = build_curriculum(
+            seed=sequence_seed, max_turns=steps, reveal_goal=reveal_goal)
+    elif environment_kind == "blind_code":
+        if map_spec is not None:
+            raise ValueError('blind_code cannot be combined with a map')
+        env, task_descriptions, objectives = build_blind_code(
+            seed=sequence_seed, max_turns=steps, reveal_goal=reveal_goal)
+    elif environment_kind == "sequence_rooms":
         if map_spec is not None:
             raise ValueError("sequence_rooms cannot be combined with a map")
         env, task_descriptions, objectives = build_sequence_rooms(
             seed=sequence_seed, pads_per_room=pads_per_room, presses_per_room=presses_per_room,
-            max_turns=steps, max_resets=max_resets)
+            max_turns=steps, max_resets=max_resets, reveal_goal=reveal_goal)
     elif environment_kind != "map":
         raise ValueError(f"unknown environment: {environment_kind}")
     elif map_spec is not None:
-        env, task_descriptions, objectives = build_environment(map_spec)
+        env, task_descriptions, objectives = build_environment(map_spec, reveal_goal=reveal_goal)
     else:
-        env, task_descriptions = build_episode()
+        env, task_descriptions = build_episode(reveal_goal=reveal_goal)
         objectives = GATE_OBJECTIVES
+
+    if reward_visible:
+        def reward_for(agent_id):
+            score = score_episode(env, max_steps=steps, objectives=objectives)
+            return {'individual_score': score['agents'][agent_id]['score'],
+                    'team_score': score['team']['score'], 'total_score': score['total']}
+        env.reward_provider = reward_for
+    reward_description = (
+        ' Observation reward contains your cumulative individual_score, team_score and total_score. '
+        'Use changes in these scores as reward feedback.' if reward_visible else
+        ' Numeric reward scores are not provided in your observations.')
+    task_descriptions = {aid: description + reward_description
+                         for aid, description in task_descriptions.items()}
 
     os.makedirs(os.path.dirname(os.path.abspath(log_path)), exist_ok=True)
     debug_path = os.path.splitext(log_path)[0] + ".debug.jsonl"
@@ -163,9 +185,24 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
         emit_debug('code_check', agent_id, check=event)
 
     policies = {}
+    compression_path = os.path.splitext(log_path)[0] + '.context_compressions.jsonl'
+    archive_path = os.path.splitext(log_path)[0] + '.context_archive.jsonl'
+    for path in (compression_path, archive_path):
+        with open(path, 'w', encoding='utf-8'):
+            pass
+    context_lock = threading.Lock()
+
+    def write_context(path, agent_id, record):
+        with context_lock, open(path, 'a', encoding='utf-8') as destination:
+            destination.write(json.dumps({'agent': agent_id, **record}, ensure_ascii=False) + '\n')
+
     for agent_id, description in task_descriptions.items():
         policies[agent_id] = make_policy(policy_kind, model, description, base_url, api_key, extra_params,
                                          env.interact_radius)
+        if hasattr(policies[agent_id], 'client'):
+            policies[agent_id]._context_memory = ContextMemory(ContextConfig(max_tokens=context_max_tokens))
+            policies[agent_id].context_memory.sink = lambda event, aid=agent_id: write_context(compression_path, aid, event)
+            policies[agent_id].conversation_history.sink = lambda message, aid=agent_id: write_context(archive_path, aid, {'message': message})
         checks = getattr(policies[agent_id], "code_checks", None)
         if checks is not None:
             checks.sink = lambda event, aid=agent_id: write_check(aid, event)
@@ -175,12 +212,15 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
     # Observer-only state; this is never added to the agents' observations.
     def snapshot():
         return {"width": env.game_map.map_width, "height": env.game_map.map_height,
-                "walls": env._walls(), "objects": list(env.objects.values())}
+                "walls": env._walls(), "objects": list(env.objects.values()),
+                **({'level_state': env.level_state()} if hasattr(env, 'level_state') else {})}
 
     os.makedirs(os.path.dirname(os.path.abspath(log_path)), exist_ok=True)
     scene_path = os.path.splitext(log_path)[0] + ".scene.json"
     with open(scene_path, "w", encoding="utf-8") as scene:
-        json.dump({"environment": environment_kind, "world": snapshot(),
+        json.dump({"environment": environment_kind, "world": snapshot(), "reveal_goal": reveal_goal,
+                   "reward_visible": reward_visible,
+                   "score": score_episode(env, max_steps=steps, objectives=objectives),
                    "agents": [{"agent": aid, "position": [a.x, a.y], "facing": a.facing}
                               for aid, a in env.agents.items()]}, scene, ensure_ascii=False)
 
@@ -195,18 +235,21 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
             record = {
                 "step": step,
                 "task": dict(task_descriptions),
-                "map_seed": sequence_seed if environment_kind == "sequence_rooms" else (map_spec.seed if map_spec is not None else None),
+                "map_seed": sequence_seed if environment_kind in ("sequence_rooms", "blind_code", "curriculum") else (map_spec.seed if map_spec is not None else None),
                 "environment": environment_kind,
+                "reveal_goal": reveal_goal,
+                "reward_visible": reward_visible,
                 "world": snapshot(),
                 "failure": env.failure,
                 "objectives": objectives,
                 "cleared": clear_step(env.event_log.entries, objectives) is not None,
                 "messages": step_messages,
                 "events": env.event_log.filter(step=step),
+                "score": score_episode(env, max_steps=steps, objectives=objectives),
                 "agents": [
                     {
                         "agent": agent_id,
-                        "model": model if policy_kind == "code" else policy_kind,
+                        "model": model if policy_kind in ("code", "hybrid") else policy_kind,
                         "position": [env.agents[agent_id].x, env.agents[agent_id].y],
                         "facing": env.agents[agent_id].facing,
                         "spatial_state": env.agents[agent_id].spatial_state(),
@@ -220,6 +263,12 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                             "code_checks": (policies[agent_id].code_checks.snapshot()
                                             if hasattr(policies[agent_id], "code_checks") else None),
                             "context_messages": len(getattr(policies[agent_id], '_conversation_history', [])),
+                            "context_compression": (policies[agent_id].context_stats
+                                                    if hasattr(policies[agent_id], 'client') else None),
+                            "code_turns": getattr(policies[agent_id], 'code_turns', 0),
+                            "next_review_step": getattr(policies[agent_id], 'next_review_step', None),
+                            "message_interrupt": getattr(policies[agent_id], 'last_message_interrupt', None),
+                            "token_usage": getattr(policies[agent_id], 'token_usage', {}),
                             # CodePolicy가 이번 step에 stuck으로 코드를 재생성했으면 {"step", "reason"}
                             "replan": getattr(policies[agent_id], "last_replan", None),
                         },
@@ -268,8 +317,12 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
     print(f"Wrote code checks: {checks_path}")
     context_path = os.path.splitext(log_path)[0] + '.context.json'
     with open(context_path, 'w', encoding='utf-8') as context_file:
-        json.dump({aid: getattr(p, '_conversation_history', []) for aid, p in policies.items()},
+        json.dump({aid: getattr(getattr(p, '_conversation_history', []), 'archive',
+                              getattr(p, '_conversation_history', [])) for aid, p in policies.items()},
                   context_file, ensure_ascii=False, indent=2)
+    with open(os.path.splitext(log_path)[0] + '.working_context.json', 'w', encoding='utf-8') as file:
+        json.dump({aid: getattr(p, '_conversation_history', []) for aid, p in policies.items()},
+                  file, ensure_ascii=False, indent=2)
     emit_debug('episode_finished', cleared=score['team']['cleared'], failure=env.failure, total=score['total'])
 
 
@@ -283,19 +336,25 @@ def main():
     parser.add_argument("--out", default=None, help="manifest.jsonl output path (default: benchmark_runs/<timestamp>.jsonl)")
     parser.add_argument("--map-seed", type=int, default=None, help="mapgen으로 이 시드의 무작위 맵을 만들어 사용 (기본 GenConfig)")
     parser.add_argument("--map-file", default=None, help="저장된 맵 JSON(python -m mapgen --save로 생성)을 사용")
-    parser.add_argument("--environment", choices=("map", "sequence_rooms"), default="map")
+    parser.add_argument("--environment", choices=("map", "sequence_rooms", "blind_code", "curriculum"), default="map")
     parser.add_argument("--sequence-seed", type=int, default=42)
     parser.add_argument("--pads-per-room", type=int, default=5)
     parser.add_argument("--presses-per-room", type=int, default=3)
     parser.add_argument("--max-resets", type=int, default=None, help="허용 리셋 횟수 (생략하면 제한 없음)")
     parser.add_argument('--debug', action='store_true', help='실시간 상세 로그 출력 및 .debug.jsonl 저장')
+    parser.add_argument('--hide-goal', action='store_true', help='에이전트 초기 설명에서 목표 숨기기 (최소 규칙 유지)')
+    parser.add_argument('--show-reward', action='store_true', help='Include cumulative numeric scores in agent observations')
+    parser.add_argument('--context-max-tokens', type=int, default=64_000,
+                        help='Advisory context pressure threshold (UTF-8 byte estimate + output reserve); the model decides whether to compress (default: 64000)')
     parser.add_argument("--policy", choices=POLICY_CHOICES, default="code",
-                        help="code(기본, LLM이 정책 코드 작성 - API 키 필요) 또는 API 키 없이 실행 확인용 규칙 기반 정책")
+                        help="code: reusable LLM code required; hybrid: compatibility alias for code; tooluse/random/noop: no API")
     args = parser.parse_args()
     if args.steps < 1:
         parser.error("--steps must be at least 1")
-    if args.environment == "sequence_rooms" and (args.map_file or args.map_seed is not None):
-        parser.error("sequence_rooms cannot be combined with --map-file or --map-seed")
+    if args.context_max_tokens < 1:
+        parser.error('--context-max-tokens must be positive')
+    if args.environment != "map" and (args.map_file or args.map_seed is not None):
+        parser.error("room environments cannot be combined with --map-file or --map-seed")
     if not 1 <= args.presses_per_room <= args.pads_per_room <= 5:
         parser.error("need 1 <= presses-per-room <= pads-per-room <= 5")
     if args.max_resets is not None and args.max_resets < 0:
@@ -307,7 +366,7 @@ def main():
     elif args.map_seed is not None:
         map_spec = generate_map(args.map_seed)
 
-    api_key = read_secret(args.api_key_file) if args.policy == "code" else ""
+    api_key = ('local' if is_local_endpoint(args.base_url) else read_secret(args.api_key_file)) if args.policy in ("code", "hybrid") else ""
     extra_params = {"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}
 
     out_path = args.out
@@ -317,7 +376,9 @@ def main():
         out_path = os.path.join(RUNS_DIR, f"{timestamp}.jsonl")
 
     run_episode(args.model, args.base_url, api_key, extra_params, args.steps, out_path, map_spec, args.policy,
-                args.environment, args.sequence_seed, args.pads_per_room, args.presses_per_room, args.max_resets, args.debug)
+                args.environment, args.sequence_seed, args.pads_per_room, args.presses_per_room, args.max_resets, args.debug,
+                reveal_goal=not args.hide_goal, reward_visible=args.show_reward,
+                context_max_tokens=args.context_max_tokens)
     print(f"\nWrote manifest: {out_path}")
     print(f"Score it with: python maci_judge.py {out_path}")
 

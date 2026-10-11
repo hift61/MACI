@@ -46,7 +46,11 @@ GUI에서 다음 순서로 실험할 수 있습니다.
 
 **실행 → 디버깅: 켜짐**으로 설정하고 실행하면 **디버그** 탭에서 상세 로그를 실시간으로 봅니다. LLM 요청 시작·생성 코드·컴파일/실행 결과·복구 대기·행동·메시지·퍼즐 이벤트를 표시하며, step 완료 전의 오류 검사도 바로 나타납니다. 최신 내용을 자동으로 따라가고 휠로 과거 내용을 살펴보거나 **최신 로그로 이동**으로 돌아올 수 있습니다. GUI에는 최근 3,000개 원본 로그 행을 보관하며 전체 상세 로그는 `<실행 이름>.debug.jsonl`에 즉시 저장합니다. 터미널 실행은 `python benchmark.py --debug ...`를 사용합니다. 디버깅을 끄면 상세 로그 파일은 생성하지 않으며 기존 실행·검사 로그는 유지합니다.
 
-LLM context는 에이전트별로 누적합니다. 이전 요청·모델 응답·코드 제출 검사 결과와 각 step의 자기 관찰·실제 행동·다음 관찰을 다음 LLM 요청에 함께 보냅니다. 다른 에이전트의 비공개 관찰이나 관찰자용 전체 맵은 포함하지 않습니다. 코드 정책은 기존처럼 코드를 재사용하되 다음 코드 생성/복구 요청 때 누적 이력을 전달합니다. 에피소드마다 새 이력으로 시작하고 `CodePolicy.reset()`도 이력을 비웁니다. 완료 후 `<실행 이름>.context.json`에 에이전트별 이력을 저장하며 step 로그의 `decision.context_messages` 및 디버그 로그에서 메시지 수를 확인할 수 있습니다.
+LLM context는 에이전트별로 누적합니다. 이전 요청·모델 응답·코드 제출 검사 결과와 각 step의 자기 관찰·실제 행동·다음 관찰을 다음 LLM 요청에 함께 보냅니다. 다른 에이전트의 비공개 관찰이나 관찰자용 전체 맵은 포함하지 않습니다. 코드 정책은 코드를 재사용하되 다음 코드 생성/복구 요청 때 이력을 전달합니다. 에피소드마다 새 이력으로 시작하고 `CodePolicy.reset()`도 이력을 비웁니다.
+
+Context 관리와 압축은 **행동 코드를 만드는 동일 모델의 재량**입니다. 모델은 `manage_context(summary, keep_recent_messages, inbox_recent_messages?)` 도구로 직접 작성한 요약과 보존 범위를 제출합니다. 프로그램은 요약문을 그대로 적용하며 별도 요약 모델, 자동 요약, 임의 이력 절단을 사용하지 않습니다. 기본으로 전체 이력과 inbox를 전달하며, 모델이 선택하면 과거 이력을 요약으로 교체하고 최근 메시지를 지정한 수만큼 보존합니다. 시스템 규칙·현재 관찰·진행 중인 tool 호출/응답은 항상 보존하고, 새로운 연락은 inbox 보존 설정과 관계없이 전달합니다. `--context-max-tokens 64000`은 길이 경고 기준이며 강제 압축 조건이 아닙니다. 길이는 UTF-8 바이트 기반 보수적 추정치로 표시하며 실제 모델 토큰 수와 다릅니다. 모델이 압축하지 않으면 공급자의 context 한도에 도달할 수 있습니다. Tool 호출을 지원하지 않는 공급자에서는 이 관리 도구를 사용할 수 없습니다.
+
+원본 이력은 실행 중 `<실행 이름>.context_archive.jsonl`에 기록하고, 완료 후 `.context.json`에도 저장합니다. 실제 전송용 이력은 `.working_context.json`, 모델이 제출한 요약·보존 범위·압축 전후 길이는 `.context_compressions.jsonl`에 남깁니다. Step 로그의 `decision.context_compression`과 디버그 `context_compressed` 이벤트로 관리 상태를 확인할 수 있습니다. 설계는 모델 주도 메모리 도구를 제안한 [MemGPT](https://arxiv.org/abs/2310.08560)와 이력을 요약 상태로 이어가는 [ReSum](https://arxiv.org/abs/2509.13313)을 참고했습니다. 논문의 학습된 요약기나 강화학습 절차를 재현한 구현은 아닙니다.
 
 행동 함수의 기본 레이아웃은 `enviroment/policy_template.py`입니다. 코드 생성 프롬프트는 관찰/메모리/물체 목록을 준비하는 부분과 `finish`, `find_object`, `move_toward`, `send_message` 헬퍼를 제공하고 LLM에게 `DECISION START/END` 영역의 판단 로직을 채우도록 안내합니다. LLM은 완성된 `decide(observation)` 전체를 제출하며 기존 컴파일·안전성·실행 검사를 통과해야 합니다. `finish`를 통해 모든 행동에 메모리를 포함하고 현재 시야 밖의 기억한 물체도 조회할 수 있습니다. `move_toward`는 직선 이동 헬퍼이므로 벽 우회나 미끼 번호판 회피를 위한 경유점은 판단 로직에서 선택해야 합니다. 초기 코드 생성과 오류 복구, LiveCodePolicy 및 HybridPolicy의 코드 모드에 같은 틀을 제공합니다.
 
@@ -54,7 +58,23 @@ LLM context는 에이전트별로 누적합니다. 이전 요청·모델 응답�
 
 두 방 퍼즐의 번호판 번호와 전체 입력 순서는 시드 기반 난수로 부여됩니다. 같은 시드는 같은 퍼즐을 재현하며 실행 도중이나 오입력 리셋 후에도 번호·순서는 바뀌지 않습니다. 각 방의 안내판에는 자기 차례만 표시되므로 메시지로 공유 순서를 맞춰야 합니다. 번호판의 반경 10 범위에 닿으면 자동 입력되며 `press_button`은 필요하지 않습니다. 머무르면 반복 입력되지 않고 나갔다 다시 들어와야 재입력됩니다. 이동 중 다른 번호판을 스쳐도 입력되므로 번호판 줄 아래로 우회한 뒤 목표에 접근해야 합니다. 이동 창의 번호판 주변 원은 접촉 범위입니다.
 
+LLM의 초기 설명에는 자신의 ID, 상대 에이전트 ID, 공통 환경·조작 규칙과 최소 목표를 제공합니다. 두 방 퍼즐에서는 접촉 자동 입력, 하나의 공유 순서, 방별 안내판이 자기 부분만 표시한다는 점, 턴당 한 입력, 오입력·동시 입력 시 전체 초기화, 표시판의 정보 범위와 실패 제한을 알려줍니다. 실제 정답 순서·번호 배치·이동 경로·메시지 교환 전략은 알려주지 않습니다. 안내판 내용은 시야에 들어온 물체의 관찰 데이터로 얻습니다.
+
+GUI **실행** 탭의 **목표 알려주기** 토글로 초기 목표 설명을 켜거나 끌 수 있습니다(기본: 켜짐). 끄면 목표 문장만 숨기며 상대 ID, 조작 규칙, 순서 입력·초기화 같은 최소 규칙과 환경 내 안내판은 유지됩니다. 실제 클리어 판정과 점수는 바뀌지 않습니다. CLI에서는 `--hide-goal`을 붙이고, 실행 로그의 `reveal_goal`에서 사용한 설정을 확인할 수 있습니다.
+
+**힌트 없는 10자리 협력**은 별도 환경입니다. `clue`와 `display`가 없으며 각 방의 5개 번호판으로 10자리를 입력합니다. A와 B가 각 5자리를 입력해야 하므로 한 에이전트만으로는 클리어할 수 없습니다. 정답과 방별 차례는 맵 배치 시드와 무관하게 암호학적 난수로 생성하며 정답·부분 정답 여부·순서 힌트를 에이전트에게 전달하지 않습니다. 10자리 전체를 제출한 뒤 판정하며, 오답이나 동시 입력이면 입력 진행도·두 에이전트의 위치·방향·행동 메모리를 초기 상태로 되돌리고 해당 입력에 참여한 에이전트에게 각각 -3점을 줍니다. context·받은 메시지·토큰 사용량·정답은 유지하고 코드 캐시를 비워 다음 턴에 새 계획을 세웁니다. 전체 턴 제한까지 재시도할 수 있으며 제한 턴을 소진하면 실패합니다. 따라서 추론으로 정답을 식별할 수 없는 통제 환경이며 우연한 정답까지 불가능하다고 주장하지 않습니다. 정답 후보는 `252 × 5^10 = 2,460,937,500`개입니다. 정확한 정답 시퀀스는 로그에도 저장하지 않으므로 배치 시드만으로 정답을 재현할 수 없습니다.
+
+GUI에서 **로컬 모델 (8080) 사용**을 누르면 현재 서버의 Bonsai 모델과 `http://127.0.0.1:8080/v1`, **LLM 행동 / 코드** 정책을 설정합니다. 이 정책은 모델의 JSON 행동과 Python 코드 응답을 모두 받습니다. 로컬 주소에서는 `key.txt`가 필요하지 않습니다. CLI 실행 예:
+
+```powershell
+python benchmark.py --environment blind_code --policy hybrid --base-url http://127.0.0.1:8080/v1 --model models/Ternary-Bonsai-2-27B-PTQ1_0.gguf --steps 150
+```
+
+두 방 퍼즐은 서로 다른 step에 한 개씩 올바른 번호판에 진입해야 진행됩니다. 한 step의 행동은 동시 실행이므로 두 에이전트가 같은 step에 번호판을 밟거나 한 이동으로 여러 번호판을 지나가면 `simultaneous_input`으로 전체 초기화됩니다. 잘못된 순서도 `wrong_order`로 전체 초기화됩니다. 초기화된 시도의 입력으로는 문을 열 수 없으며 처음부터 전체 순서를 다시 맞춰야 합니다.
+
 새 실행에는 초기 상태를 담은 `*.scene.json`과 매 step의 `world`·`facing`·`failure`가 저장됩니다. 이전 형식 JSONL은 에이전트 위치만 재생할 수 있습니다. 터미널에서도 실행 가능합니다.
+
+이동 화면 오른쪽에는 현재 step의 누적 총점·팀 점수·에이전트별 점수가 표시됩니다. **소통 메시지** 탭에서는 해당 시점까지 전달된 메시지를 최신순으로 확인하며 발신자 → 수신자, step, 본문이 표시됩니다. 긴 메시지는 줄바꿈되고 마우스 휠로 이전 메시지를 볼 수 있습니다. **행동 / 점수 내역** 탭에서는 행동·오류·이벤트와 개인 점수의 획득·감점 내역을 확인합니다. 실시간 실행과 다시 보기에 모두 적용되며, 이전 step으로 돌아가면 점수와 메시지도 그 시점으로 돌아갑니다. 실시간 점수는 새 실행 로그부터 저장됩니다.
 
 LLM 코드 정책의 실행 오류가 발생하면 새 코드가 실행에 성공할 때까지 현재 step에서 기다립니다. 기다리는 동안 이동·회전하거나 추가 step을 소비하지 않습니다. 코드 재생성 또는 재실행이 실패하면 잠시 대기 후 재시도하며, 성공한 행동으로 현재 step을 이어갑니다. 복구 대기는 일반 정체 재계획 횟수 제한과 별개로 진행됩니다. GUI 로그에 `[CODE RECOVERY]`가 표시되며 **작업 중단**으로 대기를 끝낼 수 있습니다. 복구 결과는 `decision.recovery`에 기록됩니다.
 
@@ -64,6 +84,14 @@ LLM 코드 정책의 실행 오류가 발생하면 새 코드가 실행에 성�
 python benchmark.py --environment sequence_rooms --sequence-seed 42 --steps 80
 python viewer.py benchmark_runs\실행결과.jsonl
 ```
+
+기본 시야 거리는 200 월드 단위이며 시야각은 90도입니다. 벽에 의한 시야 차단은 유지됩니다. 생성 코드의 사용 턴 수 제한은 없으며 CodePolicy와 HybridPolicy는 같은 코드를 계속 재사용할 수 있습니다. 기존 정체 감지·재계획·실행 오류 복구는 유지됩니다. 로그의 `decision.code_turns`와 이동 화면의 **행동 / 점수 내역** 탭에서 현재 코드의 사용 턴 수를 확인할 수 있습니다.
+
+생성 코드가 상태 재확인 간격을 정합니다. 기본 함수 틀의 판단 영역에서 `recheck_after = 3`처럼 양의 정수를 지정하면 `finish()`가 행동에 포함합니다(기본값: 5). 첫 실행이 step 1이면 step 4의 행동 전에 LLM에 최신 관찰과 누적 context를 보내 현재 실행 상태를 다시 판단시킵니다. CodePolicy와 HybridPolicy의 캐시된 코드에 적용되며 매 턴 같은 값을 반환해도 예정 시점은 뒤로 밀리지 않습니다. 재확인 후 같은 코드를 유지할 수도 있습니다. 기존 코드가 이 필드를 반환하지 않으면 정기 재확인은 예약되지 않습니다. 로그의 `decision.next_review_step`과 **행동 / 점수 내역** 탭에 다음 재확인 step을 표시합니다.
+
+새 연락이 관찰의 `inbox`에 들어오면 그 턴의 캐시 실행 전에 LLM을 호출합니다. 정기 재확인 예약과 일반 재계획 횟수 제한보다 우선하며, 텍스트·질문·명령·belief 등 모든 메시지 유형에 적용됩니다. 한 관찰에 도착한 여러 메시지는 한 번에 전달하고 이미 확인한 메시지는 호출을 반복하지 않습니다. 동시 실행 중 행동 적용 단계에서 보낸 메시지는 다음 턴 시작 관찰에 들어오며, 수신 에이전트는 그 턴에 바로 LLM으로 판단합니다. `decision.message_interrupt`와 디버그 로그에서 연락에 의한 호출을 확인할 수 있습니다.
+
+힌트 없는 협력 환경은 `clue`와 `display/update` 블록 및 부분 정답 피드백이 없음을 목표 토글과 관계없이 에이전트에게 알립니다. 공통 설명에는 과도한 출력 토큰 소비가 감점된다는 점도 명시합니다. 기준은 에이전트별·에피소드별 출력 API 토큰 50,000개까지 감점 없음, 초과 출력분 1,000개당 1점 비례 감점입니다. 입력 및 반복 전송한 누적 context는 기록만 하고 감점하지 않습니다. 재시도에서 생성한 출력도 포함됩니다. 실제 감점은 개인 점수와 총점에 반영되며 `token_usage`, `token_penalty`로 저장됩니다. API가 사용량을 보고하지 않은 요청은 `unreported_requests`로 따로 표시하고 토큰 수를 추정해 감점하지 않습니다. 이전 실행은 토큰 사용량을 기록하지 않았으므로 소급 감점하지 않습니다.
 
 ---
 
@@ -200,6 +228,51 @@ python3 -m unittest discover -s tests -v
 ```
 
 ---
+
+## Five-level learning environment
+
+LLM runs require a submitted Python `decide(observation)` policy. Direct JSON
+actions are rejected at code submission. The GUI offers **LLM 코드 필수 / 재사용**;
+the local-model button also selects this mode. Old `--policy hybrid` commands
+now use `CodePolicy` as a compatibility alias, so they cannot bypass code execution.
+Generated code is compiled, validated and executed in the existing sandbox,
+then cached across steps. Initial generation receives the current observation.
+The code's `recheck_after` schedules LLM review; incoming messages still force
+immediate review, and level changes/retries invalidate old plans. Intentional
+waiting and communication do not trigger the stationary-agent stall heuristic;
+blocked forward movement still does. No code-reuse turn cap is imposed.
+
+Select **5단계 학습 퍼즐** in the pygame launcher's run tab. The default
+150-step budget becomes 600 when selecting this mode; an edited budget is kept.
+Or run:
+
+```powershell
+python benchmark.py --environment curriculum --sequence-seed 42 --steps 600
+```
+
+The levels progress from one pad, to a two-pad sequence in A's room, to a
+two-room sequence, a six-input sequence, and finally a ten-input sequence with
+repeated digits. Levels 3–5 require both agents. Pad numbers and target order
+vary by seed. There are no clue/display blocks or answer hints. Each agent
+receives its own input result and accepted position through `input_feedback`;
+the next correct digit is never exposed. Agents can learn by trying inputs
+and exchanging observations. `level_state` reports level, length, completed
+levels and resets; it does not report the global current input position.
+
+A correct level advances automatically. Wrong or simultaneous inputs reset
+the current attempt and positions and penalize participating agents by 3 points.
+The same sequence remains on retry. Conversation, messages, action memory and
+token accounting persist through retries and transitions, while cached action
+code is invalidated so the LLM can revise its plan. Completion gives each
+contributing agent 10 points per level; only level 5 opens the final vault.
+The episode turn budget covers all five levels. The viewer displays current
+level and completed count; run logs and score files retain level state/events.
+By default agents cannot see numeric scores. Add `--show-reward` to include
+their own individual score, team score, and total score in each observation's
+`reward` field. This does not change the puzzle, correctness feedback, or scoring.
+Compare a matched pair with `python compare_reward_runs.py visible.jsonl hidden.jsonl --out comparison.json`.
+This is a MACI progression mode inspired by interactive level learning, not
+an implementation of the official ARC-AGI-3 benchmark.
 
 ## Repository Access
 

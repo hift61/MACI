@@ -51,7 +51,7 @@ class Environment:
         x: float,
         y: float,
         facing: float = 0.0,
-        view_radius: float = 100.0,
+        view_radius: float = 200.0,
         view_angle: float = 90.0,
         policy=None,
         rules: list[Rule] | None = None
@@ -706,7 +706,7 @@ class Environment:
         for obj in visible_objects:
             known_objects[obj["object_id"]] = {**copy.deepcopy(obj), "last_seen_step": self.step_count}
 
-        return {
+        observation = {
             "self": {
                 **agent.spatial_state(),
                 "max_move": self.max_move,
@@ -735,6 +735,10 @@ class Environment:
             # 명령 메시지에 표시하는 message["handled"] = True는 실제 agent.inbox에 반영돼야 함
             "inbox": list(agent.inbox)
         }
+        reward_provider = getattr(self, 'reward_provider', None)
+        if reward_provider is not None:
+            observation['reward'] = copy.deepcopy(reward_provider(agent_id))
+        return observation
 
     # (x, y)에서 radius 안에 일부라도 걸친 벽 목록 [x, y, width, height]
     def _walls_near(self, x: float, y: float, radius: float) -> list[list[float]]:
@@ -844,6 +848,9 @@ class Environment:
     # 병렬로(스레드) 결정한 뒤, 그 행동들을 한꺼번에 적용하고 마지막에 압력판을 판정함.
     # 같은 물건을 동시에 집는 것처럼 적용 순서가 결과를 가르는 충돌이 있으므로, 한 에이전트가
     # 늘 먼저 적용되는 편향이 없도록 적용 순서를 step마다 한 칸씩 돌림 (결정적이라 재현 가능)
+    def _after_actions(self) -> None:
+        """Resolve simultaneous action effects before recording next observations."""
+
     def step(self) -> None:
         self.step_count += 1
         self._update_movers()
@@ -867,6 +874,7 @@ class Environment:
             self._store_memory(agent_id, actions[agent_id])
             self.decision_log.record(self.step_count, agent_id, observations[agent_id], actions[agent_id], final_action)
 
+        self._after_actions()
         self._update_pressure_plates()
         for agent_id in agent_ids:
             policy = self.agents[agent_id].policy

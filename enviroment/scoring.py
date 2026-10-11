@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from token_usage import TOKEN_ALLOWANCE, TOKEN_PENALTY_PER_1000
 
 # 한 회차(episode)가 끝난 Environment의 event_log/decision_log를 읽어 점수를 매김.
 #   개인 점수: 각 에이전트가 일으킨 이벤트(물체 목격, 도움이 되는 동작 등)마다 부여
@@ -20,6 +21,8 @@ ATTEMPT_EFFECTS = {
 
 @dataclass
 class ScoreConfig:
+    token_allowance: int = TOKEN_ALLOWANCE
+    token_penalty_per_1000: float = TOKEN_PENALTY_PER_1000
     # ---- 개인 점수 (대상 오브젝트마다 한 번) ----
     seen_points: float = 1.0                    # 물체를 처음 목격
     seen_points_by_type: dict = field(default_factory=lambda: {"clue": 3.0})  # 종류별로 다르게 줄 때
@@ -42,6 +45,8 @@ class ScoreConfig:
 
 # event: EventLog 항목 하나 -> 그 이벤트의 대상 오브젝트 id (중복 가점 판정 키)
 def _target_of(event: dict):
+    if event['type'] == 'level_completed':
+        return event['level']
     for key in ("object_id", "door_id", "lever_id", "plate_id", "portal_id"):
         if key in event:
             return event[key]
@@ -51,6 +56,8 @@ def _target_of(event: dict):
 # 이벤트 하나가 agent_id에게 주는 (점수, 사유). 점수 대상이 아니면 None
 def _individual_points(event: dict, config: ScoreConfig):
     event_type = event["type"]
+    if event_type == 'level_completed':
+        return 10.0, '단계 완료'
     if event_type == "object_seen":
         return config.seen_points_by_type.get(event["object_type"], config.seen_points), "목격"
     if event_type == "item_picked_up":
@@ -142,6 +149,18 @@ def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConf
                 "points": points
             })
 
+    for agent_id, agent in env.agents.items():
+        usage = getattr(agent.policy, 'token_usage', {})
+        output_tokens = usage.get('completion_tokens', 0)
+        penalty = round(max(0, output_tokens - config.token_allowance)
+                        / 1000 * config.token_penalty_per_1000, 2)
+        agents[agent_id]['token_usage'] = usage
+        agents[agent_id]['token_penalty'] = -penalty
+        if penalty:
+            agents[agent_id]['score'] -= penalty
+            agents[agent_id]['items'].append({'step': env.step_count, 'reason': '과도한 토큰 소비',
+                                             'target': 'LLM', 'points': -penalty})
+
     cleared_at = clear_step(env.event_log.entries, objectives)
     cleared = cleared_at is not None
     clear_bonus = config.clear_bonus if cleared else 0.0
@@ -156,6 +175,7 @@ def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConf
     return {
         "agents": agents,
         "team": {
+            **({'level_state': env.level_state()} if hasattr(env, 'level_state') else {}),
             "cleared": cleared,
             "clear_step": cleared_at,
             "clear_bonus": clear_bonus,

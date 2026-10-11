@@ -21,7 +21,7 @@ class PolicyTemplateTests(unittest.TestCase):
         obs = self.observation()
         result = run_decide_code(POLICY_LAYOUT, obs)
         self.assertIsNone(result['error'])
-        self.assertEqual(result['action'], {'type': 'noop', 'memory': {'previous': True}})
+        self.assertEqual(result['action'], {'type': 'noop', 'memory': {'previous': True}, 'recheck_after': 5})
 
     def test_movement_uses_remembered_goal_and_preserves_memory(self):
         code = self.filled('    target = find_object("goal")\n    memory["phase"] = "approach"\n    return move_toward(target["x"], target["y"])')
@@ -33,7 +33,7 @@ class PolicyTemplateTests(unittest.TestCase):
 
     def test_message_and_arrival_helpers(self):
         result = run_decide_code(self.filled('    return send_message("B", "ready")'), self.observation())
-        self.assertEqual(result['action'], {'type': 'send_message', 'receiver_id': 'B', 'content': 'ready', 'memory': {'previous': True}})
+        self.assertEqual(result['action'], {'type': 'send_message', 'receiver_id': 'B', 'content': 'ready', 'memory': {'previous': True}, 'recheck_after': 5})
         result = run_decide_code(self.filled('    return move_toward(x, y)'), self.observation())
         self.assertIsNone(result['error'])
         self.assertEqual(result['action']['type'], 'noop')

@@ -14,10 +14,12 @@ def decide(observation):
         objects[obj["object_id"]] = obj
 
     # 2. Use these helpers to keep action and memory formatting consistent.
+    recheck_after = 5  # Override in the decision region to choose the review interval.
     def finish(action_type="noop", **fields):
         action = dict(fields)
         action["type"] = action_type
         action["memory"] = memory
+        action.setdefault("recheck_after", recheck_after)
         return action
 
     def find_object(object_id):
@@ -39,7 +41,7 @@ def decide(observation):
         return finish("send_message", receiver_id=receiver_id, content=content)
 
     # 3. DECISION START: replace only this region with task-specific logic.
-    # Read new messages, check progress/reset, select a target, and act.
+    # Read new messages, inspect observed state, select a target, and act.
     # Save state in memory. Return through finish/move_toward/send_message.
     return finish()
     # DECISION END

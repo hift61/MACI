@@ -14,6 +14,16 @@ import launcher
 
 
 class LauncherTests(unittest.TestCase):
+    def test_curriculum_selection_and_command(self):
+        self.app.select_curriculum()
+        self.app.policy = 'noop'
+        self.assertEqual(self.app.fields['steps'], '600')
+        with patch.object(self.app, 'start') as start:
+            self.app.run_episode()
+        args = start.call_args.args[0]
+        self.assertEqual(args[args.index('--environment') + 1], 'curriculum')
+        self.app.draw()
+
     def setUp(self):
         self.app = launcher.Launcher()
         self.app.auto_view = False
@@ -52,6 +62,31 @@ class LauncherTests(unittest.TestCase):
         with patch.object(self.app, 'key_ready', return_value=False):
             with self.assertRaises(ValueError):
                 self.app.run_episode()
+
+    def test_goal_toggle_controls_runner_flag(self):
+        self.app.switch('실행')
+        self.app.draw()
+        self.assertTrue(self.app.reveal_goal)
+        # Use the actual goal toggle's UI callback.
+        next(action for rect, action in self.app.widgets if rect.collidepoint((820, 135)))()
+        self.assertFalse(self.app.reveal_goal)
+        with patch.object(self.app, 'start') as start:
+            self.app.run_episode()
+            self.assertIn('--hide-goal', start.call_args.args[0])
+            self.app.reveal_goal = True
+            self.app.run_episode()
+            self.assertNotIn('--hide-goal', start.call_args.args[0])
+
+    def test_blind_environment_uses_local_server_without_key(self):
+        self.app.use_local_model()
+        self.assertEqual(self.app.policy, 'code')
+        self.app.environment = 'blind_code'
+        with patch.object(self.app, 'key_ready', return_value=False), patch.object(self.app, 'start') as start:
+            self.app.run_episode()
+        args = start.call_args.args[0]
+        self.assertIn('blind_code', args)
+        self.assertIn('http://127.0.0.1:8080/v1', args)
+        self.assertNotIn('--map-file', args)
 
     def test_actual_generate_run_and_results(self):
         with tempfile.TemporaryDirectory(dir=launcher.ROOT) as folder:
@@ -124,12 +159,16 @@ class LauncherTests(unittest.TestCase):
             output = Path(folder) / 'sequence.jsonl'
             self.app.start(['benchmark.py', '--environment', 'sequence_rooms', '--sequence-seed', '7',
                             '--pads-per-room', '4', '--presses-per-room', '2',
-                            '--max-resets', '1', '--policy', 'noop', '--steps', '2', '--out', str(output)],
+                            '--max-resets', '1', '--policy', 'noop', '--hide-goal', '--steps', '2', '--out', str(output)],
                            '에피소드 실행', output)
             self.finish()
             self.assertTrue(output.is_file(), '\n'.join(self.app.logs))
             records = [json.loads(line) for line in output.read_text(encoding='utf-8').splitlines()]
             self.assertEqual(records[-1]['environment'], 'sequence_rooms')
+            self.assertFalse(records[-1]['reveal_goal'])
+            for text in records[-1]['task'].values():
+                self.assertNotIn('Goal:', text)
+                self.assertIn('strictly in overall order', text)
             self.assertEqual(records[-1]['failure']['reason'], 'turn_limit')
             self.assertEqual(sum(o['type'] == 'number_pad' for o in records[-1]['world']['objects']), 8)
             self.assertTrue(output.with_suffix('.scene.json').is_file())
