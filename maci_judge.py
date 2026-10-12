@@ -16,9 +16,16 @@ sound given what the agent could perceive, and (2) whether the resulting
 action makes real progress (including coordinating with the other agent
 when the task needs it).
 
+Several judge models can score the same run (--judge-model a,b,c) so a
+single judge's bias does not decide the result. Each judge's per-turn scores
+are saved to <manifest>.judges.json, and judge_agreement.py compares judges
+with each other and with human scores from launcher.py's human scoring tab.
+Baselines are recorded per judge model, since judges differ in strictness.
+
 Usage:
     python maci_judge.py path/to/manifest.jsonl --set-baseline
     python maci_judge.py path/to/other_manifest.jsonl
+    python maci_judge.py path/to/manifest.jsonl --judge-model nvidia/nemotron-3.5-lightning,upstage/solar-pro4
 """
 from __future__ import annotations
 
@@ -29,6 +36,8 @@ import re
 import time
 
 from openai import APIConnectionError, APIStatusError, OpenAI
+
+import judge_agreement
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASELINE_FILE = os.path.join(HERE, "maci_judge_baseline.json")
@@ -290,20 +299,26 @@ def load_baselines() -> dict:
     return {}
 
 
-def save_baseline(model_name: str, raw_avg: float) -> None:
+def baseline_key(baseline_model: str, judge_model: str | None) -> str:
+    return f"{baseline_model}@{judge_model}" if judge_model else baseline_model
+
+
+def save_baseline(model_name: str, raw_avg: float, judge_model: str | None = None) -> None:
     baselines = load_baselines()
-    baselines[model_name] = raw_avg
+    baselines[baseline_key(model_name, judge_model)] = raw_avg
     with open(BASELINE_FILE, "w", encoding="utf-8") as f:
         json.dump(baselines, f, ensure_ascii=False, indent=2)
 
 
-def scale_score(raw_avg: float, baseline_model: str):
+def scale_score(raw_avg: float, baseline_model: str, judge_model: str | None = None):
     """Returns (scaled_score, baseline_raw) if a baseline has been recorded
     for baseline_model, else (None, None). Calibration is
     (raw_avg / baseline_raw) * BASELINE_TARGET, capped at MAX_SCORE - so the
     baseline run itself always scores exactly BASELINE_TARGET, and
-    better/worse runs scale proportionally around it."""
-    baseline_raw = load_baselines().get(baseline_model)
+    better/worse runs scale proportionally around it. Baselines are kept per
+    judge model, because a baseline judged by one model does not calibrate
+    another (older baselines saved without a judge must be registered again)."""
+    baseline_raw = load_baselines().get(baseline_key(baseline_model, judge_model))
     if not baseline_raw:
         return None, None
     scaled = (raw_avg / baseline_raw) * BASELINE_TARGET
@@ -314,7 +329,8 @@ def main():
     parser = argparse.ArgumentParser(description="Score a completed MACI benchmark.py run's manifest.jsonl with a judge model.")
     parser.add_argument("manifest", help="path to manifest.jsonl")
     parser.add_argument("--agent", default=None, help="only judge this agent label (e.g. A); default: all agents")
-    parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL)
+    parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL,
+                        help="judge model, or several separated by commas (each scores every selected turn)")
     parser.add_argument("--base-url", default="https://openrouter.ai/api/v1")
     parser.add_argument("--api-key-file", default="key.txt", help="API key file (relative paths use the project directory)")
     parser.add_argument("--max-turns", type=int, default=None, help="limit how many manifest lines to judge (for a quick check)")
@@ -325,8 +341,22 @@ def main():
 
     api_key = read_secret(args.api_key_file)
     client = OpenAI(base_url=args.base_url, api_key=api_key)
-    result = score_run(args.manifest, client, args.judge_model, agent_filter=args.agent, max_turns=args.max_turns)
+    judges = [model.strip() for model in args.judge_model.split(",") if model.strip()]
+    if not judges:
+        parser.error("--judge-model is empty")
+    for judge_model in judges:
+        print(f"\n=== Judge: {judge_model} ===")
+        result = score_run(args.manifest, client, judge_model, agent_filter=args.agent, max_turns=args.max_turns)
+        judge_agreement.save_judge_result(args.manifest, judge_model, result)
+        report_result(args, result, judge_model)
+    print(f"\nPer-turn judge scores saved to {judge_agreement.judge_path(args.manifest)}")
+    agreement = judge_agreement.report(args.manifest)
+    if agreement["pairs"]:
+        print("\n=== Agreement (judges / human raters) ===")
+        print("\n".join(judge_agreement.format_report(agreement)))
 
+
+def report_result(args, result: dict, judge_model: str) -> None:
     print(f"\nActor model(s) in this run: {result['actor_models']}")
     print(f"Raw average judge score: {result['raw_avg']:.3f} / 10 over {result['n_scored']}/{result['n_total']} scored turns")
 
@@ -341,10 +371,10 @@ def main():
                 f"Re-run with a {args.baseline_model} manifest, or pass --force-baseline if this is intentional."
             )
         else:
-            save_baseline(args.baseline_model, result["raw_avg"])
-            print(f"Saved baseline for {args.baseline_model}: raw {result['raw_avg']:.3f} -> now defines {BASELINE_TARGET} points")
+            save_baseline(args.baseline_model, result["raw_avg"], judge_model)
+            print(f"Saved baseline for {args.baseline_model} judged by {judge_model}: raw {result['raw_avg']:.3f} -> now defines {BASELINE_TARGET} points")
 
-    scaled, baseline_raw = scale_score(result["raw_avg"], args.baseline_model)
+    scaled, baseline_raw = scale_score(result["raw_avg"], args.baseline_model, judge_model)
     if scaled is None:
         fallback = (result["raw_avg"] / 10) * MAX_SCORE if result["raw_avg"] == result["raw_avg"] else float("nan")
         print(f"[WARNING] No {args.baseline_model} baseline recorded yet - run this judge on a {args.baseline_model} manifest with --set-baseline first.")

@@ -12,6 +12,10 @@ import threading
 from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent
+TABS = ("맵", "실행", "결과", "LLM 채점", "사람 채점", "디버그")
+HUMAN_LINES = 10  # 사람 채점 탭에서 한 번에 보이는 턴 설명 줄 수
+HUMAN_RUBRIC = ("채점 기준 (판정 모델과 동일, 0~10): (1) 이 에이전트가 볼 수 있던 정보로 코드 논리가 타당한가 "
+                "(2) 행동이 공동 과제를 진전시키는가 - 필요하면 상대와의 협력 포함. 판정 점수는 일치도 계산에서만 보입니다.")
 
 try:
     import pygame
@@ -40,9 +44,10 @@ class Launcher:
             "map": "", "steps": "150", "model": "upstage/solar-pro4",
             "url": "https://openrouter.ai/api/v1", "manifest": "",
             "judge": "upstage/solar-pro4", "turns": "5", "agent": "",
-            "pads": "5", "presses": "3", "resets": "",
+            "pads": "5", "presses": "3", "resets": "", "rater": "",
         }
         self.policy = "tooluse"
+        self.controller = "decentralized"  # central: LLM 하나가 모든 에이전트를 조종
         self.environment = "map"
         self.auto_view = True
         self.debug = False
@@ -64,6 +69,12 @@ class Launcher:
         self.list_scroll = 0
         self.detail_scroll = 0
         self.detail = []
+        self.human_items = []      # 사람 채점: (manifest 행, 에이전트 기록) 목록
+        self.human_source = None
+        self.human_index = 0
+        self.human_lines = []
+        self.human_scroll = 0
+        self.human_scores = {}     # 현재 채점자의 turn_key -> 점수
         self.status = "맵 선택 → 실행 → 결과 확인. LLM 실행에는 key.txt가 필요합니다."
         self.maps, self.runs = [], []
         self.refresh()
@@ -198,12 +209,16 @@ class Launcher:
         local = urlparse(self.fields['url'].strip()).hostname in ('127.0.0.1', 'localhost', '::1')
         if self.policy in ("code", "hybrid") and not local and not self.key_ready():
             raise ValueError("프로젝트의 key.txt에 API 키를 입력하세요.")
+        if self.controller == "central" and self.policy not in ("code", "hybrid"):
+            raise ValueError("단일 LLM 조종은 'LLM 코드 필수 / 재사용' 정책에서만 실행할 수 있습니다.")
         output_dir = ROOT / "benchmark_runs"
         output_dir.mkdir(exist_ok=True)
         output = output_dir / (datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".jsonl")
         args = ["benchmark.py", "--policy", self.policy, "--steps", self.number("steps"), "--out", str(output)]
         if self.debug:
             args.append('--debug')
+        if self.controller == "central":
+            args += ['--controller', 'central']
         if not self.reveal_goal:
             args.append('--hide-goal')
         if self.policy in ("code", "hybrid"):
@@ -263,6 +278,104 @@ class Launcher:
         if baseline:
             args.append("--set-baseline")
         self.start(args, "LLM 채점", source)
+
+    def wrap(self, value, width, font=None):
+        font = font or self.small
+        lines = []
+        for line in str(value).split("\n"):
+            rest = line or " "
+            while rest:
+                n = min(len(rest), 200)
+                while n > 1 and font.size(rest[:n])[0] > width:
+                    n -= 1
+                lines.append(rest[:n])
+                rest = rest[n:]
+        return lines
+
+    def human_rater(self):
+        rater = self.fields["rater"].strip()
+        if not rater:
+            raise ValueError("채점자 이름을 입력하세요.")
+        return rater
+
+    def load_human_items(self):
+        source = self.path("manifest")
+        if not self.fields["manifest"].strip() or not source.is_file():
+            raise ValueError("채점할 결과 JSONL을 선택하세요.")
+        items = []
+        with source.open(encoding="utf-8") as file:
+            for line in file:
+                if not line.strip():
+                    continue
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                items += [(record, agent) for agent in record.get("agents", [])]
+        if not items:
+            raise ValueError("채점할 턴이 없습니다.")
+        self.human_rater()
+        self.human_items, self.human_source, self.human_index = items, source, 0
+        self.refresh_human_scores()
+        self.show_human_item()
+        self.status = f"턴 {len(items)}개를 불러왔습니다. 숫자 키 0~9 또는 아래 버튼으로 채점, ←/→로 이동."
+
+    def refresh_human_scores(self):
+        import judge_agreement
+        self.human_scores = judge_agreement.load_humans(self.human_source).get(self.human_rater(), {})
+
+    def show_human_item(self):
+        from maci_judge import build_turn_summary
+        record, agent = self.human_items[self.human_index]
+        # 판정 모델과 같은 내용. 긴 과제 설명은 맨 아래로 옮겨 이번 턴의 행동이 먼저 보이게 함
+        summary = build_turn_summary(record, agent).split("\n")
+        task = [line for line in summary if line.startswith("Task for this agent:")]
+        rest = [line for line in summary if not line.startswith("Task for this agent:")]
+        text = (HUMAN_RUBRIC + "\n\n" + "\n".join(rest) + "\n\n=== 정책 코드 ===\n"
+                + (agent.get("generated_code") or "(이 턴에 기록된 코드 없음)") + "\n\n" + "\n".join(task))
+        self.human_lines = self.wrap(text, 1100)
+        self.human_scroll = 0
+
+    def human_key(self):
+        from judge_agreement import turn_key
+        record, agent = self.human_items[self.human_index]
+        return turn_key(record["step"], agent["agent"])
+
+    def set_human_score(self, score):
+        import judge_agreement
+        if not self.human_items:
+            raise ValueError("먼저 턴을 불러오세요.")
+        record, agent = self.human_items[self.human_index]
+        judge_agreement.save_human_score(self.human_source, self.human_rater(), record["step"], agent["agent"], score)
+        self.refresh_human_scores()
+        if score is not None:
+            self.move_human(1)
+
+    def move_human(self, delta):
+        if self.human_items:
+            self.human_index = min(len(self.human_items) - 1, max(0, self.human_index + delta))
+            self.show_human_item()
+
+    def next_unscored(self):
+        from judge_agreement import turn_key
+        for offset in range(1, len(self.human_items) + 1):
+            index = (self.human_index + offset) % len(self.human_items)
+            record, agent = self.human_items[index]
+            if turn_key(record["step"], agent["agent"]) not in self.human_scores:
+                self.human_index = index
+                self.show_human_item()
+                return
+        self.status = "모든 턴을 채점했습니다. 일치도를 계산하세요."
+
+    def human_agreement(self):
+        import judge_agreement
+        source = self.human_source or self.path("manifest")
+        if not source.is_file():
+            raise ValueError("결과 JSONL을 선택하세요.")
+        self.logs = judge_agreement.format_report(judge_agreement.report(source))
+        self._log_revision += 1
+        self.log_scroll = 0
+        self.status = "일치도 계산 완료 (아래 로그). 판정 결과는 LLM 채점 탭에서 같은 결과 파일로 만듭니다."
 
     def load_result(self):
         source = self.path("manifest")
@@ -342,8 +455,8 @@ class Launcher:
         self.widgets = []
         self.text("MACI 실험 실행 도구", 24, 18, self.title)
         self.text("키 파일: " + ("준비됨" if self.key_ready() else "key.txt 확인 필요"), 880, 28, self.small, DIM)
-        for i, tab in enumerate(("맵", "실행", "결과", "LLM 채점", "디버그")):
-            self.button(tab, (24 + i * 154, 66, 142, 40), lambda t=tab: self.switch(t), self.tab == tab)
+        for i, tab in enumerate(TABS):
+            self.button(tab, (24 + i * 130, 66, 122, 40), lambda t=tab: self.switch(t), self.tab == tab)
         self.button("목록 새로고침", (820, 66, 165, 40), self.refresh)
         self.button("작업 중단", (997, 66, 155, 40), self.stop)
         if self.tab == "맵":
@@ -389,6 +502,9 @@ class Launcher:
             self.button('이동 창 자동 열기: ' + ('켜짐' if self.auto_view else '꺼짐'), (790, 506, 362, 36), lambda: setattr(self, 'auto_view', not self.auto_view))
             self.button('디버깅: ' + ('켜짐' if self.debug else '꺼짐'), (24, 506, 240, 36), lambda: setattr(self, 'debug', not self.debug))
             self.button('로컬 모델 (8080) 사용', (280, 506, 480, 36), self.use_local_model)
+            self.button('조종: ' + ('단일 LLM (A·B 모두)' if self.controller == 'central' else '에이전트별 LLM'),
+                        (790, 552, 362, 36), lambda: setattr(self, 'controller', 'decentralized' if self.controller == 'central' else 'central'),
+                        self.controller == 'central')
             self.text("결과 자동 저장 · 이동 창에서 재생 속도 / 일시정지 / 이전·다음 step 조절", 24, 566, self.small, DIM)
         elif self.tab == "결과":
             self.field("manifest", "결과 JSONL 경로", 24, 122, 736)
@@ -424,16 +540,42 @@ class Launcher:
                 self.text(line, 36, 208+i*22, self.small, width=1100)
             pygame.display.flip()
             return
+        elif self.tab == "사람 채점":
+            self.field("manifest", "채점할 JSONL (결과 탭에서 선택 가능)", 24, 122, 600)
+            self.field("rater", "채점자 이름", 640, 122, 200)
+            self.button("턴 불러오기", (860, 146, 140, 36), self.load_human_items)
+            self.button("일치도 계산", (1012, 146, 140, 36), self.human_agreement)
+            if not self.human_items:
+                for i, line in enumerate(self.wrap(HUMAN_RUBRIC + " 채점은 결과 파일 옆 .human.<채점자>.json에 바로 저장됩니다.", 1120)):
+                    self.text(line, 24, 210 + i * 22, self.small, DIM)
+            else:
+                from judge_agreement import turn_key
+                record, agent = self.human_items[self.human_index]
+                mine = self.human_scores.get(self.human_key())
+                done = sum(turn_key(r["step"], a["agent"]) in self.human_scores for r, a in self.human_items)
+                self.text(f"{self.human_index + 1}/{len(self.human_items)}   step {record['step']}   에이전트 {agent['agent']}"
+                          f"   내 점수: {'-' if mine is None else mine}   (채점 {done}/{len(self.human_items)})", 24, 196)
+                pygame.draw.rect(self.screen, PANEL, (24, 224, 1128, 248), border_radius=7)
+                for i, line in enumerate(self.human_lines[self.human_scroll:self.human_scroll + HUMAN_LINES]):
+                    self.text(line, 36, 234 + i * 23, self.small, width=1100)
+                for score in range(11):
+                    self.button(str(score), (24 + score * 78, 482, 70, 36), lambda v=score: self.set_human_score(v), mine == score)
+                self.button("지우기", (882, 482, 110, 36), lambda: self.set_human_score(None))
+                self.button("◀ 이전", (24, 528, 150, 36), lambda: self.move_human(-1))
+                self.button("다음 ▶", (186, 528, 150, 36), lambda: self.move_human(1))
+                self.button("다음 미채점 턴", (348, 528, 220, 36), self.next_unscored)
+                self.text("휠: 턴 설명 스크롤 · 숫자 키 0~9 채점 · ←/→ 이동", 590, 537, self.small, DIM)
         else:
             self.field("manifest", "채점할 JSONL (결과 탭에서 선택 가능)", 24, 122, 1128)
-            self.field("judge", "판정 모델", 24, 210, 550)
+            self.field("judge", "판정 모델 (쉼표로 여러 개)", 24, 210, 550)
             self.field("turns", "최대 턴 (비우면 전체)", 605, 210, 260)
             self.field("agent", "에이전트 (비우면 전체)", 888, 210, 264)
             self.field("url", "API 주소", 24, 298, 1128)
             self.button("LLM 채점", (24, 390, 350, 44), self.judge)
             self.button("100점 기준 등록 + 채점", (394, 390, 400, 44), lambda: self.judge(True))
             self.text("기준 등록: solar-pro4로 실행한 결과를 선택하세요. 같은 턴 범위로 비교하세요.", 24, 456, self.small, DIM)
-            self.text("채점 출력은 결과 파일 옆 .judge.log.txt에 저장됩니다. API 키는 key.txt를 사용합니다.", 24, 486, self.small, DIM)
+            self.text("채점 출력은 결과 파일 옆 .judge.log.txt, 턴별 점수는 .judges.json에 저장됩니다. API 키는 key.txt를 사용합니다.", 24, 486, self.small, DIM)
+            self.text("판정 모델을 여러 개 쓰면 판정끼리, 사람 채점과의 일치도가 함께 출력됩니다. 기준 점수는 판정 모델별로 저장됩니다.", 24, 516, self.small, DIM)
         self.text(self.status, 24, 600, self.small, ACCENT, 1128)
         pygame.draw.rect(self.screen, (10, 15, 23), (24, 631, 1128, 193), border_radius=8)
         end = max(0, len(self.logs) - self.log_scroll)
@@ -466,6 +608,13 @@ class Launcher:
                             break
                 elif event.type == pygame.TEXTINPUT and self.focus:
                     self.fields[self.focus] += event.text
+                elif event.type == pygame.KEYDOWN and not self.focus and self.tab == "사람 채점" and self.human_items:
+                    if event.key == pygame.K_LEFT:
+                        self.act(lambda: self.move_human(-1))
+                    elif event.key == pygame.K_RIGHT:
+                        self.act(lambda: self.move_human(1))
+                    elif pygame.K_0 <= event.key <= pygame.K_9:
+                        self.act(lambda v=event.key - pygame.K_0: self.set_human_score(v))
                 elif event.type == pygame.KEYDOWN and self.focus:
                     if event.key == pygame.K_BACKSPACE:
                         self.fields[self.focus] = self.fields[self.focus][:-1]
@@ -487,6 +636,8 @@ class Launcher:
                         self.log_scroll = min(max(0, len(self._debug_lines)-28), max(0, self.log_scroll-event.y*3))
                     elif y >= 631:
                         self.log_scroll = min(max(0, len(self.logs) - 8), max(0, self.log_scroll - event.y * 3))
+                    elif self.tab == "사람 채점" and 224 <= y <= 472:
+                        self.human_scroll = min(max(0, len(self.human_lines) - HUMAN_LINES), max(0, self.human_scroll - event.y * 3))
                     elif self.tab == "결과" and x >= 382:
                         self.detail_scroll = min(max(0, len(self.detail) - 15), max(0, self.detail_scroll - event.y * 3))
                     else:

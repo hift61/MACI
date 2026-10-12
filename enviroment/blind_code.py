@@ -24,6 +24,9 @@ class BlindCodeEnvironment(SequenceRoomsEnvironment):
         self._log('sequence_reset', sorted(set(participants)), object_id=self.vault_id,
                   reason=reason)
         self.resets += 1
+        for aid in self.agents:
+            self._notify(aid, {'type': 'attempt_reset', 'reason': reason,
+                               'caused_by_you': aid in participants})
         self.progress = 0
         self.submitted = []
         self.submitted_by = []
@@ -49,7 +52,7 @@ class BlindCodeEnvironment(SequenceRoomsEnvironment):
         agent, pad = self.agents[agent_id], self.objects[pad_id]
         if pad['room'] != agent_id:
             return
-        if not contact and (agent.x-pad['x'])**2 + (agent.y-pad['y'])**2 > pad['touch_radius']**2:
+        if not contact and (agent.x-pad['x'])**2 + (agent.y-pad['y'])**2 > (pad['touch_radius'] + 1e-8)**2:
             return
         self.submitted.append(pad_id)
         self.submitted_by.append(agent_id)

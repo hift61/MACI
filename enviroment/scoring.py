@@ -1,12 +1,15 @@
-from dataclasses import dataclass, field
+import json
+from dataclasses import asdict, dataclass, field, fields
 from token_usage import TOKEN_ALLOWANCE, TOKEN_PENALTY_PER_1000
 
 # 한 회차(episode)가 끝난 Environment의 event_log/decision_log를 읽어 점수를 매김.
 #   개인 점수: 각 에이전트가 일으킨 이벤트(물체 목격, 도움이 되는 동작 등)마다 부여
-#   단체 점수: 클리어 여부, 클리어 시간, 헛된 시도 횟수로 팀 전체에 부여
+#   단체 점수: 클리어 여부와 클리어 시간으로 팀 전체에 부여
 #   총점 = 개인 점수 합 + 단체 점수
 # 같은 점수 항목을 반복해서 쌓는 것(레버를 계속 당기기, 판을 밟았다 내렸다 하기)을 막기 위해
-# 개인 가점은 (에이전트, 이벤트 종류, 대상 오브젝트) 조합마다 한 번만 줌. 감점은 매번 적용.
+# 개인 가점은 (에이전트, 이벤트 종류, 대상 오브젝트) 조합마다 한 번만 줌. 감점은 매번 적용하되
+# 잘못된 실행 감점(invalid action, 코드 오류, 헛된 시도)은 종류별 하한(cap)까지만 깎음.
+# 가중치는 협력 중심: 탐색(목격) 점수는 작게, 협력 결과(순서 이어받기, 협력 물품, 클리어)는 크게.
 
 # 시도로 세는 상호작용 action type -> 그 시도가 성공했을 때 같은 step에 남는 이벤트 종류
 # (press_button은 별도 이벤트가 없어 연결된 문의 상태 변화로 판정)
@@ -24,23 +27,45 @@ class ScoreConfig:
     token_allowance: int = TOKEN_ALLOWANCE
     token_penalty_per_1000: float = TOKEN_PENALTY_PER_1000
     # ---- 개인 점수 (대상 오브젝트마다 한 번) ----
-    seen_points: float = 1.0                    # 물체를 처음 목격
-    seen_points_by_type: dict = field(default_factory=lambda: {"clue": 3.0})  # 종류별로 다르게 줄 때
-    pickup_points: float = 3.0                  # normal 물품/열쇠 습득
+    seen_points: float = 0.2                    # 물체를 처음 목격 (탐색은 협력이 아니므로 작게)
+    seen_points_by_type: dict = field(default_factory=lambda: {"clue": 1.0})  # 종류별로 다르게 줄 때
+    pickup_points: float = 2.0                  # normal 물품/열쇠 습득
     coop_pickup_points: float = 8.0             # coop 물품 습득 (함께 들어준 에이전트도 같은 점수)
-    lever_points: float = 3.0                   # 레버 당기기
-    door_unlock_points: float = 10.0            # 문 열기 (압력판이면 밟고 있던 전원)
-    plate_points: float = 2.0                   # 압력판에 올라서기
-    portal_points: float = 1.0                  # 포탈 사용
-    number_points: float = 2.0                  # 번호판을 순서에 맞게 누름 (sequence_rooms)
+    lever_points: float = 2.0                   # 레버 당기기
+    door_unlock_points: float = 5.0             # 문 열기 (압력판이면 밟고 있던 전원)
+    plate_points: float = 1.0                   # 압력판에 올라서기
+    portal_points: float = 0.5                  # 포탈 사용
+    number_points: float = 3.0                  # 번호판을 순서에 맞게 누름 (sequence_rooms)
+    handoff_points: float = 2.0                 # 상대의 올바른 입력 바로 다음 차례를 이어받아 맞게 입력
+    level_points: float = 10.0                  # curriculum 단계 완료
     # ---- 개인 감점 (매번) ----
     trap_penalty: float = -30.0                 # trap 발동
-    sequence_reset_penalty: float = -3.0        # 번호판을 틀리게 눌러 전체 순서를 리셋시킴 (sequence_rooms)
+    sequence_reset_penalty: float = -3.0        # 번호판을 틀리게/동시에 눌러 전체 순서를 리셋시킴
+    invalid_action_penalty: float = -1.0        # 형식이 틀린/알 수 없는 행동, 없는 수신자에게 메시지
+    invalid_action_penalty_cap: float = -10.0
+    code_failure_penalty: float = -1.0          # 제출 검사에서 거부되거나 실행에 실패한 정책 코드 1회당
+    code_failure_penalty_cap: float = -15.0
+    failed_attempt_penalty: float = -0.5        # 상태를 바꾸지 못한 상호작용 시도 1회당
+    failed_attempt_penalty_cap: float = -10.0
     # ---- 단체 점수 ----
-    clear_bonus: float = 50.0                   # 클리어하면
-    time_bonus_max: float = 30.0                # 1 step 만에 클리어하면 전부, max_steps에 클리어하면 0에 가깝게 선형 감소
-    failed_attempt_penalty: float = -1.0        # 상태를 바꾸지 못한 상호작용 시도 1회당
-    failed_attempt_penalty_cap: float = -20.0   # 헛된 시도 감점 하한
+    clear_bonus: float = 60.0                   # 클리어하면
+    time_bonus_max: float = 20.0                # 1 step 만에 클리어하면 전부, max_steps에 클리어하면 0에 가깝게 선형 감소
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ScoreConfig":
+        known = {f.name for f in fields(cls)}
+        unknown = sorted(set(data) - known)
+        if unknown:
+            raise ValueError(f"unknown score weights: {unknown}")
+        return cls(**data)
+
+    @classmethod
+    def load(cls, path) -> "ScoreConfig":
+        with open(path, encoding="utf-8") as file:
+            return cls.from_dict(json.load(file))
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
 # event: EventLog 항목 하나 -> 그 이벤트의 대상 오브젝트 id (중복 가점 판정 키)
@@ -57,7 +82,7 @@ def _target_of(event: dict):
 def _individual_points(event: dict, config: ScoreConfig):
     event_type = event["type"]
     if event_type == 'level_completed':
-        return 10.0, '단계 완료'
+        return config.level_points, '단계 완료'
     if event_type == "object_seen":
         return config.seen_points_by_type.get(event["object_type"], config.seen_points), "목격"
     if event_type == "item_picked_up":
@@ -80,12 +105,15 @@ def _individual_points(event: dict, config: ScoreConfig):
         return config.number_points, "번호 순서 입력"
     if event_type == "sequence_reset":
         return config.sequence_reset_penalty, "순서 리셋"
+    if event_type == "invalid_action":
+        return config.invalid_action_penalty, "잘못된 행동"
     return None
 
 
-# 상호작용 시도 중 같은 step에 그 에이전트가 일으킨 대응 이벤트가 없는 것(=헛된 시도)을 셈
-def count_attempts(env) -> tuple[int, int]:
-    attempts = failed = 0
+# 상호작용 시도 중 같은 step에 그 에이전트가 일으킨 대응 이벤트가 없는 것(=헛된 시도)을 셈.
+# 반환: (전체 시도 수, 헛된 시도 수, 헛된 시도 목록 [(step, agent_id, action_type)])
+def _attempts(env):
+    attempts, failures = 0, []
     for decision in env.decision_log.entries:
         action_type = (decision["final_action"] or {}).get("type")
         if action_type not in ATTEMPT_EFFECTS:
@@ -97,7 +125,12 @@ def count_attempts(env) -> tuple[int, int]:
             for e in env.event_log.filter(step=decision["step"])
         )
         if not succeeded:
-            failed += 1
+            failures.append((decision["step"], decision["agent_id"], action_type))
+    return attempts, len(failures), failures
+
+
+def count_attempts(env) -> tuple[int, int]:
+    attempts, failed, _ = _attempts(env)
     return attempts, failed
 
 
@@ -119,16 +152,49 @@ def clear_step(events: list[dict], objectives: list[dict]):
     return max(steps) if steps else None
 
 
+# 같은 policy 객체를 공유하는 에이전트끼리 묶음 (중앙집중 모드에서는 모델 하나가 전원을 조종).
+# 토큰/코드 오류는 정책 단위로 생기므로 묶음 단위로 계산해 구성원에게 똑같이 나눔
+def _policy_groups(env) -> list[tuple[object, list[str]]]:
+    groups: dict[int, tuple[object, list[str]]] = {}
+    for agent_id, agent in env.agents.items():
+        groups.setdefault(id(agent.policy), (agent.policy, []))[1].append(agent_id)
+    return list(groups.values())
+
+
 # env: 회차가 끝난 Environment
 # max_steps: 이 회차에 허용된 최대 step 수 (시간 보너스 계산용)
 # objectives: 클리어 조건 목록 (형식은 _matches 참고). 전부 충족된 step이 클리어 시간
-# 반환: {"agents": {agent_id: {"score", "items"}}, "team": {...}, "individual_total", "total"}
+# 반환: {"agents": {agent_id: {"score", "items", ...}}, "team": {...}, "individual_total", "total"}
 def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConfig = None) -> dict:
     config = config or ScoreConfig()
 
     agents = {agent_id: {"score": 0.0, "items": []} for agent_id in env.agents}
+    penalty_totals: dict[tuple[str, str], float] = {}
+
+    def add(agent_id, step, reason, target, points, cap=None, category=None):
+        if cap is not None:
+            used = penalty_totals.get((agent_id, category), 0.0)
+            points = max(points, cap - used)
+            if points >= 0:
+                return
+            penalty_totals[(agent_id, category)] = used + points
+        agents[agent_id]["score"] += points
+        agents[agent_id]["items"].append({"step": step, "reason": reason, "target": target, "points": points})
+
+    caps = {"invalid_action": config.invalid_action_penalty_cap}
     awarded: set = set()
+    last_accepted_by = None  # 현재 시도에서 마지막으로 맞게 입력한 에이전트 (순서 이어받기 판정)
     for event in env.event_log.entries:
+        if event["type"] in ("sequence_reset", "level_started"):
+            last_accepted_by = None
+        if event["type"] == "number_accepted":
+            presser = event["agent_ids"][0] if event["agent_ids"] else None
+            if presser in agents and last_accepted_by not in (None, presser):
+                key = (presser, "handoff", event.get("order"))
+                if key not in awarded and config.handoff_points > 0:
+                    awarded.add(key)
+                    add(presser, event["step"], "순서 이어받기", event.get("object_id"), config.handoff_points)
+            last_accepted_by = presser
         result = _individual_points(event, config)
         if result is None:
             continue
@@ -141,25 +207,39 @@ def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConf
                 if key in awarded:
                     continue
                 awarded.add(key)
-            agents[agent_id]["score"] += points
-            agents[agent_id]["items"].append({
-                "step": event["step"],
-                "reason": reason,
-                "target": _target_of(event),
-                "points": points
-            })
+            cap = caps.get(event["type"])
+            add(agent_id, event["step"], reason, _target_of(event), points, cap, event["type"] if cap is not None else None)
 
-    for agent_id, agent in env.agents.items():
-        usage = getattr(agent.policy, 'token_usage', {})
+    attempts, failed, failures = _attempts(env)
+    failed_by_agent: dict[str, int] = {}
+    for step, agent_id, action_type in failures:
+        if agent_id not in agents:
+            continue
+        failed_by_agent[agent_id] = failed_by_agent.get(agent_id, 0) + 1
+        add(agent_id, step, "헛된 상호작용 시도", action_type, config.failed_attempt_penalty,
+            config.failed_attempt_penalty_cap, "failed_attempt")
+
+    for policy, members in _policy_groups(env):
+        usage = getattr(policy, 'token_usage', {}) if policy is not None else {}
         output_tokens = usage.get('completion_tokens', 0)
-        penalty = round(max(0, output_tokens - config.token_allowance)
-                        / 1000 * config.token_penalty_per_1000, 2)
-        agents[agent_id]['token_usage'] = usage
-        agents[agent_id]['token_penalty'] = -penalty
-        if penalty:
-            agents[agent_id]['score'] -= penalty
-            agents[agent_id]['items'].append({'step': env.step_count, 'reason': '과도한 토큰 소비',
-                                             'target': 'LLM', 'points': -penalty})
+        allowance = config.token_allowance * len(members)
+        penalty = round(max(0, output_tokens - allowance) / 1000 * config.token_penalty_per_1000 / len(members), 2)
+        checks = getattr(policy, 'code_checks', None) if policy is not None else None
+        counts = checks.snapshot() if checks is not None else {}
+        code_failures = counts.get('compile_failures', 0) + counts.get('execution_failures', 0)
+        for agent_id in members:
+            agents[agent_id]['token_usage'] = dict(usage, **({'shared_with': members} if len(members) > 1 else {}))
+            agents[agent_id]['token_penalty'] = -penalty
+            if penalty:
+                add(agent_id, env.step_count, '과도한 토큰 소비', 'LLM', -penalty)
+            agents[agent_id]['code_failures'] = code_failures
+            if code_failures:
+                points = code_failures * config.code_failure_penalty / len(members)
+                add(agent_id, env.step_count, f'코드 오류 {code_failures}회', 'LLM', points,
+                    config.code_failure_penalty_cap, 'code_failure')
+            agents[agent_id]['failed_attempts'] = failed_by_agent.get(agent_id, 0)
+            agents[agent_id]['invalid_actions'] = sum(
+                1 for e in env.event_log.entries if e['type'] == 'invalid_action' and agent_id in e['agent_ids'])
 
     cleared_at = clear_step(env.event_log.entries, objectives)
     cleared = cleared_at is not None
@@ -167,11 +247,11 @@ def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConf
     time_bonus = 0.0
     if cleared:
         time_bonus = config.time_bonus_max * max(0.0, 1 - (cleared_at - 1) / max_steps)
-    attempts, failed = count_attempts(env)
-    attempt_penalty = max(config.failed_attempt_penalty_cap, failed * config.failed_attempt_penalty) if failed else 0.0
-    team_score = clear_bonus + time_bonus + attempt_penalty
+    team_score = clear_bonus + time_bonus
 
-    individual_total = sum(a["score"] for a in agents.values())
+    for agent in agents.values():
+        agent["score"] = round(agent["score"], 2)
+    individual_total = round(sum(a["score"] for a in agents.values()), 2)
     return {
         "agents": agents,
         "team": {
@@ -182,7 +262,6 @@ def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConf
             "time_bonus": round(time_bonus, 2),
             "attempts": attempts,
             "failed_attempts": failed,
-            "attempt_penalty": attempt_penalty,
             "score": round(team_score, 2)
         },
         "individual_total": individual_total,

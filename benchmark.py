@@ -11,6 +11,7 @@ Usage:
     python benchmark.py --model upstage/solar-pro4 --steps 80 --map-seed 42        # 무작위 생성 맵
     python benchmark.py --model upstage/solar-pro4 --steps 80 --map-file map_datas/map_42.json
     python benchmark.py --policy tooluse --map-seed 42 --steps 80                  # API 키 없이 실행 확인용
+    python benchmark.py --environment sequence_rooms --controller central --model upstage/solar-pro4  # LLM 하나가 A/B 모두 조종
 """
 from __future__ import annotations
 
@@ -28,8 +29,8 @@ if ENVIRONMENT_DIR not in sys.path:
     sys.path.insert(0, ENVIRONMENT_DIR)  # enviroment/*.py use flat sibling imports (from policy import ...)
 
 from enviroment import Environment  # noqa: E402
-from policy import CodePolicy, HybridPolicy, NoopPolicy, RandomPolicy, ToolUsePolicy  # noqa: E402
-from scoring import clear_step, score_episode  # noqa: E402
+from policy import CentralCodePolicy, CodePolicy, HybridPolicy, NoopPolicy, RandomPolicy, ToolUsePolicy  # noqa: E402
+from scoring import ScoreConfig, clear_step, score_episode  # noqa: E402
 from context_memory import ContextMemory, ContextConfig  # noqa: E402
 from mapgen import MapSpec, generate_map  # noqa: E402
 from mapgen.builder import build_environment  # noqa: E402
@@ -40,6 +41,34 @@ from curriculum import build_curriculum  # noqa: E402
 from environment_prompt import environment_description  # noqa: E402
 
 RUNS_DIR = os.path.join(HERE, "benchmark_runs")
+# 점수 가중치 파일. 있으면 기본값(scoring.ScoreConfig) 대신 사용하고, 사용한 값은 score.json에 함께 저장
+SCORE_CONFIG_PATH = os.path.join(HERE, "scoring_weights.json")
+# decentralized: 에이전트마다 LLM 하나 (메시지로 협력) / central: LLM 하나가 모든 에이전트를 조종
+CONTROLLER_CHOICES = ("decentralized", "central")
+
+
+def load_score_config(path: str | None = None) -> ScoreConfig:
+    path = path or (SCORE_CONFIG_PATH if os.path.isfile(SCORE_CONFIG_PATH) else None)
+    return ScoreConfig.load(path) if path else ScoreConfig()
+
+
+# 에이전트 설명에 붙는 감점 안내 (실제 채점에 쓰는 가중치에서 만듦)
+def penalty_description(config: ScoreConfig) -> str:
+    return (f" Mistakes reduce your score: each invalid action (malformed or unknown action type, or a message to "
+            f"an unknown agent) costs {-config.invalid_action_penalty:g} point(s), up to "
+            f"{-config.invalid_action_penalty_cap:g}; each rejected or failing policy code submission/execution costs "
+            f"{-config.code_failure_penalty:g}, up to {-config.code_failure_penalty_cap:g}; each interaction with no "
+            f"effect costs {-config.failed_attempt_penalty:g}, up to {-config.failed_attempt_penalty_cap:g}. "
+            "observation.last_action_result reports whether your previous action was ok, invalid or had no effect, "
+            "and observation.notices lists recent events such as input resets.")
+
+
+# 중앙집중 모드에서 모델 하나가 받는 과제 설명: 에이전트별 설명을 모두 담음
+def central_task_description(task_descriptions: dict[str, str]) -> str:
+    parts = [f"You control all agents at once: {', '.join(task_descriptions)}. "
+             "Below is each agent's own task description, written from that agent's point of view."]
+    parts += [f"[Agent {aid}]\n{text}" for aid, text in task_descriptions.items()]
+    return "\n\n".join(parts)
 
 
 def is_local_endpoint(base_url):
@@ -115,9 +144,18 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                 map_spec: MapSpec = None, policy_kind: str = "code", environment_kind: str = "map",
                 sequence_seed: int = 42, pads_per_room: int = 5, presses_per_room: int = 3,
                 max_resets: int | None = None, debug: bool = False, reveal_goal: bool = True,
-                reward_visible: bool = False, context_max_tokens: int = 64_000) -> None:
+                reward_visible: bool = False, context_max_tokens: int = 64_000,
+                solo_agent: str | None = None, controller: str = "decentralized",
+                score_config: ScoreConfig | None = None) -> None:
     if steps < 1:
         raise ValueError("steps must be at least 1")
+    if controller not in CONTROLLER_CHOICES:
+        raise ValueError(f"unknown controller: {controller!r} (expected one of {CONTROLLER_CHOICES})")
+    if controller == "central" and policy_kind not in ("code", "hybrid"):
+        raise ValueError("the central controller needs an LLM code policy (--policy code)")
+    if controller == "central" and solo_agent is not None:
+        raise ValueError("the central controller cannot be combined with a solo-agent run")
+    score_config = score_config or ScoreConfig()
     if environment_kind == "curriculum":
         if map_spec is not None:
             raise ValueError('curriculum cannot be combined with a map')
@@ -142,9 +180,12 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
         env, task_descriptions = build_episode(reveal_goal=reveal_goal)
         objectives = GATE_OBJECTIVES
 
+    if solo_agent is not None and solo_agent not in env.agents:
+        raise ValueError(f'Unknown solo agent: {solo_agent}')
+
     if reward_visible:
         def reward_for(agent_id):
-            score = score_episode(env, max_steps=steps, objectives=objectives)
+            score = score_episode(env, max_steps=steps, objectives=objectives, config=score_config)
             return {'individual_score': score['agents'][agent_id]['score'],
                     'team_score': score['team']['score'], 'total_score': score['total']}
         env.reward_provider = reward_for
@@ -152,7 +193,7 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
         ' Observation reward contains your cumulative individual_score, team_score and total_score. '
         'Use changes in these scores as reward feedback.' if reward_visible else
         ' Numeric reward scores are not provided in your observations.')
-    task_descriptions = {aid: description + reward_description
+    task_descriptions = {aid: description + reward_description + penalty_description(score_config)
                          for aid, description in task_descriptions.items()}
 
     os.makedirs(os.path.dirname(os.path.abspath(log_path)), exist_ok=True)
@@ -187,7 +228,8 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
     policies = {}
     compression_path = os.path.splitext(log_path)[0] + '.context_compressions.jsonl'
     archive_path = os.path.splitext(log_path)[0] + '.context_archive.jsonl'
-    for path in (compression_path, archive_path):
+    observation_path = os.path.splitext(log_path)[0] + '.observations.jsonl'
+    for path in (compression_path, archive_path, observation_path):
         with open(path, 'w', encoding='utf-8'):
             pass
     context_lock = threading.Lock()
@@ -196,9 +238,38 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
         with context_lock, open(path, 'a', encoding='utf-8') as destination:
             destination.write(json.dumps({'agent': agent_id, **record}, ensure_ascii=False) + '\n')
 
+    def save_snapshot(step, observations):
+        with open(observation_path, 'a', encoding='utf-8') as destination:
+            for aid, observation in observations.items():
+                destination.write(json.dumps({'step': step, 'agent': aid,
+                                              'observation': observation}, ensure_ascii=False, default=str) + '\n')
+            destination.flush()
+
+    env.snapshot_sink = save_snapshot
+
+    central = None
+    if controller == "central":
+        central = CentralCodePolicy(model, central_task_description(task_descriptions), list(env.agents),
+                                    base_url=base_url, api_key=api_key, extra_params=extra_params)
+        if is_local_endpoint(base_url):
+            central.client = central.client.with_options(timeout=60, max_retries=0)
+        central._context_memory = ContextMemory(ContextConfig(max_tokens=context_max_tokens))
+        central.context_memory.sink = lambda event: write_context(compression_path, 'central', event)
+        central.conversation_history.sink = lambda message: write_context(archive_path, 'central', {'message': message})
+        central.code_checks.sink = lambda event: write_check('central', event)
+        central.debug_sink = lambda event, details: emit_debug(event, 'central', **details)
+        env.joint_policy = central
     for agent_id, description in task_descriptions.items():
-        policies[agent_id] = make_policy(policy_kind, model, description, base_url, api_key, extra_params,
-                                         env.interact_radius)
+        if central is not None:
+            policies[agent_id] = central
+            env.agents[agent_id].set_policy(central)
+            continue
+        if solo_agent == agent_id:
+            description += (' This is a single-active-agent control run. Other agents '
+                            'always take noop actions and will not assist or reply.')
+        policies[agent_id] = (NoopPolicy() if solo_agent is not None and agent_id != solo_agent else
+                              make_policy(policy_kind, model, description, base_url, api_key, extra_params,
+                                          env.interact_radius))
         if hasattr(policies[agent_id], 'client'):
             policies[agent_id]._context_memory = ContextMemory(ContextConfig(max_tokens=context_max_tokens))
             policies[agent_id].context_memory.sink = lambda event, aid=agent_id: write_context(compression_path, aid, event)
@@ -220,7 +291,8 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
     with open(scene_path, "w", encoding="utf-8") as scene:
         json.dump({"environment": environment_kind, "world": snapshot(), "reveal_goal": reveal_goal,
                    "reward_visible": reward_visible,
-                   "score": score_episode(env, max_steps=steps, objectives=objectives),
+                   "controller": controller,
+                   "score": score_episode(env, max_steps=steps, objectives=objectives, config=score_config),
                    "agents": [{"agent": aid, "position": [a.x, a.y], "facing": a.facing}
                               for aid, a in env.agents.items()]}, scene, ensure_ascii=False)
 
@@ -239,17 +311,21 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                 "environment": environment_kind,
                 "reveal_goal": reveal_goal,
                 "reward_visible": reward_visible,
+                "solo_agent": solo_agent,
+                "controller": controller,
+                "configured_steps": steps,
                 "world": snapshot(),
                 "failure": env.failure,
                 "objectives": objectives,
                 "cleared": clear_step(env.event_log.entries, objectives) is not None,
                 "messages": step_messages,
                 "events": env.event_log.filter(step=step),
-                "score": score_episode(env, max_steps=steps, objectives=objectives),
+                "score": score_episode(env, max_steps=steps, objectives=objectives, config=score_config),
                 "agents": [
                     {
                         "agent": agent_id,
-                        "model": model if policy_kind in ("code", "hybrid") else policy_kind,
+                        "model": ('noop' if solo_agent is not None and agent_id != solo_agent else
+                                  model if policy_kind in ("code", "hybrid") else policy_kind),
                         "position": [env.agents[agent_id].x, env.agents[agent_id].y],
                         "facing": env.agents[agent_id].facing,
                         "spatial_state": env.agents[agent_id].spatial_state(),
@@ -305,9 +381,11 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                 break
 
     # 회차 점수: manifest는 maci_judge.py가 step 단위로 읽으므로 같은 파일에 섞지 않고 옆에 따로 저장
-    score = score_episode(env, max_steps=steps, objectives=objectives)
+    score = score_episode(env, max_steps=steps, objectives=objectives, config=score_config)
     score["code_checks"] = {aid: p.code_checks.snapshot() for aid, p in policies.items()
                             if hasattr(p, "code_checks")}
+    score["controller"] = controller
+    score["score_config"] = score_config.to_dict()
     score_path = os.path.splitext(log_path)[0] + ".score.json"
     with open(score_path, "w", encoding="utf-8") as f:
         json.dump(score, f, ensure_ascii=False, indent=2, default=str)
@@ -344,8 +422,13 @@ def main():
     parser.add_argument('--debug', action='store_true', help='실시간 상세 로그 출력 및 .debug.jsonl 저장')
     parser.add_argument('--hide-goal', action='store_true', help='에이전트 초기 설명에서 목표 숨기기 (최소 규칙 유지)')
     parser.add_argument('--show-reward', action='store_true', help='Include cumulative numeric scores in agent observations')
+    parser.add_argument('--solo-agent', choices=('A', 'B'), help='Run only this agent; all other agents take noop actions')
     parser.add_argument('--context-max-tokens', type=int, default=64_000,
                         help='Advisory context pressure threshold (UTF-8 byte estimate + output reserve); the model decides whether to compress (default: 64000)')
+    parser.add_argument("--controller", choices=CONTROLLER_CHOICES, default="decentralized",
+                        help="decentralized: one LLM per agent (messages); central: one LLM controls every agent")
+    parser.add_argument("--score-config", default=None,
+                        help="score weight JSON (default: scoring_weights.json if present, else built-in weights)")
     parser.add_argument("--policy", choices=POLICY_CHOICES, default="code",
                         help="code: reusable LLM code required; hybrid: compatibility alias for code; tooluse/random/noop: no API")
     args = parser.parse_args()
@@ -359,6 +442,12 @@ def main():
         parser.error("need 1 <= presses-per-room <= pads-per-room <= 5")
     if args.max_resets is not None and args.max_resets < 0:
         parser.error("--max-resets must be nonnegative")
+    if args.controller == "central" and (args.policy not in ("code", "hybrid") or args.solo_agent):
+        parser.error("--controller central needs --policy code and cannot be combined with --solo-agent")
+    try:
+        score_config = load_score_config(args.score_config)
+    except (OSError, ValueError, TypeError) as exc:
+        parser.error(f"--score-config: {exc}")
 
     map_spec = None
     if args.map_file:
@@ -378,7 +467,8 @@ def main():
     run_episode(args.model, args.base_url, api_key, extra_params, args.steps, out_path, map_spec, args.policy,
                 args.environment, args.sequence_seed, args.pads_per_room, args.presses_per_room, args.max_resets, args.debug,
                 reveal_goal=not args.hide_goal, reward_visible=args.show_reward,
-                context_max_tokens=args.context_max_tokens)
+                context_max_tokens=args.context_max_tokens, solo_agent=args.solo_agent,
+                controller=args.controller, score_config=score_config)
     print(f"\nWrote manifest: {out_path}")
     print(f"Score it with: python maci_judge.py {out_path}")
 

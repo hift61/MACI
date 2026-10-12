@@ -42,7 +42,7 @@ class LauncherTests(unittest.TestCase):
         self.assertIsNone(self.app.proc, 'subprocess did not finish')
 
     def test_all_tabs_render(self):
-        for tab in ('맵', '실행', '결과', 'LLM 채점', '디버그'):
+        for tab in launcher.TABS:
             self.app.switch(tab)
             self.app.draw()
             self.assertGreater(len(self.app.widgets), 5)

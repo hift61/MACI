@@ -82,6 +82,9 @@ class CurriculumEnvironment(BlindCodeEnvironment):
         self._log('sequence_reset', sorted(set(participants)), object_id=self.vault_id,
                   reason=reason, level=self.level)
         self.resets += 1
+        for aid in self.agents:
+            self._notify(aid, {'type': 'attempt_reset', 'reason': reason, 'level': self.level,
+                               'caused_by_you': aid in participants})
         self.progress = 0
         self._contributors = []
         self._refresh_plans()
@@ -95,7 +98,7 @@ class CurriculumEnvironment(BlindCodeEnvironment):
         pad, agent = self.objects[pad_id], self.agents[agent_id]
         if pad['type'] != 'number_pad' or pad['room'] != agent_id:
             return
-        if not contact and (agent.x-pad['x'])**2 + (agent.y-pad['y'])**2 > pad['touch_radius']**2:
+        if not contact and (agent.x-pad['x'])**2 + (agent.y-pad['y'])**2 > (pad['touch_radius'] + 1e-8)**2:
             return
         if pad_id != self.sequence[self.progress]:
             self._restart_attempt('wrong_order', [agent_id])

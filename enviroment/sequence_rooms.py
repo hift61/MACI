@@ -100,7 +100,9 @@ class SequenceRoomsEnvironment(Environment):
         for pad_id, pad in self.objects.items():
             if pad['type'] != 'number_pad':
                 continue
-            radius = pad['touch_radius']
+            # Floating-point movement can stop microscopically outside the
+            # requested boundary. Treat that point as contact consistently.
+            radius = pad['touch_radius'] + 1e-8
             if math.hypot(agent.x-pad['x'], agent.y-pad['y']) <= radius:
                 inside.add(pad_id)
             if pad_id in previous:
@@ -151,6 +153,9 @@ class SequenceRoomsEnvironment(Environment):
         self.progress = 0
         self.resets += 1
         self._contributors = []
+        causers = {aid for aid, _ in contacts}
+        for aid in self.agents:
+            self._notify(aid, {"type": "sequence_reset", "reason": reason, "caused_by_you": aid in causers})
         for display in self._displays():
             display["resets"] = self.resets
         if self.max_resets is not None and self.resets > self.max_resets:

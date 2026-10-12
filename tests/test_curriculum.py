@@ -14,6 +14,15 @@ from tests.test_blind_code import enter
 
 
 class CurriculumTests(unittest.TestCase):
+    def test_contact_at_float_rounding_boundary_advances_level(self):
+        env, _, _ = build_curriculum(seed=42)
+        pad = env.objects[env.sequence[0]]
+        agent = env.agents['A']
+        agent.x = pad['x'] + pad['touch_radius'] + 5e-9
+        agent.y = pad['y']
+        env.apply_action('A', {'type': 'noop'})
+        self.assertEqual(env.completed_levels, [1])
+
     def test_feedback_and_shared_observations_allow_discovery(self):
         # A test controller exchanges each room's observations through messages.
         # It discovers prefixes through contact feedback, without reading sequence.

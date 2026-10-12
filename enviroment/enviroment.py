@@ -43,6 +43,12 @@ class Environment:
         self._plate_occupants: dict[str, set[str]] = {}  # plate_id -> 지난 판정 때 위에 서 있던 agent_id 집합 (진입/이탈 이벤트용)
         self._seen: dict[str, set[str]] = {}  # agent_id -> 지금까지 관찰에 한 번이라도 나타난 object_id 집합 (object_seen 이벤트용)
         self._known: dict[str, dict[str, dict]] = {}  # agent_id -> object_id -> 마지막으로 본 상태 (관찰의 known_objects)
+        # agent_id -> 직전 행동의 처리 결과 (관찰의 last_action_result). 잘못된 행동/헛된 시도를 바로 알려줌
+        self._action_results: dict[str, dict] = {}
+        # agent_id -> 최근 알림 목록 (관찰의 notices). 리셋처럼 자기 행동과 무관하게 일어난 일을 알려줌
+        self._notices: dict[str, list[dict]] = {}
+        # 중앙집중 모드: 이 객체가 있으면 모든 에이전트의 행동을 한 번에 결정 (decide_all)
+        self.joint_policy = None
 
     # Register a new agent into the environment
     def add_agent(
@@ -733,7 +739,11 @@ class Environment:
             # inbox는 목록만 복사하고 메시지 객체는 그대로 공유: 동시 실행에서 이번 step에 다른
             # 에이전트가 보낸 메시지가 이미 만든 관찰에 끼어들면 안 되지만, ObeyCommandRule이 처리한
             # 명령 메시지에 표시하는 message["handled"] = True는 실제 agent.inbox에 반영돼야 함
-            "inbox": list(agent.inbox)
+            "inbox": list(agent.inbox),
+            # 직전 행동이 정상(ok)/무효(invalid)/효과 없음(no_effect) 중 무엇이었는지 (처음엔 None)
+            "last_action_result": copy.deepcopy(self._action_results.get(agent_id)),
+            # 최근 알림 (리셋 등). 오래된 순, 최대 NOTICE_LIMIT개
+            "notices": copy.deepcopy(self._notices.get(agent_id, []))
         }
         reward_provider = getattr(self, 'reward_provider', None)
         if reward_provider is not None:
@@ -783,12 +793,17 @@ class Environment:
         if observation is None:
             observation = self.get_observation(agent_id)
         action = self._enforce_rules(agent, observation, action)
-        if not self._is_well_formed(action):
+        error = self._action_error(action)
+        if error is not None:
             # LLM이 짠 코드가 {"distance": "5"}나 {"object_id": [...]}를 반환하면 아래 처리에서
             # TypeError로 회차 전체가 죽거나 NaN 좌표가 생기므로, 그 에이전트의 이번 행동만 무효 처리
-            self._log("invalid_action", [agent_id], action=action)
+            self._log("invalid_action", [agent_id], action=action, reason=error)
+            self._action_results[agent_id] = {
+                "step": self.step_count, "action_type": action.get("type") if isinstance(action, dict) else None,
+                "status": "invalid", "reason": error}
             return {"type": "noop"}
         action_type = action.get("type", "noop")
+        events_before = len(self.event_log.entries)
 
         if action_type == "move_forward":
             self.move_forward(agent_id, action["distance"])
@@ -822,27 +837,68 @@ class Environment:
         elif action_type == "issue_command":
             self.issue_command(agent_id, action.get("receiver_id"), action.get("command"))
 
+        result = {"step": self.step_count, "action_type": action_type, "status": "ok"}
+        effects = self.INTERACTION_EFFECTS.get(action_type)
+        if effects is not None and not any(
+            e["type"] in effects and agent_id in e["agent_ids"] for e in self.event_log.entries[events_before:]
+        ):
+            result.update(status="no_effect", reason=(
+                "the interaction changed nothing: the target may be missing, unusable or beyond reach "
+                f"(about {self.interact_radius:g} units)"))
+        self._action_results[agent_id] = result
         return action
 
     # 숫자 필드는 유한한 실수(bool 제외), id 필드는 문자열(또는 생략)이어야 함
     _NUMBER_FIELDS = ("facing", "angle", "distance")
     _ID_FIELDS = ("object_id", "key_id", "button_id", "lever_id", "receiver_id")
+    # apply_action이 처리하는 행동 종류. 이 밖의 type은 조용히 무시하지 않고 invalid로 알림
+    KNOWN_ACTION_TYPES = frozenset((
+        "noop", "move_forward", "turn", "pick_up", "drop", "use_key", "press_button", "pull_lever",
+        "send_message", "share_belief", "request_info", "confirm", "claim_role", "claim_task", "issue_command"))
+    _RECEIVER_ACTIONS = ("send_message", "share_belief", "request_info", "confirm", "issue_command")
+    # 상호작용 행동 -> 성공했을 때 그 에이전트에게 남는 이벤트 (scoring.ATTEMPT_EFFECTS와 같은 기준)
+    INTERACTION_EFFECTS = {
+        "pick_up": {"item_picked_up"},
+        "drop": {"item_dropped"},
+        "use_key": {"door_unlocked"},
+        "press_button": {"door_unlocked", "door_locked", "number_accepted"},
+        "pull_lever": {"lever_pulled"},
+    }
+    NOTICE_LIMIT = 5
 
     def _is_well_formed(self, action) -> bool:
+        return self._action_error(action) is None
+
+    # 행동이 잘못된 이유 (정상이면 None). 이유 문장은 그대로 에이전트 피드백으로 전달됨
+    def _action_error(self, action) -> str | None:
         if not isinstance(action, dict):
-            return False
+            return "action must be a dict"
+        action_type = action.get("type", "noop")
         # Cartesian motion is no longer an action, including overridden commands.
-        if action.get("type") == "move":
-            return False
+        if action_type == "move":
+            return "move(dx, dy) was removed; use turn(angle) then move_forward(distance)"
+        if action_type not in self.KNOWN_ACTION_TYPES:
+            return f"unknown action type {action_type!r}"
         for key in self._NUMBER_FIELDS:
             value = action.get(key, 0)
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
-                return False
-        if action.get("type") == "move_forward" and ("distance" not in action or action["distance"] < 0):
-            return False
-        if action.get("type") == "turn" and (("angle" in action) == ("facing" in action)):
-            return False
-        return all(isinstance(action.get(key), (str, type(None))) for key in self._ID_FIELDS)
+                return f"{key} must be a finite number"
+        if action_type == "move_forward" and ("distance" not in action or action["distance"] < 0):
+            return "move_forward needs a nonnegative distance"
+        if action_type == "turn" and (("angle" in action) == ("facing" in action)):
+            return "turn needs exactly one of angle or facing"
+        for key in self._ID_FIELDS:
+            if not isinstance(action.get(key), (str, type(None))):
+                return f"{key} must be a string"
+        if action_type in self._RECEIVER_ACTIONS and action.get("receiver_id") not in self.agents:
+            return f"unknown receiver_id {action.get('receiver_id')!r}"
+        return None
+
+    # 에이전트에게 알림을 남김 (관찰의 notices). 최근 NOTICE_LIMIT개만 유지
+    def _notify(self, agent_id: str, notice: dict) -> None:
+        notices = self._notices.setdefault(agent_id, [])
+        notices.append({"step": self.step_count, **notice})
+        del notices[:-self.NOTICE_LIMIT]
 
     # 한 틱을 동시 실행으로 진행: 모든 에이전트가 같은 시점의 세계를 관찰하고, 각자의 policy가
     # 병렬로(스레드) 결정한 뒤, 그 행동들을 한꺼번에 적용하고 마지막에 압력판을 판정함.
@@ -864,9 +920,16 @@ class Environment:
             observations[agent_id] = self.get_observation(agent_id)
             self._record_sightings(agent_id, observations[agent_id])
 
-        with ThreadPoolExecutor(max_workers=len(agent_ids)) as pool:
-            decided = pool.map(lambda a: self.agents[a].decide(observations[a]), agent_ids)
-            actions = dict(zip(agent_ids, decided))
+        snapshot_sink = getattr(self, 'snapshot_sink', None)
+        if snapshot_sink is not None:
+            snapshot_sink(self.step_count, copy.deepcopy(observations))
+
+        if self.joint_policy is not None:
+            actions = self.joint_policy.decide_all(observations)
+        else:
+            with ThreadPoolExecutor(max_workers=len(agent_ids)) as pool:
+                decided = pool.map(lambda a: self.agents[a].decide(observations[a]), agent_ids)
+                actions = dict(zip(agent_ids, decided))
 
         shift = self.step_count % len(agent_ids)
         for agent_id in agent_ids[shift:] + agent_ids[:shift]:
@@ -876,6 +939,12 @@ class Environment:
 
         self._after_actions()
         self._update_pressure_plates()
+        if self.joint_policy is not None:
+            self.joint_policy.remember_steps(
+                observations,
+                {a: self.decision_log.filter(step=self.step_count, agent_id=a)[-1]['final_action'] for a in agent_ids},
+                {a: self.get_observation(a) for a in agent_ids})
+            return
         for agent_id in agent_ids:
             policy = self.agents[agent_id].policy
             if hasattr(policy, 'remember_step'):

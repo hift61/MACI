@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 key.txt
+hf_key.txt
 benchmark_runs/
 .venv/
 .venv-gui/

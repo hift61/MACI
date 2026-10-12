@@ -1,0 +1,27 @@
+{
+  "token_allowance": 50000,
+  "token_penalty_per_1000": 1.0,
+  "seen_points": 0.2,
+  "seen_points_by_type": {
+    "clue": 1.0
+  },
+  "pickup_points": 2.0,
+  "coop_pickup_points": 8.0,
+  "lever_points": 2.0,
+  "door_unlock_points": 5.0,
+  "plate_points": 1.0,
+  "portal_points": 0.5,
+  "number_points": 3.0,
+  "handoff_points": 2.0,
+  "level_points": 10.0,
+  "trap_penalty": -30.0,
+  "sequence_reset_penalty": -3.0,
+  "invalid_action_penalty": -1.0,
+  "invalid_action_penalty_cap": -10.0,
+  "code_failure_penalty": -1.0,
+  "code_failure_penalty_cap": -15.0,
+  "failed_attempt_penalty": -0.5,
+  "failed_attempt_penalty_cap": -10.0,
+  "clear_bonus": 60.0,
+  "time_bonus_max": 20.0
+}

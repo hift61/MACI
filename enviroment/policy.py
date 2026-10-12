@@ -421,7 +421,8 @@ def _action_schema_docs() -> str:
 _OBSERVATION_DOC = """{"self": {"x", "y", "facing", "heading": {"x", "y"}, "last_move", "max_move",
  "inventory": [...], "step", "map_width", "map_height"},
  "visible_objects": [...], "known_objects": {object_id: {..., "last_seen_step"}},
- "walls": [[x, y, width, height], ...], "memory": {...}, "inbox": [...]}
+ "walls": [[x, y, width, height], ...], "memory": {...}, "inbox": [...],
+ "last_action_result": {"step", "action_type", "status", "reason"?} or null, "notices": [...]}
 - Every object has "object_id", "type", "x", "y" plus type-specific fields (door: "locked"; key: "unlocks";
   button: "linked_door_id"; lever: "on", "linked_door_ids"; pressure_plate: "linked_door_id", "radius";
   item: "category" ("normal" or "coop"); portal: "dest_x", "dest_y"; clue: "content";
@@ -445,7 +446,12 @@ _OBSERVATION_DOC = """{"self": {"x", "y", "facing", "heading": {"x", "y"}, "last
 - inbox: every message ever delivered to you (oldest first); each has "step" (when it arrived) and "from".
 - memory: your own notes. Add a "memory": {...} key to any returned action to replace it for the next step
   (your code runs fresh every step, so this is the only way to remember plans or explored places).
-- Interactions (pick_up, use_key, press_button, pull_lever) only work within about 15 units."""
+- Interactions (pick_up, use_key, press_button, pull_lever) only work within about 15 units.
+- last_action_result: how your previous action was processed. status "ok", "invalid" (malformed or
+  unknown action, or unknown receiver_id; it was replaced by noop) or "no_effect" (an interaction that
+  changed nothing), with a reason. Invalid actions and no-effect interactions reduce your score.
+- notices: your most recent notices (oldest first), e.g. {"step", "type": "sequence_reset", "reason",
+  "caused_by_you"} when an input attempt is reset."""
 
 
 POLICY_LAYOUT = Path(__file__).with_name('policy_template.py').read_text(encoding='utf-8')
@@ -722,6 +728,8 @@ Keep the observation setup and action helpers from the system prompt, and return
 
 
 class CodePolicy(Policy):
+    system_prompt = CODE_POLICY_SYSTEM_PROMPT
+
     def __init__(
         self,
         model: str,
@@ -861,7 +869,7 @@ class CodePolicy(Policy):
         return self._generate_tracked(
             self.client,
             self.model,
-            CODE_POLICY_SYSTEM_PROMPT,
+            self.system_prompt,
             user_content or self.task_description,
             self.temperature,
             self.max_tokens,
@@ -968,6 +976,158 @@ class CodePolicy(Policy):
         if self.last_error is None:
             self._acknowledge_inbox(observation)
         return action
+
+
+# 중앙집중(단일 모델) 대조군: LLM 하나가 모든 에이전트의 관찰을 동시에 보고, decide() 코드 하나로
+# 전원을 조종한다. 정보가 처음부터 전부 공유되므로 메시지로 정보를 나눌 필요가 없는 상한선 조건 -
+# 같은 과제를 분산(에이전트마다 LLM, 메시지로 협력) 조건과 비교해 "소통 비용"을 잰다.
+# Environment.joint_policy로 붙이면 env.step()이 에이전트별 decide() 대신 decide_all()을 한 번 부름.
+# 코드는 에이전트마다 한 번씩 실행되며, 관찰에 agent_id(지금 조종 중인 에이전트)와 team(나머지
+# 에이전트들의 같은 step 관찰)이 추가된다. 코드 생성/검사/재사용/정기 재확인/정체 재계획/실행 오류
+# 복구는 CodePolicy와 같은 규칙을 따른다 (실행 오류 복구는 step을 소비하지 않고 기다림).
+CENTRAL_POLICY_INSTRUCTIONS = """You are the single controller of EVERY agent in this simulation.
+Your one decide(observation) function runs once per agent on every step.
+observation["agent_id"] is the agent controlled by this call; "self", "visible_objects", "known_objects",
+"walls", "memory", "inbox", "last_action_result" and "notices" belong to that agent.
+observation["team"] maps every other agent_id to that agent's full observation for the same step.
+Branch on observation["agent_id"] to give each agent its own behaviour. You already see everything
+every agent sees, so messages between agents are unnecessary. All agents act simultaneously, so
+coordinate their timing inside your logic (for example, let only one agent input at a time)."""
+
+CENTRAL_POLICY_SYSTEM_PROMPT = CODE_POLICY_SYSTEM_PROMPT + "\n\n" + CENTRAL_POLICY_INSTRUCTIONS
+
+
+class CentralCodePolicy(CodePolicy):
+    system_prompt = CENTRAL_POLICY_SYSTEM_PROMPT
+
+    def __init__(self, model: str, task_description: str, agent_ids: list[str], **kwargs) -> None:
+        super().__init__(model, task_description, **kwargs)
+        self.agent_ids = list(agent_ids)
+        self._agent_states: dict[str, dict] = {}  # agent_id -> 정체 판정용 직전 위치/방향/행동/정지 횟수
+
+    def reset(self) -> None:
+        super().reset()
+        self._agent_states = {}
+
+    def decide(self, observation: dict) -> dict:
+        raise RuntimeError('CentralCodePolicy acts for every agent at once through decide_all()')
+
+    @staticmethod
+    def _joint_view(observations: dict, agent_id: str) -> dict:
+        view = copy.deepcopy(observations[agent_id])
+        view['agent_id'] = agent_id
+        view['team'] = {other: copy.deepcopy(obs) for other, obs in observations.items() if other != agent_id}
+        return view
+
+    def _joint_prompt(self, observations: dict) -> str:
+        return json.dumps({aid: self._prompt_observation(obs) for aid, obs in observations.items()},
+                          ensure_ascii=False)
+
+    def _joint_stuck_reason(self, observations: dict) -> str | None:
+        found = None
+        for agent_id, observation in observations.items():
+            state = self._agent_states.get(agent_id, {})
+            self._last_pos, self._last_facing = state.get('pos'), state.get('facing')
+            self._last_action, self._stall_count = state.get('action'), state.get('stall', 0)
+            reason = self._stuck_reason(observation)
+            state['stall'] = self._stall_count
+            self._agent_states[agent_id] = state
+            if reason is not None and found is None:
+                found = f'agent {agent_id}: {reason}'
+        return found
+
+    def _replan_joint(self, observations: dict, reason: str, scheduled: bool = False) -> None:
+        if not scheduled and sum(r.get('kind') not in ('execution_repair', 'scheduled_review')
+                                 for r in self.replans) >= self.max_replans:
+            return
+        step = next(iter(observations.values()))['self'].get('step')
+        self.generated_code = self._generate_code(CODE_REPLAN_PROMPT.format(
+            task=self.task_description, step=step, reason=reason, code=self.generated_code,
+            observation=self._joint_prompt(observations)))
+        self.last_replan = {'step': step, 'reason': reason, **({'kind': 'scheduled_review'} if scheduled else {})}
+        self.replans.append(self.last_replan)
+        self._next_review_step = None
+        for state in self._agent_states.values():
+            state['stall'] = 0
+
+    # 모든 에이전트에 대해 현재 코드를 실행. 하나라도 실패하면 None (오류는 _execution_error)
+    def _run_all(self, observations: dict) -> dict | None:
+        actions = {}
+        for agent_id in observations:
+            result = self._execute_code(self.generated_code, self._joint_view(observations, agent_id))
+            if result.get('error'):
+                self._execution_error = f'agent {agent_id}: {result["error"]}'
+                self.last_error = self._execution_error
+                return None
+            actions[agent_id] = result['action']
+        self._execution_error = None
+        self.last_error = None
+        return actions
+
+    def _recover_all(self, observations: dict) -> dict:
+        step = next(iter(observations.values()))['self'].get('step')
+        self._debug('recovery_wait_started', step=step, error=self._execution_error)
+        print(f'[CODE RECOVERY] step {step}: waiting for working code', flush=True)
+        while True:
+            self._repair_attempts += 1
+            reason = f'decide() failed: {self._execution_error}'
+            self.last_replan = {'step': step, 'reason': reason, 'kind': 'execution_repair'}
+            self.replans.append(self.last_replan)
+            try:
+                self.generated_code = self._generate_code(CODE_REPLAN_PROMPT.format(
+                    task=self.task_description, step=step, reason=reason, code=self.generated_code,
+                    observation=self._joint_prompt(observations)))
+                self._next_review_step = None
+                actions = self._run_all(observations)
+            except Exception:
+                self._execution_error = traceback.format_exc()
+                self.last_error = self._execution_error
+                actions = None
+            if actions is not None:
+                self.last_recovery = {'status': 'recovered', 'attempts': self._repair_attempts}
+                self._debug('recovery_succeeded', step=step, attempts=self._repair_attempts)
+                print(f'[CODE RECOVERY] recovered after {self._repair_attempts} attempt(s)', flush=True)
+                return actions
+            # No action is applied and no additional simulation step is consumed here.
+            time.sleep(1.0)
+
+    def decide_all(self, observations: dict) -> dict:
+        self.last_replan = None
+        self.last_recovery = None
+        self.last_message_interrupt = None
+        first = next(iter(observations.values()))
+        try:
+            if self.generated_code is None:
+                self._next_review_step = None
+                self.generated_code = self._generate_code(
+                    self.task_description + '\n\nCurrent observations by agent:\n' + self._joint_prompt(observations))
+            elif self._review_due(first):
+                self._debug('review_started', step=first['self']['step'])
+                self._replan_joint(observations, 'The code-defined review interval has elapsed. Check the current '
+                                   'execution state and observations, then keep or revise the policy.', scheduled=True)
+            else:
+                reason = self._joint_stuck_reason(observations)
+                if reason is not None:
+                    self._replan_joint(observations, reason)
+            actions = self._run_all(observations)
+        except Exception:
+            self._execution_error = traceback.format_exc()
+            self.last_error = self._execution_error
+            actions = None
+        if actions is None:
+            actions = self._recover_all(observations)
+        for agent_id, observation in observations.items():
+            state = self._agent_states.setdefault(agent_id, {})
+            state.update(pos=(observation['self']['x'], observation['self']['y']),
+                         facing=observation['self']['facing'], action=actions[agent_id])
+        return actions
+
+    def remember_steps(self, observations: dict, actions: dict, next_observations: dict) -> None:
+        self.conversation_history.append({'role': 'user', 'content': 'Simulation step result:\n' + json.dumps(
+            {aid: {'observation': self._prompt_observation(observations[aid]), 'executed_action': actions[aid],
+                   'next_observation': self._prompt_observation(next_observations[aid])}
+             for aid in observations} | {'policy_error': self.last_error},
+            ensure_ascii=False, default=str)})
 
 
 # CodePolicy는 코드를 처음 한 번만 생성해 재사용하므로, 생성 이후 들어오는 메시지에
