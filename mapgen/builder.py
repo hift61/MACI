@@ -29,21 +29,34 @@ class GeneratedMap:
 
 
 # 반환: (env, 에이전트별 과제 설명, objectives)
+# 시나리오 맵(spec.scenario 또는 spec.rules가 있음)은 scenarios.engine.ScenarioEnvironment로 만듦 -
+# 기존 Environment를 상속해 시나리오 전용 물체(add_keypad 등)와 규칙만 더한 것
 def build_environment(spec: MapSpec, interact_radius: float = 15.0, reveal_goal: bool = True):
-    env = Environment(GeneratedMap(spec), interact_radius=interact_radius)
+    if spec.scenario or spec.rules:
+        from scenarios.engine import ScenarioEnvironment
+        env = ScenarioEnvironment(GeneratedMap(spec), rules=spec.rules, seed=spec.seed,
+                                  interact_radius=interact_radius)
+    else:
+        env = Environment(GeneratedMap(spec), interact_radius=interact_radius)
 
     for obj in spec.objects:
         add = getattr(env, f"add_{obj['kind']}")
         add(obj["id"], obj["x"], obj["y"], **obj["params"])
 
     for agent in spec.agents:
-        env.add_agent(agent["id"], x=agent["x"], y=agent["y"], facing=agent["facing"])
+        view = {key: agent[key] for key in ("view_radius", "view_angle") if key in agent}
+        env.add_agent(agent["id"], x=agent["x"], y=agent["y"], facing=agent["facing"], **view)
 
     return env, task_descriptions(spec, reveal_goal=reveal_goal), list(spec.objectives)
 
 
 def task_descriptions(spec: MapSpec, reveal_goal: bool = True) -> dict[str, str]:
     agent_ids = [a["id"] for a in spec.agents]
-    return {aid: environment_description(aid, agent_ids, spec.width, spec.height)
-                 + (objective_description(spec.objectives) if reveal_goal else '')
-            for aid in agent_ids}
+    descriptions = {aid: environment_description(aid, agent_ids, spec.width, spec.height)
+                         + (objective_description(spec.objectives) if reveal_goal else '')
+                    for aid in agent_ids}
+    # 시나리오 맵의 개인별 안내 (새 물체 설명, 맵 규칙)
+    for agent_id, briefing in (getattr(spec, "briefings", None) or {}).items():
+        if agent_id in descriptions and briefing:
+            descriptions[agent_id] += "\n" + briefing
+    return descriptions

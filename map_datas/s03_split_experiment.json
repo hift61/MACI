@@ -1,0 +1,249 @@
+{
+  "seed": 0,
+  "width": 440,
+  "height": 260,
+  "walls": [
+    [
+      210,
+      0,
+      20,
+      145
+    ],
+    [
+      0,
+      105,
+      95.0,
+      10
+    ],
+    [
+      115.0,
+      105,
+      95.0,
+      10
+    ],
+    [
+      0,
+      135,
+      95.0,
+      10
+    ],
+    [
+      115.0,
+      135,
+      95.0,
+      10
+    ],
+    [
+      230,
+      105,
+      95.0,
+      10
+    ],
+    [
+      345.0,
+      105,
+      95.0,
+      10
+    ],
+    [
+      230,
+      135,
+      95.0,
+      10
+    ],
+    [
+      345.0,
+      135,
+      95.0,
+      10
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 105,
+      "y": 70,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 335,
+      "y": 70,
+      "facing": 270
+    }
+  ],
+  "objects": [
+    {
+      "kind": "switch_lever",
+      "id": "L1",
+      "x": 50,
+      "y": 30,
+      "params": {
+        "cooldown": 3
+      }
+    },
+    {
+      "kind": "switch_lever",
+      "id": "L2",
+      "x": 105,
+      "y": 30,
+      "params": {
+        "cooldown": 3
+      }
+    },
+    {
+      "kind": "switch_lever",
+      "id": "L3",
+      "x": 160,
+      "y": 30,
+      "params": {
+        "cooldown": 3
+      }
+    },
+    {
+      "kind": "switch_lever",
+      "id": "L4",
+      "x": 280,
+      "y": 30,
+      "params": {
+        "cooldown": 3
+      }
+    },
+    {
+      "kind": "switch_lever",
+      "id": "L5",
+      "x": 335,
+      "y": 30,
+      "params": {
+        "cooldown": 3
+      }
+    },
+    {
+      "kind": "switch_lever",
+      "id": "L6",
+      "x": 390,
+      "y": 30,
+      "params": {
+        "cooldown": 3
+      }
+    },
+    {
+      "kind": "logic_door",
+      "id": "G1",
+      "x": 105,
+      "y": 110,
+      "params": {
+        "levers": [
+          "L1",
+          "L4",
+          "L5"
+        ],
+        "parity": 1
+      }
+    },
+    {
+      "kind": "logic_door",
+      "id": "G2",
+      "x": 105,
+      "y": 140,
+      "params": {
+        "levers": [
+          "L2",
+          "L6"
+        ],
+        "parity": 1
+      }
+    },
+    {
+      "kind": "logic_door",
+      "id": "G3",
+      "x": 335,
+      "y": 110,
+      "params": {
+        "levers": [
+          "L3",
+          "L4"
+        ],
+        "parity": 1
+      }
+    },
+    {
+      "kind": "logic_door",
+      "id": "G4",
+      "x": 335,
+      "y": 140,
+      "params": {
+        "levers": [
+          "L1",
+          "L2",
+          "L5",
+          "L6"
+        ],
+        "parity": 1
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "wiring_note_A",
+      "x": 180,
+      "y": 70,
+      "params": {
+        "content": {
+          "wiring": "Each of the six levers (L1-L3 in room A, L4-L6 in room B) is secretly wired to some of the four gates G1-G4. Pulling a lever flips every gate it is wired to (open <-> closed).",
+          "rule": "A gate is open exactly when an ODD number of the levers wired to it are ON. All levers start OFF.",
+          "view": "G1 and G2 are in room A, G3 and G4 in room B. You can only watch the gates in your own room.",
+          "cooldown": "After a pull, a lever needs 3 steps before it can be pulled again (field ready_at_step)."
+        },
+        "hidden": false
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "wiring_note_B",
+      "x": 410,
+      "y": 70,
+      "params": {
+        "content": {
+          "wiring": "Each of the six levers (L1-L3 in room A, L4-L6 in room B) is secretly wired to some of the four gates G1-G4. Pulling a lever flips every gate it is wired to (open <-> closed).",
+          "rule": "A gate is open exactly when an ODD number of the levers wired to it are ON. All levers start OFF.",
+          "view": "G1 and G2 are in room A, G3 and G4 in room B. You can only watch the gates in your own room.",
+          "cooldown": "After a pull, a lever needs 3 steps before it can be pulled again (field ready_at_step)."
+        },
+        "hidden": false
+      }
+    },
+    {
+      "kind": "goal_zone",
+      "id": "exit",
+      "x": 220,
+      "y": 202,
+      "params": {
+        "width": 440,
+        "height": 115,
+        "label": "exit hall"
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "team_assembled",
+      "zone_id": "exit"
+    }
+  ],
+  "puzzles": [
+    "s03_split_experiment"
+  ],
+  "hints": [
+    "Both agents must stand in the goal_zone 'exit' (below both rooms) at the same time."
+  ],
+  "config": {
+    "recommended_steps": 150,
+    "source": "scenarios/s03_split_experiment.py"
+  },
+  "scenario": "s03_split_experiment",
+  "rules": {},
+  "briefings": {
+    "A": "You are in room A (left) with levers L1-L3 and gates G1, G2 (G2 lies beyond G1). Agent B is in room B (right) with L4-L6 and gates G3, G4. A wall separates the rooms. Read wiring_note_A. Object guide: lever with \"cooldown\": after a pull it cannot be pulled again until step 'ready_at_step'. goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "You are in room B (right) with levers L4-L6 and gates G3, G4 (G4 lies beyond G3). Agent A is in room A (left) with L1-L3 and gates G1, G2. A wall separates the rooms. Read wiring_note_B. Object guide: lever with \"cooldown\": after a pull it cannot be pulled again until step 'ready_at_step'. goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

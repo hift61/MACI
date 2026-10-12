@@ -124,6 +124,16 @@ python experiment.py --name smoke --policy tooluse --controllers decentralized -
 
 **판정기 다변화와 사람 채점.** `maci_judge.py --judge-model a,b`처럼 판정 모델을 여러 개 지정할 수 있습니다. 턴별 점수는 `*.judges.json`에 저장되고, 100점 기준도 판정 모델별로 따로 저장됩니다. GUI **사람 채점** 탭은 판정 모델과 같은 턴 정보와 기준으로 0~10점을 입력받아 `*.human.<채점자>.json`에 저장합니다. 사람이 판정 점수에 영향받지 않도록 판정 점수는 일치도 계산 결과에만 표시됩니다. **일치도 계산** 또는 `python judge_agreement.py <결과.jsonl>`은 판정 모델끼리, 그리고 판정 모델과 사람 사이의 일치도를 공통 턴에서 계산합니다. 지표는 Pearson r, Spearman ρ, QWK, MAE, 1점 이내 비율입니다.
 
+
+### 시나리오 맵 (협력 실험 12종)
+
+`map_datas/s01_deadlock.json` ~ `s12_unreliable_eyes.json`은 협력 능력별(순서 계획, 공동 추론, 통신 규약, 사회적 딜레마, 작업 분배, 시간 예측, 신뢰 검증) 고난도 맵입니다. 런처의 **맵** 탭 목록에서 고르고 **실행** 탭에서 최대 step을 맵별 권장값(120~200) 이상으로 두고 실행합니다. 실패 상태는 없고 실수하면 시간만 잃습니다. 맵별 목표·의도·단서 내용은 [scenarios/SCENARIOS.md](scenarios/SCENARIOS.md), 이번 추가에 따른 변경 사항은 [TEAM_CHANGES.md](TEAM_CHANGES.md)에 있습니다.
+
+```powershell
+python benchmark.py --map-file map_datas\s05_lossy_sync.json --steps 150
+python -m scenarios --check     # 맵 12개가 실제로 풀리는지 검증 후 map_datas/에 다시 내보내기
+```
+
 ---
 
 ## Core Objective

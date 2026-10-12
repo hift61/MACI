@@ -1,0 +1,289 @@
+{
+  "seed": 0,
+  "width": 520,
+  "height": 200,
+  "walls": [
+    [
+      90,
+      0,
+      10,
+      90.0
+    ],
+    [
+      90,
+      110.0,
+      10,
+      90.0
+    ],
+    [
+      170,
+      0,
+      10,
+      90.0
+    ],
+    [
+      170,
+      110.0,
+      10,
+      90.0
+    ],
+    [
+      250,
+      0,
+      10,
+      90.0
+    ],
+    [
+      250,
+      110.0,
+      10,
+      90.0
+    ],
+    [
+      330,
+      0,
+      10,
+      90.0
+    ],
+    [
+      330,
+      110.0,
+      10,
+      90.0
+    ],
+    [
+      410,
+      0,
+      10,
+      90.0
+    ],
+    [
+      410,
+      110.0,
+      10,
+      90.0
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 30,
+      "y": 80,
+      "facing": 0
+    },
+    {
+      "id": "B",
+      "x": 30,
+      "y": 120,
+      "facing": 0
+    }
+  ],
+  "objects": [
+    {
+      "kind": "door",
+      "id": "d1",
+      "x": 95,
+      "y": 100,
+      "params": {
+        "locked": true,
+        "radius": 12.0
+      }
+    },
+    {
+      "kind": "switch_plate",
+      "id": "b1",
+      "x": 60,
+      "y": 25,
+      "params": {
+        "opens": [
+          "d1"
+        ]
+      }
+    },
+    {
+      "kind": "switch_plate",
+      "id": "f1",
+      "x": 130,
+      "y": 175,
+      "params": {
+        "opens": [
+          "d1"
+        ]
+      }
+    },
+    {
+      "kind": "door",
+      "id": "d2",
+      "x": 175,
+      "y": 100,
+      "params": {
+        "locked": true,
+        "radius": 12.0
+      }
+    },
+    {
+      "kind": "switch_plate",
+      "id": "b2",
+      "x": 140,
+      "y": 25,
+      "params": {
+        "opens": [
+          "d2"
+        ]
+      }
+    },
+    {
+      "kind": "switch_plate",
+      "id": "f2",
+      "x": 210,
+      "y": 175,
+      "params": {
+        "opens": [
+          "d2"
+        ]
+      }
+    },
+    {
+      "kind": "door",
+      "id": "d3",
+      "x": 255,
+      "y": 100,
+      "params": {
+        "locked": true,
+        "radius": 12.0
+      }
+    },
+    {
+      "kind": "switch_plate",
+      "id": "b3",
+      "x": 220,
+      "y": 25,
+      "params": {
+        "opens": [
+          "d3"
+        ]
+      }
+    },
+    {
+      "kind": "switch_plate",
+      "id": "f3",
+      "x": 290,
+      "y": 175,
+      "params": {
+        "opens": [
+          "d3"
+        ]
+      }
+    },
+    {
+      "kind": "door",
+      "id": "d4",
+      "x": 335,
+      "y": 100,
+      "params": {
+        "locked": true,
+        "radius": 12.0
+      }
+    },
+    {
+      "kind": "switch_plate",
+      "id": "b4",
+      "x": 300,
+      "y": 25,
+      "params": {
+        "opens": [
+          "d4"
+        ]
+      }
+    },
+    {
+      "kind": "switch_plate",
+      "id": "f4",
+      "x": 370,
+      "y": 175,
+      "params": {
+        "opens": [
+          "d4"
+        ]
+      }
+    },
+    {
+      "kind": "door",
+      "id": "d5",
+      "x": 415,
+      "y": 100,
+      "params": {
+        "locked": true,
+        "radius": 12.0
+      }
+    },
+    {
+      "kind": "switch_plate",
+      "id": "b5",
+      "x": 380,
+      "y": 25,
+      "params": {
+        "opens": [
+          "d5"
+        ]
+      }
+    },
+    {
+      "kind": "switch_plate",
+      "id": "f5",
+      "x": 450,
+      "y": 175,
+      "params": {
+        "opens": [
+          "d5"
+        ]
+      }
+    },
+    {
+      "kind": "goal_zone",
+      "id": "exit",
+      "x": 470,
+      "y": 100,
+      "params": {
+        "width": 100,
+        "height": 200,
+        "label": "exit hall"
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "manual",
+      "x": 20,
+      "y": 180,
+      "params": {
+        "hidden": false,
+        "content": {
+          "doors": "Doors d1..d5 stand in a row from left to right. Each door d_i is held open by EITHER of two switch plates: b_i on the near side (before the door) or f_i on the far side.",
+          "catch": "Every plate is far from its door, so nobody can stand on a plate and walk through its door at the same time. The exit hall lies beyond d5."
+        }
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "team_assembled",
+      "zone_id": "exit"
+    }
+  ],
+  "puzzles": [
+    "s02_leapfrog"
+  ],
+  "hints": [
+    "Both agents must stand inside the goal_zone 'exit' (beyond door d5) at the same time."
+  ],
+  "config": {
+    "recommended_steps": 200,
+    "source": "scenarios/s02_leapfrog.py"
+  },
+  "scenario": "s02_leapfrog",
+  "rules": {},
+  "briefings": {
+    "A": "You and your teammate start together in the leftmost section. Read the clue 'manual'. You cannot see your teammate, and from a plate you usually cannot see its door. Object guide: switch_plate: while ANY agent stands within its radius, every door in its 'opens' list is unlocked; when nobody stands on any plate for a door, that door locks again. goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "You and your teammate start together in the leftmost section. Read the clue 'manual'. You cannot see your teammate, and from a plate you usually cannot see its door. Object guide: switch_plate: while ANY agent stands within its radius, every door in its 'opens' list is unlocked; when nobody stands on any plate for a door, that door locks again. goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

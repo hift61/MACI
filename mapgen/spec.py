@@ -23,6 +23,10 @@ class MapSpec:
     puzzles: list = field(default_factory=list)     # 사용된 퍼즐 템플릿 이름 (기록/분석용)
     hints: list = field(default_factory=list)       # 과제 설명에 들어갈 퍼즐별 안내 문장
     config: dict = field(default_factory=dict)      # 생성에 쓰인 GenConfig 값 (재현용)
+    # ---- 시나리오 맵 전용 (scenarios/ 패키지, 없으면 기존 맵과 동일하게 동작) ----
+    scenario: str = ""                               # 시나리오 이름. 비어 있지 않으면 ScenarioEnvironment로 만듦
+    rules: dict = field(default_factory=dict)        # 환경 규칙 (메시지 손실/지연/길이 제한, 유리벽 등 - scenarios/engine.py)
+    briefings: dict = field(default_factory=dict)    # agent_id -> 과제 설명 뒤에 붙는 개인별 안내문
 
     def to_dict(self) -> dict:
         return asdict(self)

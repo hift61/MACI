@@ -231,6 +231,10 @@ class EditorModel:
         for obj in spec.objects:
             if obj["kind"] == "item" and obj["params"].get("category") == "trap":
                 obj["params"]["seals"] = list(door_ids)
+        if spec.scenario:
+            # 시나리오 맵(scenarios/)은 직접 쓴 목표 안내/설정을 유지 (자동 안내는 새 물체를 모름)
+            spec.config = {**spec.config, "editor": True}
+            return spec
         spec.hints = auto_hints(spec)
         spec.puzzles = ["custom"]
         spec.config = {"editor": True}

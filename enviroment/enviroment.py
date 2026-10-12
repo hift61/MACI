@@ -861,7 +861,7 @@ class Environment:
         "pick_up": {"item_picked_up"},
         "drop": {"item_dropped"},
         "use_key": {"door_unlocked"},
-        "press_button": {"door_unlocked", "door_locked", "number_accepted"},
+        "press_button": {"door_unlocked", "door_locked", "number_accepted", "keypad_input"},
         "pull_lever": {"lever_pulled"},
     }
     NOTICE_LIMIT = 5

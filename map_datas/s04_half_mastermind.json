@@ -1,0 +1,159 @@
+{
+  "seed": 0,
+  "width": 440,
+  "height": 260,
+  "walls": [
+    [
+      210,
+      0,
+      20,
+      260
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 105,
+      "y": 160,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 335,
+      "y": 160,
+      "facing": 270
+    }
+  ],
+  "objects": [
+    {
+      "kind": "keypad",
+      "id": "color_panel",
+      "x": 105,
+      "y": 25,
+      "params": {
+        "code": [
+          "blue",
+          "red",
+          "purple",
+          "green"
+        ],
+        "mode": "mastermind",
+        "display_id": "result_screen",
+        "label": "4-colour code panel"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "btn_red",
+      "x": 35,
+      "y": 70,
+      "params": {
+        "panel": "color_panel",
+        "label": "red"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "btn_green",
+      "x": 70,
+      "y": 70,
+      "params": {
+        "panel": "color_panel",
+        "label": "green"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "btn_blue",
+      "x": 105,
+      "y": 70,
+      "params": {
+        "panel": "color_panel",
+        "label": "blue"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "btn_yellow",
+      "x": 140,
+      "y": 70,
+      "params": {
+        "panel": "color_panel",
+        "label": "yellow"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "btn_purple",
+      "x": 175,
+      "y": 70,
+      "params": {
+        "panel": "color_panel",
+        "label": "purple"
+      }
+    },
+    {
+      "kind": "display",
+      "id": "result_screen",
+      "x": 335,
+      "y": 40,
+      "params": {
+        "label": "result of the code panel in room A",
+        "content": {
+          "attempt": 0,
+          "exact": null,
+          "misplaced": null
+        }
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "panel_manual",
+      "x": 105,
+      "y": 200,
+      "params": {
+        "hidden": false,
+        "content": {
+          "code": "color_panel takes a code of 4 colours chosen from red, green, blue, yellow, purple. No colour appears twice in the code.",
+          "checking": "After every 4th press the panel checks the code and clears itself. The result appears ONLY on result_screen in room B: 'exact' = right colour in the right slot, 'misplaced' = right colour in the wrong slot.",
+          "retries": "Wrong codes cost nothing but time. You may try as often as you need."
+        }
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "screen_manual",
+      "x": 335,
+      "y": 200,
+      "params": {
+        "hidden": false,
+        "content": {
+          "screen": "result_screen shows only the result of the latest code entered on the panel in room A: attempt number, 'exact' and 'misplaced'. It never shows which colours were entered.",
+          "panel": "The code uses 4 different colours out of red, green, blue, yellow, purple."
+        }
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "keypad_solved",
+      "panel_id": "color_panel"
+    }
+  ],
+  "puzzles": [
+    "s04_half_mastermind"
+  ],
+  "hints": [
+    "Unlock color_panel in room A by entering the secret 4-colour code."
+  ],
+  "config": {
+    "recommended_steps": 200,
+    "source": "scenarios/s04_half_mastermind.py"
+  },
+  "scenario": "s04_half_mastermind",
+  "rules": {},
+  "briefings": {
+    "A": "You are in room A (left) with color_panel and its five colour buttons. Agent B is in room B (right) and is the only one who can see result_screen. A wall separates you. Read panel_manual. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries. display: a screen whose 'content' is updated by the machine it belongs to.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "You are in room B (right) with result_screen. Agent A is in room A (left) with the code panel. A wall separates you. You cannot press anything useful yourself. Read screen_manual. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries. display: a screen whose 'content' is updated by the machine it belongs to.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

@@ -737,7 +737,9 @@ class CodePolicy(Policy):
         base_url: str | None = None,
         api_key: str = "not-needed",
         temperature: float = 0.0,
-        max_tokens: int = 4000,
+        # 생각(reasoning) 토큰도 이 한도에 포함됨. 4000이면 reasoning 모델(gpt-6-luna, glm-5.3-flash)이
+        # 코드를 다 쓰기 전에 잘려(finish_reason=length) 복구 대기에서 재시도만 반복함
+        max_tokens: int = 16000,
         extra_params: dict | None = None,
         sandbox_timeout: float = 5.0,
         stall_limit: int = 3,

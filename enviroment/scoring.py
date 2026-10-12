@@ -17,7 +17,8 @@ ATTEMPT_EFFECTS = {
     "pick_up": {"item_picked_up"},
     "drop": {"item_dropped"},
     "use_key": {"door_unlocked"},
-    "press_button": {"door_unlocked", "door_locked", "number_accepted"},  # number_accepted: sequence_rooms 번호판
+    "press_button": {"door_unlocked", "door_locked", "number_accepted",  # number_accepted: sequence_rooms 번호판
+                     "keypad_input"},  # keypad_input: 시나리오 맵의 패널 버튼 (scenarios/engine.py)
     "pull_lever": {"lever_pulled"},
 }
 
@@ -38,6 +39,11 @@ class ScoreConfig:
     number_points: float = 3.0                  # 번호판을 순서에 맞게 누름 (sequence_rooms)
     handoff_points: float = 2.0                 # 상대의 올바른 입력 바로 다음 차례를 이어받아 맞게 입력
     level_points: float = 10.0                  # curriculum 단계 완료
+    # 시나리오 맵(scenarios/) 이벤트. bonus_collected는 아이템마다 정해진 points를 그대로 줌
+    delivery_points: float = 5.0                # 아이템을 회수함(receptacle)에 배달
+    checkpoint_points: float = 3.0              # 체크포인트 첫 방문
+    keypad_points: float = 10.0                 # 패널 풀기 (마지막 입력자)
+    sync_points: float = 10.0                   # 동시 진입 성공 (함께 밟은 전원)
     # ---- 개인 감점 (매번) ----
     trap_penalty: float = -30.0                 # trap 발동
     sequence_reset_penalty: float = -3.0        # 번호판을 틀리게/동시에 눌러 전체 순서를 리셋시킴
@@ -72,7 +78,7 @@ class ScoreConfig:
 def _target_of(event: dict):
     if event['type'] == 'level_completed':
         return event['level']
-    for key in ("object_id", "door_id", "lever_id", "plate_id", "portal_id"):
+    for key in ("object_id", "door_id", "lever_id", "plate_id", "portal_id", "panel_id", "group"):
         if key in event:
             return event[key]
     return None
@@ -107,6 +113,16 @@ def _individual_points(event: dict, config: ScoreConfig):
         return config.sequence_reset_penalty, "순서 리셋"
     if event_type == "invalid_action":
         return config.invalid_action_penalty, "잘못된 행동"
+    if event_type == "bonus_collected":
+        return event["points"], "보너스 획득"
+    if event_type == "item_delivered":
+        return config.delivery_points, "배달"
+    if event_type == "checkpoint_visited":
+        return config.checkpoint_points, "체크포인트 방문"
+    if event_type == "keypad_solved":
+        return config.keypad_points, "패널 해결"
+    if event_type == "sync_success":
+        return config.sync_points, "동시 진입 성공"
     return None
 
 
@@ -262,7 +278,9 @@ def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConf
             "time_bonus": round(time_bonus, 2),
             "attempts": attempts,
             "failed_attempts": failed,
-            "score": round(team_score, 2)
+            "score": round(team_score, 2),
+            # 시나리오 맵이면 이동거리/판 지킨 시간/보너스/메시지 손실 등 지표 (점수 합계에는 안 들어감)
+            **({"metrics": env.scenario_metrics()} if hasattr(env, "scenario_metrics") else {})
         },
         "individual_total": individual_total,
         "total": round(individual_total + team_score, 2)

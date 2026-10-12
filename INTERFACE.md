@@ -81,7 +81,7 @@ width, height : 맵 크기 (int)
 
 walls : 벽 목록, 각 항목은 [x, y, width, height] (list)
 
-agents : 에이전트 목록, 각 항목은 {"id", "x", "y", "facing"} (list)
+agents : 에이전트 목록, 각 항목은 {"id", "x", "y", "facing"} (list). 선택 키 "view_radius", "view_angle"이 있으면 add_agent에 그대로 전달
 
 objects : 오브젝트 목록, 각 항목은 {"kind", "id", "x", "y", "params"}. kind는 Environment의 add_<kind>() 이름(door/key/button/lever/pressure_plate/item/portal/clue)과 같고 params는 그 함수의 나머지 키워드 인자 그대로 (list)
 
@@ -91,7 +91,15 @@ puzzles : 사용된 퍼즐 템플릿 이름 목록 (list)
 
 hints : 과제 설명에 들어갈 퍼즐별 안내 문장 목록 (list)
 
-config : 생성에 쓰인 GenConfig 값 (재현용, dict)
+config : 생성에 쓰인 GenConfig 값 (재현용, dict). 시나리오 맵은 {"recommended_steps", "source"}
+
+scenario : 시나리오 이름 (str, 기본 ""). 비어 있지 않으면 builder가 scenarios.engine.ScenarioEnvironment로 만듦
+
+rules : 시나리오 환경 규칙 (dict, 기본 {}). 메시지 손실/지연/길이·빈도 제한, 유리벽 등 - 아래 "scenarios/" 절 참고. 비어 있지 않으면 역시 ScenarioEnvironment
+
+briefings : agent_id -> 과제 설명 끝에 붙는 개인별 안내문 (dict, 기본 {})
+
+scenario/rules/briefings는 시나리오 맵 전용 필드로, 기본값 덕분에 예전 맵 JSON도 그대로 불러올 수 있음
 
 - 함수
 
@@ -195,9 +203,9 @@ WallRect(Class) : x, y, width, height만 가진 벽 (Environment._walls가 읽�
 
 GeneratedMap(Class) : Environment가 맵에서 쓰는 것만 가진 최소 맵 객체. map_width/map_height(이동 범위), walls(WallRect 목록 - 시야 가림). world_core.GameMap에 의존하지 않기 위함
 
-build_environment(spec: MapSpec, interact_radius: float = 15.0) -> tuple[Environment, dict[str, str], list[dict]] : 오브젝트는 getattr(env, "add_" + kind)(id, x, y, **params)로, 에이전트는 add_agent로 배치하고 (env, 에이전트별 과제 설명, objectives) 반환
+build_environment(spec: MapSpec, interact_radius: float = 15.0) -> tuple[Environment, dict[str, str], list[dict]] : 오브젝트는 getattr(env, "add_" + kind)(id, x, y, **params)로, 에이전트는 add_agent로 배치하고 (env, 에이전트별 과제 설명, objectives) 반환. spec.scenario 또는 spec.rules가 있으면 Environment 대신 scenarios.engine.ScenarioEnvironment(GeneratedMap(spec), rules=spec.rules, seed=spec.seed, interact_radius=...)를 만듦 (그때만 scenarios를 import). 에이전트 항목에 view_radius/view_angle이 있으면 add_agent에 전달
 
-task_descriptions(spec: MapSpec) -> dict[str, str] : 에이전트별 과제 설명 생성 (맵 크기, 다른 에이전트, 모든 hints를 목표로 나열, 시야/turn/메시지 사용 안내)
+task_descriptions(spec: MapSpec) -> dict[str, str] : 에이전트별 과제 설명 생성 (맵 크기, 다른 에이전트, 모든 hints를 목표로 나열, 시야/turn/메시지 사용 안내). spec.briefings에 그 에이전트 항목이 있으면 줄을 바꿔 끝에 붙임
 
 ### mapgen/hints.py
 
@@ -263,7 +271,7 @@ toggle_hidden(self, obj: dict) -> bool | None : 문/단서는 hidden, trap은 di
 
 rotate_agent(self, agent: dict, delta: float) -> None / set_clue_text(self, clue: dict, text: str) -> None / resize(self, width, height) -> None : 에이전트 방향 회전 / 단서 내용 설정 / 맵 크기 변경
 
-finalize(self) -> MapSpec : 저장/실행용 완성본 (trap의 seals를 모든 문으로 채우고, hints를 auto_hints로 생성, puzzles=["custom"], config={"editor": True})
+finalize(self) -> MapSpec : 저장/실행용 완성본 (trap의 seals를 모든 문으로 채우고, hints를 auto_hints로 생성, puzzles=["custom"], config={"editor": True}). 단 시나리오 맵(spec.scenario가 있음)은 직접 쓴 hints/puzzles/config를 유지하고 config에 "editor": True만 더함 (auto_hints는 시나리오 전용 물체를 모르기 때문)
 
 validate(self) -> tuple[list[str], list[str]] : (errors, warnings). error: 에이전트 없음. warning: 목표 없음, 여는 장치가 없는 목표 문, 에이전트 수보다 많은 압력판만으로 여는 문, 인원이 모자란 coop 물품, 어떤 문에도 연결되지 않은 장치, 내용이 빈 단서, 걸어서 갈 수 없는 곳(generator._is_reachable)
 
@@ -300,6 +308,204 @@ render_ascii(spec: MapSpec, cols: int = 60, rows: int = 30) -> str : 맵을 문�
 summarize(spec: MapSpec) -> str : 시드/크기/벽 수/퍼즐/objectives/hints 요약
 
 main() -> None : 명령행 인자를 읽어 위 동작 수행
+
+---
+
+## scenarios/ (시나리오 맵 패키지)
+
+협력 실험용 고난도 맵 12종과, 그 맵들이 쓰는 전용 물체/규칙을 담은 패키지. 맵마다 목표·의도·단서/화면 내용·정답 흐름은 `scenarios/SCENARIOS.md`에 정리. 맵은 `python -m scenarios`로 `map_datas/sNN_*.json`(MapSpec, scenario 필드 포함)에 내보내며, 런처 맵 목록과 `benchmark.py --map-file`로 바로 실행됨. **실패(영구 봉인) 상태를 만들지 않음** - 틀리면 리셋/밀려남/문 닫힘/대기로만 대가를 치름.
+
+구성: engine.py(ScenarioEnvironment), common.py(맵 조립 도구), oracle.py(정답 검증 스크립트 정책), sNN_*.py(시나리오 하나당 파일 하나), __main__.py(내보내기/검증 명령), SCENARIOS.md(설명서)
+
+### scenarios/__init__.py
+
+SCENARIO_NAMES : 시나리오 모듈 이름 목록 (순서 = 번호)
+
+load(name: str) -> module : scenarios.<name> 모듈
+
+all_scenarios() -> list[module] : SCENARIO_NAMES 순서의 모듈 목록
+
+### scenarios/sNN_*.py (시나리오 모듈 공통 형식)
+
+NAME : 모듈/맵 파일 이름 (예: "s01_deadlock")
+
+TITLE : 한국어 이름, FAMILY : 계열 (순서 계획/공동 추론/통신 규약/사회적 딜레마/작업 분배/시간 예측/신뢰, 검증)
+
+build() -> MapSpec : 맵 데이터 (Environment를 import하지 않음)
+
+solution(env) -> dict[str, list] : 정답 plan (oracle.py 형식, 검증 전용)
+
+mistake(env) -> dict[str, list] : 일부러 실수한 뒤 정답으로 복구하는 plan (실수 뒤에도 풀리는지 검증)
+
+12종: s01_deadlock(교착 상태), s02_leapfrog(징검다리 교대), s03_split_experiment(나눠 보는 실험), s04_half_mastermind(반쪽 마스터마인드), s05_lossy_sync(확인의 문제), s06_short_radio(짧은 무전), s07_me_vs_us(나 vs 우리), s08_boring_role(지루한 역할), s09_shared_budget(공동 예산), s10_moving_world(움직이는 세계), s11_pincer(포위), s12_unreliable_eyes(믿을 수 없는 눈)
+
+### scenarios/common.py
+
+OBJECT_HELP : 새 물체 type별 영어 설명 (과제 설명에 붙임 - CodePolicy 시스템 프롬프트에는 기존 물체만 설명돼 있으므로)
+
+explain(*kinds: str) -> str : OBJECT_HELP 항목들을 이어 붙인 "Object guide: ..." 문장
+
+COMMON_RULES : 모든 시나리오 briefing 끝에 붙는 공통 안내 (실패 없음, 다른 에이전트는 안 보임)
+
+obj(kind, object_id, x, y, **params) -> dict : MapSpec.objects 항목
+
+agent(agent_id, x, y, facing=0.0) -> dict : MapSpec.agents 항목
+
+hwall(y, x0, x1, gaps=(), t=10) -> list : 가로 벽 조각 목록. gaps [(가운데 x, 폭)] 자리를 비움 (문 끼울 자리)
+
+vwall(x, y0, y1, gaps=(), t=10) -> list : 세로 벽 조각 목록
+
+make_spec(name, width, height, walls, agents, objects, objectives, hints, briefings, rules=None, recommended_steps=150, seed=0) -> MapSpec : scenario=name, puzzles=[name], config={"recommended_steps", "source": "scenarios/<name>.py"}, briefings 끝에 COMMON_RULES
+
+### scenarios/engine.py - ScenarioEnvironment(Class, Environment 상속)
+
+Environment를 상속만 하고 원본은 고치지 않음. step()은 그대로 쓰고, Environment.step()이 step_count를 올린 직후 부르는 _update_movers()를 step 시작 훅으로, 모든 행동 적용 뒤 부르는 _update_pressure_plates()를 step 끝 훅으로 확장함.
+
+- 변수
+
+scenario_rules : MapSpec.rules (dict). self.rules(기존 Rule 객체 목록)와 이름이 겹치지 않게 따로 둠
+
+glass_walls : 유리벽 목록 [(x, y, w, h)]
+
+travel : agent_id -> 실제 이동 거리 합 (포탈 순간이동 제외, last_move.distance 누적)
+
+hold_steps : agent_id -> 압력판/switch_plate/sync_pad 위에 있었던 step 수
+
+message_stats : {"lost", "delayed", "blocked"} 횟수
+
+- 생성
+
+__init__(self, game_map, rules: dict = None, seed: int = 0, **kwargs) : kwargs는 Environment 인자 그대로. 난수(손실/지연/스폰)는 random.Random(seed * 1000 + rules.get("seed", 0))로 재현 가능
+
+- 물체 배치 (MapSpec objects의 kind = add_ 뒤 이름, params = 나머지 인자)
+
+add_goal_zone(zone_id, x, y, width, height, label="") : type "goal_zone" 사각형 (x, y는 중심). 에이전트 전원이 동시에 안에 있으면 team_assembled
+
+add_switch_plate(plate_id, x, y, opens: list, radius=10.0) : type "switch_plate". 밟고 있는 동안 opens의 문을 엶. 한 문에 연결된 switch_plate 중 하나라도 밟혀 있으면 열림(OR - 기존 pressure_plate의 AND와 다름). latched 문은 다시 잠그지 않음. plate_entered/plate_left 이벤트
+
+add_latch_lever(lever_id, x, y, doors: list) : type "lever"(latch: True, linked_door_ids=doors). 당기면 문을 영구히 열고 문에 latched=True 표시
+
+add_logic_door(door_id, x, y, levers: list, parity=1, radius=12.0) : 잠긴 문 + 비밀 _levers/_parity. 레버를 당길 때마다 (연결 레버 중 ON 개수 % 2 == parity)면 열림, 아니면 잠김 (cause "logic")
+
+add_switch_lever(lever_id, x, y, cooldown=0, label="") : type "lever"(linked_door_ids=[], cooldown, ready_at_step). 당긴 뒤 cooldown step 동안 다시 당기면 lever_cooling 이벤트만 남고 무시
+
+add_keypad(panel_id, x, y, code: list, mode="sequence", display_id=None, opens=None, label="") : type "keypad"(mode, length, entered, attempts, solved) + 비밀 _code. mode "sequence": 버튼마다 순서 검사, 틀리면 entered 초기화+attempts+1(keypad_reset), 다 맞으면 keypad_solved. mode "mastermind": length개 입력마다 채점 {"attempt", "exact", "misplaced"}를 display에 표시(keypad_attempt), 전부 맞으면 keypad_solved. 풀리면 opens의 문을 영구히 엶
+
+add_keypad_button(button_id, x, y, panel, label) : type "button"(panel, label). press_button(interact_radius 이내)으로 입력 -> keypad_input 이벤트
+
+add_display(display_id, x, y, content=None, label="") : type "display". keypad가 content를 갱신 (sequence_rooms의 display와는 별개 구현)
+
+add_sync_pad(pad_id, x, y, group, radius=10.0, tolerance=0, return_x=None, return_y=None, cooldown=3, opens=None) : type "sync_pad"(group, radius, armed). 같은 group의 모든 판에 '진입'한 step의 차가 tolerance 이하이면 sync_success(+opens 문 영구 개방). 첫 진입 후 tolerance step 안에 나머지가 안 들어오면 sync_fail: 판 위의 에이전트를 (return_x, return_y)로 옮기고 cooldown step 동안 armed=False (그동안의 진입은 무시)
+
+add_periodic_door(door_id, x, y, period, open_steps, phase=0, radius=12.0) : 매 step 시작에 (step + phase) % period < open_steps면 열림, 아니면 잠김 (cause "schedule", agent_ids []). 주기 값은 비밀
+
+add_bonus_item(item_id, x, y, points=10.0, expires_at=None) : normal item + bonus=True, expires_at, 비밀 _points. 주우면 bonus_collected(points). expires_at step이 되면 사라짐(bonus_expired)
+
+add_spawner(spawner_id, x, y, area, every, max_alive, prefix, points=0.0, label="") : 물체를 만들지 않고 내부 목록에만 등록(x, y는 builder 형식용). step % every == 0이고 prefix_* 개수가 max_alive 미만이면 area [x0, y0, x1, y1] 안 벽이 아닌 곳에 "<prefix>_<n>" 아이템 생성(points가 있으면 bonus_item) -> item_spawned
+
+add_receptacle(receptacle_id, x, y, accepts: list, target=1, radius=20.0, label="") : type "receptacle"(accepts, target, delivered, radius). 반경 안에 id가 accepts 중 하나로 시작하는 아이템을 drop하면 아이템을 없애고 item_delivered, delivered가 target이 되는 순간 delivery_complete
+
+add_checkpoint(checkpoint_id, x, y, radius=12.0, hidden=False, label="") : type "checkpoint"(visited). 누군가 radius 안에 들어오면 checkpoint_visited, 전부 방문하면 all_checkpoints_visited(한 번)
+
+add_variant_clue(clue_id, x, y, content, variants: dict, hidden=False) : clue + 비밀 _variants(agent_id -> 그 에이전트에게 보이는 content). 관찰(visible_objects, known_objects)에서 그 에이전트용 내용으로 바꿔 보여 줌
+
+움직이는 물체의 경로 숨기기: 기존 add_mover(..., extra={"_hide_path": True}) - 관찰에서 waypoints/target_index/loop를 지움
+
+- 규칙 (MapSpec.rules 키)
+
+glass_walls [[x, y, w, h], ...] : _walls()(이동 충돌, 관찰 walls)에는 포함, _has_line_of_sight()(시야)에는 불투명 벽만 사용
+
+message_loss (0~1) : _deliver에서 받는 사람마다 이 확률로 버림 -> message_lost (agent_ids=[보낸 사람], receiver_id)
+
+message_delay [min, max] : 이 범위 step만큼 늦게 전달 (다음 step 시작 훅에서 도착 처리, 메시지 step은 실제 도착 step)
+
+message_max_chars N / message_interval N : 메시지 계열 action(send_message, share_belief, request_info, confirm, claim_role, claim_task, issue_command)의 본문(type/receiver_id/memory를 뺀 값들을 이어 붙인 문자열)이 N자 초과이거나, 같은 에이전트의 마지막 전송 후 N step이 안 지났으면 전송 거부 -> message_blocked 이벤트 + 보낸 사람 inbox에 {"type": "system", "from": "system", "step", "content": "Your message was NOT sent: <이유>"} + final_action은 noop
+
+seed : 난수 시드 오프셋
+
+- 관찰
+
+_disguise(obj) : 기존 처리 + 이름이 "_"로 시작하는 비밀 필드 전부 제거, _hide_path면 경로 필드 제거
+
+get_observation(agent_id) : 기존 관찰 + variant_clue 내용 치환
+
+- 그 밖의 오버라이드
+
+_walls() / _opaque_walls() / _has_line_of_sight() : 위 유리벽 규칙
+
+apply_action() : 메시지 제한 검사 후 기존 처리
+
+_move_agent() : 기존 처리 + travel 누적
+
+press_button() : keypad 버튼이면 패널 입력, 아니면 기존 처리
+
+pull_lever() : latch/cooldown 레버 처리, 그 뒤 logic_door 재계산
+
+pick_up() : 기존 처리 + bonus_collected
+
+drop() : 기존 처리 + receptacle 배달
+
+_update_movers() (step 시작 훅) : 기존 mover 이동 -> 지연 메시지 도착 -> 보너스 만료 -> 스폰 -> periodic_door 갱신
+
+_update_pressure_plates() (step 끝 훅) : 기존 압력판 -> switch_plate -> sync_pad -> 체크포인트/goal_zone -> hold_steps 집계
+
+scenario_metrics(self) -> dict : {"distance_travelled": {agent: 거리}, "team_distance", "plate_hold_steps": {agent: step 수}, "bonus_points": {agent: 점수}, "messages": {"lost", "delayed", "blocked"}} - scoring이 team["metrics"]로 넣음
+
+- 새 이벤트 (EventLog type: agent_ids / 추가 필드)
+
+team_assembled : 전원 / zone_id
+
+keypad_input : 누른 에이전트 / panel_id, label
+
+keypad_reset : 누른 에이전트 / panel_id, wrong_at
+
+keypad_attempt : 마지막 입력자 / panel_id, guess, attempt, exact, misplaced
+
+keypad_solved : 마지막 입력자 / panel_id, attempts
+
+sync_pad_entered : 진입한 에이전트 / pad_id, group
+
+sync_success : 그 그룹 판 위의 에이전트 / group
+
+sync_fail : 밀려난 에이전트 / group, disabled_until
+
+lever_cooling : 당기려 한 에이전트 / lever_id, ready_at_step
+
+bonus_collected : 주운 에이전트 / object_id, points
+
+bonus_expired : [] / object_id
+
+item_spawned : [] / object_id, spawner_id
+
+item_delivered : 내려놓은 에이전트 / object_id, receptacle_id, delivered
+
+delivery_complete : 마지막 배달자 / receptacle_id
+
+checkpoint_visited : 그때 반경 안에 있던 에이전트 / object_id
+
+all_checkpoints_visited : [] / -
+
+message_lost : 보낸 에이전트 / receiver_id
+
+message_blocked : 보낸 에이전트 / reason
+
+door_unlocked/door_locked의 cause에 "switch_plate", "logic", "schedule", "keypad", "sync"가 추가됨
+
+### scenarios/oracle.py (검증 전용)
+
+Oracle(agent_ids) : barrier 공유 상태
+
+ScriptPolicy(oracle, env, agent_id, plan) : plan 항목을 차례로 실행하는 Policy. 항목: ("goto", x, y[, step]), ("face", deg), ("act", action), ("wait", n), ("at_step", n), ("until", fn(env)), ("barrier", name) - 전원이 도착한 다음 step에 함께 진행, ("call", fn(env, agent_id, obs) -> action 또는 None)
+
+carry_legs(start, waypoints, step=10.0) -> list : 2인 운반용으로 회전/전진을 매번 정확히 1 step씩 펼친 plan (두 에이전트가 같은 plan을 같은 step에 시작하면 보폭이 맞음)
+
+near(env, agent_id, x, y, radius=1.0) -> bool, unlocked(door_id) -> fn(env) : plan 조건용
+
+run(module, mode="solution", max_steps=400) -> tuple[int | None, env] : module.build()로 환경을 만들어 mode("solution"/"mistake") plan대로 돌리고 (클리어 step 또는 None, env) 반환
+
+### scenarios/__main__.py (명령행)
+
+python -m scenarios [이름 ...] [--out-dir map_datas] [--check] [--list] : 시나리오를 <out-dir>/<이름>.json으로 내보냄 (기본 전부). --check면 내보내기 전에 정답/실수 plan으로 모두 클리어되는지 확인하고 실패가 있으면 종료 코드 1. --list는 이름/계열/제목만 출력
 
 ---
 
@@ -719,7 +925,7 @@ add_rule(self, rule: Rule) -> None : 이 에이전트 전용 강제 규칙을 �
 
 - 모듈 상수
 
-ATTEMPT_EFFECTS : 시도로 세는 상호작용 action type -> 그 시도가 성공했을 때 같은 step에 그 에이전트 이름으로 남는 이벤트 종류 집합 (dict[str, set[str]]). pick_up->item_picked_up, drop->item_dropped, use_key->door_unlocked, press_button->door_unlocked/door_locked, pull_lever->lever_pulled
+ATTEMPT_EFFECTS : 시도로 세는 상호작용 action type -> 그 시도가 성공했을 때 같은 step에 그 에이전트 이름으로 남는 이벤트 종류 집합 (dict[str, set[str]]). pick_up->item_picked_up, drop->item_dropped, use_key->door_unlocked, press_button->door_unlocked/door_locked/number_accepted/keypad_input(시나리오 패널 버튼), pull_lever->lever_pulled
 
 ### ScoreConfig(Class, dataclass)
 
@@ -745,6 +951,16 @@ portal_points = 1.0 : 포탈 사용
 
 trap_penalty = -30.0 : trap 발동 (개인 감점, 매번)
 
+delivery_points = 5.0 : 아이템 배달 (item_delivered, 시나리오 맵)
+
+checkpoint_points = 3.0 : 체크포인트 첫 방문 (checkpoint_visited, 방문한 전원)
+
+keypad_points = 10.0 : 패널 풀기 (keypad_solved, 마지막 입력자)
+
+sync_points = 10.0 : 동시 진입 성공 (sync_success, 함께 밟은 전원)
+
+(bonus_collected는 배점 필드 없이 이벤트의 points를 그대로 개인 점수로 줌)
+
 clear_bonus = 50.0 : 클리어 시 단체 점수
 
 time_bonus_max = 30.0 : 클리어 시간 보너스 최댓값. time_bonus_max * (1 - (clear_step - 1) / max_steps)로 1 step 클리어면 전부, 늦을수록 선형 감소
@@ -755,7 +971,7 @@ failed_attempt_penalty_cap = -20.0 : 헛된 시도 감점의 하한
 
 - 함수 (모듈 레벨)
 
-_target_of(event: dict) -> str | None : 이벤트의 대상 오브젝트 id (object_id/door_id/lever_id/plate_id/portal_id 중 있는 것). 중복 가점 판정 키로 사용
+_target_of(event: dict) -> str | None : 이벤트의 대상 오브젝트 id (object_id/door_id/lever_id/plate_id/portal_id/panel_id/group 중 있는 것). 중복 가점 판정 키로 사용
 
 _individual_points(event: dict, config: ScoreConfig) -> tuple[float, str] | None : 이벤트 하나가 agent_ids의 각 에이전트에게 주는 (점수, 사유). 점수 대상이 아닌 이벤트(item_dropped, plate_left, door_locked, *_blocked 등)와 trap 물품의 item_picked_up(감점은 trap_triggered에서)은 None
 
@@ -766,7 +982,7 @@ clear_step(events: list[dict], objectives: list[dict]) -> int | None : 모든 ob
 count_attempts(env) -> tuple[int, int] : decision_log의 final_action 중 ATTEMPT_EFFECTS에 있는 상호작용 시도 수와, 그중 같은 step에 대응 이벤트가 그 에이전트 이름으로 남지 않은 헛된 시도 수를 (attempts, failed)로 반환
 
 score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConfig = None) -> dict : 회차 점수 계산. objectives는 클리어 조건 목록(형식은 _matches 참고)으로, clear_step()이 돌려준 step을 클리어 시간으로 씀. 반환 형식:
-{"agents": {agent_id: {"score", "items": [{"step", "reason", "target", "points"}]}}, "team": {"cleared", "clear_step", "clear_bonus", "time_bonus", "attempts", "failed_attempts", "attempt_penalty", "score"}, "individual_total", "total"}. total = individual_total + team.score
+{"agents": {agent_id: {"score", "items": [{"step", "reason", "target", "points"}]}}, "team": {"cleared", "clear_step", "clear_bonus", "time_bonus", "attempts", "failed_attempts", "attempt_penalty", "score"[, "metrics"]}, "individual_total", "total"}. total = individual_total + team.score. env에 scenario_metrics()가 있으면(시나리오 맵) team["metrics"]에 그 결과를 넣음 (총점에는 반영 안 함)
 
 ---
 

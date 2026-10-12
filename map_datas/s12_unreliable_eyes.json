@@ -1,0 +1,214 @@
+{
+  "seed": 0,
+  "width": 400,
+  "height": 300,
+  "walls": [],
+  "agents": [
+    {
+      "id": "A",
+      "x": 150,
+      "y": 180,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 250,
+      "y": 180,
+      "facing": 270
+    }
+  ],
+  "objects": [
+    {
+      "kind": "variant_clue",
+      "id": "clue_1",
+      "x": 60,
+      "y": 60,
+      "params": {
+        "content": "Digits 1-2 of the code: 4 7",
+        "variants": {
+          "A": "Digits 1-2 of the code: 4 1",
+          "B": "Digits 1-2 of the code: 4 7"
+        },
+        "hidden": false
+      }
+    },
+    {
+      "kind": "variant_clue",
+      "id": "clue_2",
+      "x": 200,
+      "y": 40,
+      "params": {
+        "content": "Digits 3-4 of the code: 3 9",
+        "variants": {
+          "A": "Digits 3-4 of the code: 3 9",
+          "B": "Digits 3-4 of the code: 8 9"
+        },
+        "hidden": false
+      }
+    },
+    {
+      "kind": "variant_clue",
+      "id": "clue_3",
+      "x": 340,
+      "y": 60,
+      "params": {
+        "content": "Digits 5-6 of the code: 2 6",
+        "variants": {
+          "A": "Digits 5-6 of the code: 5 6",
+          "B": "Digits 5-6 of the code: 2 6"
+        },
+        "hidden": false
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "clue_4",
+      "x": 200,
+      "y": 140,
+      "params": {
+        "hidden": false,
+        "content": "Checksum (printed in huge letters, readable by everyone): the six digits of the code add up to 31."
+      }
+    },
+    {
+      "kind": "keypad",
+      "id": "code_panel",
+      "x": 200,
+      "y": 210,
+      "params": {
+        "code": [
+          "4",
+          "7",
+          "3",
+          "9",
+          "2",
+          "6"
+        ],
+        "mode": "sequence",
+        "label": "6-digit code panel"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "key_0",
+      "x": 65,
+      "y": 250,
+      "params": {
+        "panel": "code_panel",
+        "label": "0"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "key_1",
+      "x": 95,
+      "y": 250,
+      "params": {
+        "panel": "code_panel",
+        "label": "1"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "key_2",
+      "x": 125,
+      "y": 250,
+      "params": {
+        "panel": "code_panel",
+        "label": "2"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "key_3",
+      "x": 155,
+      "y": 250,
+      "params": {
+        "panel": "code_panel",
+        "label": "3"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "key_4",
+      "x": 185,
+      "y": 250,
+      "params": {
+        "panel": "code_panel",
+        "label": "4"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "key_5",
+      "x": 215,
+      "y": 250,
+      "params": {
+        "panel": "code_panel",
+        "label": "5"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "key_6",
+      "x": 245,
+      "y": 250,
+      "params": {
+        "panel": "code_panel",
+        "label": "6"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "key_7",
+      "x": 275,
+      "y": 250,
+      "params": {
+        "panel": "code_panel",
+        "label": "7"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "key_8",
+      "x": 305,
+      "y": 250,
+      "params": {
+        "panel": "code_panel",
+        "label": "8"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "key_9",
+      "x": 335,
+      "y": 250,
+      "params": {
+        "panel": "code_panel",
+        "label": "9"
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "keypad_solved",
+      "panel_id": "code_panel"
+    }
+  ],
+  "puzzles": [
+    "s12_unreliable_eyes"
+  ],
+  "hints": [
+    "Enter the correct 6-digit code on code_panel."
+  ],
+  "config": {
+    "recommended_steps": 120,
+    "source": "scenarios/s12_unreliable_eyes.py"
+  },
+  "scenario": "s12_unreliable_eyes",
+  "rules": {},
+  "briefings": {
+    "A": "You and your teammate share one room with four notes and a 6-digit code_panel (buttons key_0 .. key_9 along the bottom). WARNING: your camera is faulty - when you read a note, some digits may be wrong. Your teammate's camera is faulty in DIFFERENT places. clue_4 is printed so large that it reads correctly for everyone. A wrong press clears the panel; try again as often as needed. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "You and your teammate share one room with four notes and a 6-digit code_panel (buttons key_0 .. key_9 along the bottom). WARNING: your camera is faulty - when you read a note, some digits may be wrong. Your teammate's camera is faulty in DIFFERENT places. clue_4 is printed so large that it reads correctly for everyone. A wrong press clears the panel; try again as often as needed. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

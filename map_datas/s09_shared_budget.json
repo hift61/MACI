@@ -1,0 +1,210 @@
+{
+  "seed": 0,
+  "width": 500,
+  "height": 400,
+  "walls": [
+    [
+      160,
+      80,
+      10,
+      240
+    ],
+    [
+      330,
+      80,
+      10,
+      240
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 240,
+      "y": 200,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 260,
+      "y": 200,
+      "facing": 270
+    }
+  ],
+  "objects": [
+    {
+      "kind": "checkpoint",
+      "id": "C1",
+      "x": 40,
+      "y": 40,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C1"
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "id": "C2",
+      "x": 250,
+      "y": 30,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C2"
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "id": "C3",
+      "x": 460,
+      "y": 50,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C3"
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "id": "C4",
+      "x": 60,
+      "y": 200,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C4"
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "id": "C5",
+      "x": 440,
+      "y": 210,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C5"
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "id": "C6",
+      "x": 50,
+      "y": 360,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C6"
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "id": "C7",
+      "x": 260,
+      "y": 370,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C7"
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "id": "C8",
+      "x": 450,
+      "y": 360,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C8"
+      }
+    },
+    {
+      "kind": "variant_clue",
+      "id": "survey",
+      "x": 250,
+      "y": 170,
+      "params": {
+        "hidden": false,
+        "content": {
+          "note": "Survey sheet. Each agent's copy lists different checkpoints."
+        },
+        "variants": {
+          "A": {
+            "survey_of": "agent A",
+            "checkpoints": {
+              "C1": [
+                40,
+                40
+              ],
+              "C2": [
+                250,
+                30
+              ],
+              "C3": [
+                460,
+                50
+              ],
+              "C4": [
+                60,
+                200
+              ],
+              "C6": [
+                50,
+                360
+              ]
+            },
+            "note": "This survey lists only some checkpoints. There are 8 in total (C1-C8)."
+          },
+          "B": {
+            "survey_of": "agent B",
+            "checkpoints": {
+              "C3": [
+                460,
+                50
+              ],
+              "C5": [
+                440,
+                210
+              ],
+              "C6": [
+                50,
+                360
+              ],
+              "C7": [
+                260,
+                370
+              ],
+              "C8": [
+                450,
+                360
+              ]
+            },
+            "note": "This survey lists only some checkpoints. There are 8 in total (C1-C8)."
+          }
+        }
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "all_checkpoints_visited"
+    }
+  ],
+  "puzzles": [
+    "s09_shared_budget"
+  ],
+  "hints": [
+    "Visit all eight checkpoints C1-C8 (each by at least one agent)."
+  ],
+  "config": {
+    "recommended_steps": 150,
+    "source": "scenarios/s09_shared_budget.py"
+  },
+  "scenario": "s09_shared_budget",
+  "rules": {},
+  "briefings": {
+    "A": "You and your teammate start in the middle of the map. Read the clue 'survey' - your copy lists only the checkpoints YOU know about (approximate coordinates); your teammate's copy is different. Every checkpoint C1-C8 must be visited by at least one of you; it does not matter who. Your team is ALSO judged on the total distance both of you walk, so avoid walking twice to the same place or both visiting the same checkpoint. Object guide: checkpoint: visited (and stays visited) as soon as any agent comes within its radius. Hidden checkpoints only show up when you are within about 15 units.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "You and your teammate start in the middle of the map. Read the clue 'survey' - your copy lists only the checkpoints YOU know about (approximate coordinates); your teammate's copy is different. Every checkpoint C1-C8 must be visited by at least one of you; it does not matter who. Your team is ALSO judged on the total distance both of you walk, so avoid walking twice to the same place or both visiting the same checkpoint. Object guide: checkpoint: visited (and stays visited) as soon as any agent comes within its radius. Hidden checkpoints only show up when you are within about 15 units.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}
