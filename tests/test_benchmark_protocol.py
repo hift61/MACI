@@ -127,9 +127,9 @@ class CentralControllerTests(unittest.TestCase):
         self.assertEqual({r['controller'] for r in records}, {'central'})
         self.assertEqual(score['controller'], 'central')
         self.assertEqual(score['score_config'], ScoreConfig().to_dict())
-        # One model controls two agents: double allowance, penalty split equally.
-        self.assertEqual(score['agents']['A']['token_penalty'], -10.0)
-        self.assertEqual(score['agents']['B']['token_penalty'], -10.0)
+        # One model controls two agents: double allowance, penalty split equally (20,000 extra -> 1 point each).
+        self.assertEqual(score['agents']['A']['token_penalty'], -1.0)
+        self.assertEqual(score['agents']['B']['token_penalty'], -1.0)
         self.assertEqual(score['agents']['A']['token_usage']['shared_with'], ['A', 'B'])
 
     def test_central_requires_llm_policy(self):
@@ -176,7 +176,7 @@ class LongContextPenaltyTests(unittest.TestCase):
             tracker(policy.client).record(self.usage(prompt))
         env.agents['A'].set_policy(policy)
         agent = score_episode(env, 80, objectives)['agents']['A']
-        self.assertEqual(agent['context_penalty'], -(10 + 90 + 250))
+        self.assertEqual(agent['context_penalty'], -10)  # 10 + 90 + 250 points, capped per agent
         self.assertEqual(agent['long_context_requests'], 3)
         self.assertIn('긴 context 요청 3회', [item['reason'] for item in agent['items']])
         self.assertEqual(policy.token_usage['max_prompt_tokens'], 1_200_000)

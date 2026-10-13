@@ -2,12 +2,15 @@
 import threading
 
 TOKEN_ALLOWANCE = 50_000
-TOKEN_PENALTY_PER_1000 = 1.0
+# 토큰 비용이 클리어 점수를 뒤집지 않도록 작게 + 상한 (2차 실험에서 클리어한 판도 총점이 -500 아래로 떨어졌음)
+TOKEN_PENALTY_PER_1000 = 0.1
+TOKEN_PENALTY_CAP = -10.0
 # 긴 context 감점: LLM 요청 한 번의 prompt(압축 후 실제로 보낸 context)가 START를 넘으면 그 요청마다
 # (min(prompt, END) - START)^2 / DIVISOR 점을 깎음. 예: 60만 -> 10점, 80만 -> 90점, 100만 -> 250점
 CONTEXT_PENALTY_START = 500_000
 CONTEXT_PENALTY_END = 1_000_000
 CONTEXT_PENALTY_DIVISOR = 1_000_000_000
+CONTEXT_PENALTY_CAP = -10.0  # 긴 context 감점의 에이전트당 하한
 
 
 def context_penalty(prompt_tokens: int, start: int = CONTEXT_PENALTY_START, end: int = CONTEXT_PENALTY_END,

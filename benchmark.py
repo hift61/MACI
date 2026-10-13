@@ -57,9 +57,10 @@ def load_score_config(path: str | None = None) -> ScoreConfig:
 # 비용 규칙 한 줄 (정보 계약 v2에서는 --disclose-costs일 때만 에이전트에게 알림. 채점은 알리든 말든 같음)
 def penalty_description(config: ScoreConfig) -> str:
     return (f" Costs: output tokens beyond {config.token_allowance:,} per agent cost "
-            f"{config.token_penalty_per_1000:g} point per 1,000; each request whose prompt exceeds "
-            f"{config.context_penalty_start:,} tokens costs (prompt-{config.context_penalty_start:,})^2/"
-            f"{config.context_penalty_divisor:,.0f} points; invalid actions {config.invalid_action_penalty:g}, "
+            f"{config.token_penalty_per_1000:g} point per 1,000 (at most {-config.token_penalty_cap:g}); each request "
+            f"whose prompt exceeds {config.context_penalty_start:,} tokens costs (prompt-{config.context_penalty_start:,})^2/"
+            f"{config.context_penalty_divisor:,.0f} points (at most {-config.context_penalty_cap:g} in total); "
+            f"invalid actions {config.invalid_action_penalty:g}, "
             f"failing code {config.code_failure_penalty:g}, no-effect interactions {config.failed_attempt_penalty:g} each.")
 
 

@@ -1,7 +1,7 @@
 import json
 from dataclasses import asdict, dataclass, field, fields
-from token_usage import (CONTEXT_PENALTY_DIVISOR, CONTEXT_PENALTY_END, CONTEXT_PENALTY_START, TOKEN_ALLOWANCE,
-                         TOKEN_PENALTY_PER_1000, context_penalty)
+from token_usage import (CONTEXT_PENALTY_CAP, CONTEXT_PENALTY_DIVISOR, CONTEXT_PENALTY_END, CONTEXT_PENALTY_START,
+                         TOKEN_ALLOWANCE, TOKEN_PENALTY_CAP, TOKEN_PENALTY_PER_1000, context_penalty)
 
 # 한 회차(episode)가 끝난 Environment의 event_log/decision_log를 읽어 점수를 매김.
 #   개인 점수: 각 에이전트가 일으킨 이벤트(물체 목격, 도움이 되는 동작 등)마다 부여
@@ -28,10 +28,12 @@ ATTEMPT_EFFECTS = {
 class ScoreConfig:
     token_allowance: int = TOKEN_ALLOWANCE
     token_penalty_per_1000: float = TOKEN_PENALTY_PER_1000
+    token_penalty_cap: float = TOKEN_PENALTY_CAP          # 출력 토큰 감점의 에이전트당 하한
     # 긴 context 감점: 압축 후 실제로 보낸 prompt가 start를 넘는 LLM 요청마다 (min(prompt, end) - start)^2 / divisor
     context_penalty_start: int = CONTEXT_PENALTY_START
     context_penalty_end: int = CONTEXT_PENALTY_END
     context_penalty_divisor: float = CONTEXT_PENALTY_DIVISOR
+    context_penalty_cap: float = CONTEXT_PENALTY_CAP      # 긴 context 감점의 에이전트당 하한
     # ---- 개인 점수 (대상 오브젝트마다 한 번) ----
     seen_points: float = 0.2                    # 물체를 처음 목격 (탐색은 협력이 아니므로 작게)
     seen_points_by_type: dict = field(default_factory=lambda: {"clue": 1.0})  # 종류별로 다르게 줄 때
@@ -254,14 +256,16 @@ def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConf
         code_failures = counts.get('compile_failures', 0) + counts.get('execution_failures', 0)
         for agent_id in members:
             agents[agent_id]['token_usage'] = dict(usage, **({'shared_with': members} if len(members) > 1 else {}))
-            agents[agent_id]['token_penalty'] = -penalty
-            if penalty:
-                add(agent_id, env.step_count, '과도한 토큰 소비', 'LLM', -penalty)
+            token_points = max(-penalty, config.token_penalty_cap)
+            agents[agent_id]['token_penalty'] = token_points
+            if token_points:
+                add(agent_id, env.step_count, '과도한 토큰 소비', 'LLM', token_points)
             share = round(context_total / len(members), 2)
-            agents[agent_id]['context_penalty'] = -share
+            context_points = max(-share, config.context_penalty_cap)
+            agents[agent_id]['context_penalty'] = context_points
             agents[agent_id]['long_context_requests'] = len(long_requests)
-            if share:
-                add(agent_id, env.step_count, f'긴 context 요청 {len(long_requests)}회', 'LLM', -share)
+            if context_points:
+                add(agent_id, env.step_count, f'긴 context 요청 {len(long_requests)}회', 'LLM', context_points)
             agents[agent_id]['code_failures'] = code_failures
             if code_failures:
                 points = code_failures * config.code_failure_penalty / len(members)

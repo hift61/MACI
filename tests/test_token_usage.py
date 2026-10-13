@@ -29,12 +29,12 @@ class TokenUsageTests(unittest.TestCase):
         self.assertEqual(policy.token_usage['total_tokens'], 652_500)
         self.assertEqual(policy.token_usage['completion_tokens'], 52_500)
         self.assertEqual(policy.token_usage['requests'], 2)
-        self.assertEqual(score['agents']['A']['token_penalty'], -2.5)
+        self.assertEqual(score['agents']['A']['token_penalty'], -0.25)  # 2,500 extra tokens x 0.1 / 1,000
         self.assertEqual(score['agents']['B']['token_penalty'], 0)
-        self.assertEqual(score['total'], -2.5)
+        self.assertEqual(score['total'], -0.25)
         self.assertEqual(score['agents']['A']['items'][-1]['reason'], '과도한 토큰 소비')
         # Repeated scoring reads must not accumulate another deduction.
-        self.assertEqual(score_episode(env, 150, objectives)['total'], -2.5)
+        self.assertEqual(score_episode(env, 150, objectives)['total'], -0.25)
         policy.reset()
         self.assertEqual(policy.token_usage['total_tokens'], 0)
 

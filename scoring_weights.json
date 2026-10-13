@@ -1,9 +1,11 @@
 {
   "token_allowance": 50000,
-  "token_penalty_per_1000": 1.0,
+  "token_penalty_per_1000": 0.1,
+  "token_penalty_cap": -10.0,
   "context_penalty_start": 500000,
   "context_penalty_end": 1000000,
   "context_penalty_divisor": 1000000000,
+  "context_penalty_cap": -10.0,
   "seen_points": 0.2,
   "seen_points_by_type": {
     "clue": 1.0
