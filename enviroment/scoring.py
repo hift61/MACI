@@ -17,7 +17,7 @@ from token_usage import (CONTEXT_PENALTY_DIVISOR, CONTEXT_PENALTY_END, CONTEXT_P
 ATTEMPT_EFFECTS = {
     "pick_up": {"item_picked_up"},
     "drop": {"item_dropped"},
-    "use_key": {"door_unlocked"},
+    "use_key": {"door_unlocked", "chest_opened"},  # chest_opened: 시나리오 맵의 상자
     "press_button": {"door_unlocked", "door_locked", "number_accepted",  # number_accepted: sequence_rooms 번호판
                      "keypad_input"},  # keypad_input: 시나리오 맵의 패널 버튼 (scenarios/engine.py)
     "pull_lever": {"lever_pulled"},
@@ -230,6 +230,12 @@ def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConf
                 awarded.add(key)
             cap = caps.get(event["type"])
             add(agent_id, event["step"], reason, _target_of(event), points, cap, event["type"] if cap is not None else None)
+
+    # 시나리오 맵: 회차가 끝날 때 남은 것으로 주는 개인 점수 (예: 들고 있는 동전) - scenarios/engine.py final_points
+    for agent_id, entries in (env.final_points() if hasattr(env, "final_points") else {}).items():
+        for points, reason, target in entries:
+            if agent_id in agents:
+                add(agent_id, env.step_count, reason, target, points)
 
     attempts, failed, failures = _attempts(env)
     failed_by_agent: dict[str, int] = {}

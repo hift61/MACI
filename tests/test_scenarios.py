@@ -38,15 +38,30 @@ class ScenarioSolvableTests(unittest.TestCase):
             "s12_unreliable_eyes": "keypad_reset",
             "s13_crossed_testimony": "keypad_attempt",
             "s14_silent_porters": "pickup_blocked",
+            "s17_push_blocks": "blocks_reset",
+            "s19_hot_cargo": "cargo_spoiled",
+            "s20_scales": "scale_balanced",
+            "s21_silent_signs": "keypad_reset",
+            "s22_narrow_bridge": "zone_overloaded",
         }
         for name, event in expected.items():
             with self.subTest(scenario=name):
                 _, env = run(load(name), "mistake")
                 self.assertIn(event, event_types(env))
         for name in ("s01_deadlock", "s04_half_mastermind", "s07_me_vs_us", "s08_boring_role",
-                     "s13_crossed_testimony", "s15_glass_division"):
+                     "s13_crossed_testimony", "s15_glass_division", "s16_remote_maze", "s17_push_blocks",
+                     "s18_assembly_line", "s19_hot_cargo", "s20_scales", "s21_silent_signs", "s22_narrow_bridge",
+                     "s23_key_chests", "s24_shared_purse"):
             with self.subTest(scenario=name):
                 self.assertGreater(run(load(name), "mistake")[0], run(load(name), "solution")[0])
+
+    def test_template_example_solves_and_is_not_exported(self):
+        template = load("_template")
+        self.assertNotIn("_template", SCENARIO_NAMES)
+        solved, _ = run(template, "solution")
+        recovered, _ = run(template, "mistake")
+        self.assertIsNotNone(solved)
+        self.assertGreater(recovered, solved)
 
     def test_no_failure_state_is_ever_reached(self):
         for name in SCENARIO_NAMES:
@@ -242,6 +257,119 @@ class ScenarioStageTests(unittest.TestCase):
         self.assertGreater(len(env._walls()), first)
         self.assertIn("d3_7", env.objects)
         self.assertNotIn("d1_1", env.objects)
+
+
+class ScenarioDeviceTests(unittest.TestCase):
+    """s16~s24에 추가된 장치 (블록, 가공대, 화물, 저울, 정원 구역, 상자, 동전, 메시지 금지, 조작자 제한)."""
+
+    def env_with(self, objects, agents=(("A", 100, 100), ("B", 100, 100)), rules=None, walls=()):
+        spec = MapSpec(seed=0, width=300, height=300, scenario="device_test", rules=rules or {},
+                       walls=[list(w) for w in walls],
+                       agents=[{"id": a, "x": x, "y": y, "facing": 0} for a, x, y in agents],
+                       objects=[{"kind": k, "id": i, "x": x, "y": y, "params": p} for k, i, x, y, p in objects])
+        return build_environment(spec)[0]
+
+    def push(self, env, agent_ids):
+        env.step_count += 1
+        for agent_id in agent_ids:
+            env.apply_action(agent_id, {"type": "move_forward", "distance": 20})
+        env._update_pressure_plates()
+
+    def test_block_needs_two_agents_pushing_the_same_way(self):
+        env = self.env_with([("push_block", "blk", 125, 100, {})], agents=(("A", 100, 100), ("B", 100, 100)))
+        self.push(env, ["A"])
+        self.assertEqual(env.objects["blk"]["x"], 125)
+        self.assertIn("push_too_weak", event_types(env))
+        self.push(env, ["A", "B"])
+        self.assertEqual(env.objects["blk"]["x"], 145)
+        self.assertLess(env.agents["A"].x, 145 - 12)  # 블록은 단단해서 통과하지 못함
+
+    def test_reset_lever_returns_blocks(self):
+        env = self.env_with([("push_block", "blk", 125, 100, {}), ("reset_lever", "rst", 108, 100, {"blocks": ["blk"]})])
+        self.push(env, ["A", "B"])
+        env.pull_lever("A", "rst")
+        self.assertEqual((env.objects["blk"]["x"], env.objects["blk"]["y"]), (125, 100))
+
+    def test_station_turns_input_into_output_after_delay(self):
+        env = self.env_with([("station", "oven", 100, 100, {"input": "ore", "output": "ingot", "process_steps": 2}),
+                             ("item", "ore_1", 100, 100, {})])
+        env.pick_up("A", "ore_1")
+        env.drop("A", "ore_1")
+        self.assertNotIn("ore_1", env.objects)
+        for _ in range(2):
+            env.step()
+        self.assertTrue(any(i.startswith("ingot") for i in env.objects))
+
+    def test_cargo_slows_carrier_and_returns_after_hold_limit_unless_handed_over(self):
+        env = self.env_with([("cargo", "box", 100, 100, {"hold_limit": 3, "carry_speed": 5})])
+        env.pick_up("A", "box")
+        env.move_forward("A", 20)
+        self.assertAlmostEqual(env.agents["A"].x, 105)
+        env.drop("A", "box")
+        env.pick_up("B", "box")
+        self.assertIn("cargo_handoff", event_types(env))
+        for _ in range(3):
+            env.step()
+        self.assertIn("cargo_spoiled", event_types(env))
+        self.assertEqual((env.objects["box"]["x"], env.objects["box"]["y"]), (100, 100))
+
+    def test_scale_reads_hidden_weights(self):
+        env = self.env_with([("weighted_item", "c1", 100, 100, {"weight": 4}), ("weighted_item", "c2", 100, 100, {"weight": 6}),
+                             ("scale", "test", 100, 100, {}), ("scale", "vault", 200, 200, {"target": 10})])
+        env.step()
+        self.assertEqual(env.objects["test"]["reading"], 10)
+        self.assertNotIn("_weight", env._disguise(env.objects["c1"]))
+        self.assertNotIn("_target", env._disguise(env.objects["vault"]))
+
+    def test_capacity_zone_throws_back_both_agents(self):
+        env = self.env_with([("capacity_zone", "bridge", 150, 100, {"width": 40, "height": 20})],
+                            agents=(("A", 115, 100), ("B", 185, 100)))
+        env.agents["B"].facing = 180
+        env.step_count = 1
+        env._update_pressure_plates()
+        env.apply_action("A", {"type": "move_forward", "distance": 20})
+        env.apply_action("B", {"type": "move_forward", "distance": 20})
+        env._update_pressure_plates()
+        self.assertEqual((env.agents["A"].x, env.agents["B"].x), (115, 185))
+        self.assertIn("zone_overloaded", event_types(env))
+
+    def test_chest_opens_with_its_key_and_releases_contents(self):
+        env = self.env_with([("chest", "box", 100, 110, {"contents": [{"kind": "item", "id": "gem"}]}),
+                             ("key", "k", 100, 100, {"unlocks": "box"})])
+        self.assertNotIn("_contents", env._disguise(env.objects["box"]))
+        env.pick_up("A", "k")
+        env.use_key("A", "k")
+        self.assertFalse(env.objects["box"]["locked"])
+        self.assertIn("gem", env.objects)
+
+    def test_coins_held_at_the_end_score_and_tolls_open_doors(self):
+        from scoring import score_episode
+        env = self.env_with([("coin", "coin_1", 100, 100, {"value": 5}), ("coin", "coin_2", 100, 100, {"value": 5}),
+                             ("door", "gate", 250, 250, {}),
+                             ("receptacle", "toll", 100, 100, {"accepts": ["coin"], "target": 1, "opens": ["gate"]})])
+        env.pick_up("A", "coin_1")
+        env.pick_up("A", "coin_2")
+        env.drop("A", "coin_1")
+        self.assertFalse(env.objects["gate"]["locked"])
+        score = score_episode(env, max_steps=10, objectives=[])
+        self.assertIn(("보유 동전", 5), [(i["reason"], i["points"]) for i in score["agents"]["A"]["items"]])
+
+    def test_messages_can_be_disabled_and_panels_limited_to_operators(self):
+        env = self.env_with([("keypad", "pad", 100, 100, {"code": ["x"], "operators": ["B"]}),
+                             ("keypad_button", "btn", 100, 100, {"panel": "pad", "label": "x"})],
+                            rules={"message_disabled": True})
+        env.apply_action("A", {"type": "send_message", "receiver_id": "B", "content": "hi"})
+        self.assertEqual(env.agents["B"].inbox, [])
+        env.press_button("A", "btn")
+        self.assertIn("keypad_denied", event_types(env))
+        env.press_button("B", "btn")
+        self.assertTrue(env.objects["pad"]["solved"])
+
+    def test_goal_zone_can_require_only_some_agents(self):
+        env = self.env_with([("goal_zone", "exit", 100, 100, {"width": 20, "height": 20, "agents": ["A"]})],
+                            agents=(("A", 100, 100), ("B", 250, 250)))
+        env.step()
+        self.assertIn("team_assembled", event_types(env))
 
 
 if __name__ == "__main__":

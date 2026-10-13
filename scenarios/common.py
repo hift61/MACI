@@ -26,6 +26,29 @@ OBJECT_HELP = {
                   "checkpoints only show up when you are within about 15 units.",
     "bonus_item": "item with \"bonus\": true: picking it up gives YOU personal points; it disappears at step "
                   "'expires_at' if nobody takes it.",
+    "push_block": "block: a heavy solid block (radius 'radius'). It moves 'push_distance' units only when at "
+                  "least 'required' agents walk into it in the SAME step while facing the same direction "
+                  "(within 30 degrees); it moves in that direction. One agent alone cannot move it. Blocks stop "
+                  "at walls and cannot be pulled.",
+    "block_target": "block_target: becomes 'filled' while the centre of any block is within its radius.",
+    "reset_lever": "lever with \"reset\": true: pull_lever puts the blocks listed in 'blocks' back where they started.",
+    "station": "station: drop an item whose id starts with 'input' within its radius; after 'process_steps' "
+               "steps a new item whose id starts with 'output' appears at (out_x, out_y). It works on one item "
+               "at a time ('busy_until' = step when the current work ends, 'queued' = items waiting).",
+    "cargo": "item with \"cargo\": true: whoever carries it moves at most 'carry_speed' units per step. One agent "
+             "may only keep it until step 'drop_by_step' (hold_limit steps after picking it up); after that it "
+             "jumps back to its starting place. The count restarts only when a DIFFERENT agent picks it up.",
+    "weighted_item": "Items here have hidden weights; you can only learn them by putting them on a scale.",
+    "scale": "scale: 'reading' is the total weight of items lying within its radius. A scale with a goal shows "
+             "only 'empty', 'too light', 'too heavy' or 'balanced'.",
+    "capacity_zone": "capacity_zone: a rectangle centred on (x, y) that holds at most 'capacity' agents. If more "
+                     "agents are inside at the end of a step, everyone inside is put back where they were before "
+                     "entering.",
+    "chest": "chest: a locked box. use_key with a key whose 'unlocks' is the chest's id (within about 15 units) "
+             "opens it; its contents then appear right next to it.",
+    "coin": "item with \"coin\": true: every coin you are still carrying when the episode ends is worth 'value' "
+            "personal points. Dropping coins into a receptacle spends them.",
+    "marker": "marker: a floor sign with a 'label'. It does nothing by itself.",
 }
 
 

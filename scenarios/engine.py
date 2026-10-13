@@ -19,6 +19,19 @@ objects 항목 kind가 아래 add_<kind> 이름과 같으면 mapgen.builder가 �
   receptacle     -> "receptacle"    반경 안에 accepts 접두사의 아이템을 내려놓으면 회수(item_delivered)
   checkpoint     -> "checkpoint"    누구든 반경 안에 들어가면 visited. 전부 방문하면 all_checkpoints_visited
   variant_clue   -> "clue"          에이전트마다 다른 내용이 보이는 단서 (관찰 노이즈 시나리오)
+  push_block     -> "block"         단단한 블록. required명이 같은 step에 같은 방향으로 밀어야 push_distance만큼 움직임
+  block_target   -> "block_target"  블록이 올라가면 filled. 전부 채워지면 all_targets_filled
+  reset_lever    -> "lever"         당기면 blocks를 처음 자리로 되돌림 (구석에 끼인 블록 구제)
+  station        -> "station"       input 접두사 아이템을 내려놓으면 process_steps 뒤 output 아이템을 만들어 냄
+  cargo          -> "item"          한 사람이 hold_limit step 넘게 들고 있으면 원위치로 돌아감. 들고 있으면 carry_speed로 느려짐
+  weighted_item  -> "item"          숨은 무게(_weight)가 있는 물건 (scale로만 잴 수 있음)
+  scale          -> "scale"         반경 안 물건 무게 합을 reading에 표시. target이 있으면 too light/too heavy/balanced만 표시
+  capacity_zone  -> "capacity_zone" 동시에 capacity명보다 많이 들어오면 안에 있던 전원을 들어오기 전 자리로 되돌림
+  chest          -> "chest"         use_key(unlocks=chest id)로 여는 상자. 열리면 contents가 그 자리에 나옴
+  coin           -> "item"          동전 (coin: true, value). 회차가 끝날 때 들고 있던 동전 가치가 개인 점수
+  marker         -> "marker"        동작 없는 바닥 표시 (label). 물건을 올려 신호로 쓰는 용도
+  (goal_zone에 agents=[...]를 주면 그 에이전트들만 모이면 됨, receptacle에 opens=[...]를 주면 목표 수 도달 시 문을 엶,
+   keypad에 operators=[...]를 주면 그 에이전트만 누를 수 있음)
   (add_mover에 extra={"_hide_path": True}를 주면 움직이는 물체의 경로(waypoints)가 관찰에서 빠짐)
 
 환경 규칙 (MapSpec.rules)
@@ -27,6 +40,7 @@ objects 항목 kind가 아래 add_<kind> 이름과 같으면 mapgen.builder가 �
   message_delay: [min, max]         메시지가 이 범위의 step만큼 늦게 도착
   message_max_chars: N              메시지 본문이 N자를 넘으면 전송 거부 (보낸 쪽 inbox에 system 알림)
   message_interval: N               한 에이전트가 N step에 한 번만 메시지를 보낼 수 있음 (위와 같이 거부)
+  message_disabled: true            메시지를 아예 보낼 수 없음 (위와 같이 거부)
   seed: int                         손실/지연/스폰 난수 시드 (MapSpec.seed에 더해짐)
   show_reward: bool                 benchmark가 누적 점수를 관찰(reward)에 넣어 피드백으로 줌
   stages: [단계, ...]               순서대로 깨야 하는 단계형 맵 (아래 "단계" 참고)
@@ -52,6 +66,7 @@ if ENVIRONMENT_DIR not in sys.path:
     sys.path.insert(0, ENVIRONMENT_DIR)  # enviroment/*.py use flat sibling imports
 
 from enviroment import Environment, ITEM_NORMAL  # noqa: E402
+from physics import SimplePhysicsEngine  # noqa: E402
 
 MESSAGE_ACTIONS = ("send_message", "share_belief", "request_info", "confirm",
                    "claim_role", "claim_task", "issue_command")
@@ -68,9 +83,50 @@ def _matches(event: dict, condition: dict) -> bool:
     return all(event.get(key) == value for key, value in condition.items())
 
 
+# 기본 물리(벽/잠긴 문/경계) + 블록(push_block)도 단단한 원으로 취급. 블록 안에서 바깥쪽으로는 나갈 수 있음
+class ScenarioPhysics(SimplePhysicsEngine):
+    def resolve_move(self, environment, agent, dx, dy):
+        new_x, new_y = super().resolve_move(environment, agent, dx, dy)
+        blocks = [o for o in environment.objects.values() if o["type"] == "block"]
+        t = circle_hit(blocks, agent.x, agent.y, new_x, new_y)
+        if t is None:
+            return new_x, new_y
+        length = math.hypot(new_x - agent.x, new_y - agent.y)
+        t = max(0.0, t - self.WALL_STANDOFF / length) if length > 0 else 0.0
+        return agent.x + (new_x - agent.x) * t, agent.y + (new_y - agent.y) * t
+
+
+# (x0, y0)->(x1, y1) 선분이 circles(각각 x, y, radius) 중 하나에 처음 들어가는 비율 t. 없으면 None
+def circle_hit(circles, x0, y0, x1, y1):
+    dx, dy = x1 - x0, y1 - y0
+    length2 = dx * dx + dy * dy
+    if length2 == 0:
+        return None
+    first = None
+    for c in circles:
+        ox, oy = x0 - c["x"], y0 - c["y"]
+        inside = ox * ox + oy * oy - c["radius"] ** 2
+        projection = ox * dx + oy * dy
+        if inside <= 0:
+            if projection >= 0:
+                continue  # 안에서 바깥쪽으로 나가는 중
+            hit = 0.0
+        else:
+            disc = projection * projection - length2 * inside
+            if disc < 0:
+                continue
+            hit = (-projection - math.sqrt(disc)) / length2
+            if not 0 <= hit <= 1:
+                continue
+        first = hit if first is None else min(first, hit)
+    return first
+
+
 class ScenarioEnvironment(Environment):
     def __init__(self, game_map, rules: dict = None, seed: int = 0, **kwargs) -> None:
         super().__init__(game_map, **kwargs)
+        if "physics" not in kwargs:
+            self.physics = ScenarioPhysics()
         self.scenario_rules = dict(rules or {})  # self.rules는 기존 Rule 객체 목록이라 이름을 따로 씀
         self._rng = random.Random(seed * 1000 + int(self.scenario_rules.get("seed", 0)))
         self.glass_walls = [tuple(w) for w in self.scenario_rules.get("glass_walls", [])]
@@ -89,6 +145,11 @@ class ScenarioEnvironment(Environment):
         self.stage_index = None   # 현재 단계 번호(0부터). 단계형 맵이 아니면 None, 다 깨면 len(stages)
         self._stage_ids: list[str] = []
         self._stage_event_start = 0
+        self._pushes: dict[str, list[tuple[str, float]]] = {}  # block_id -> 이번 step에 민 (agent_id, facing)
+        self._targets_logged = False
+        self._jobs: list[dict] = []            # station 가공 대기열 {"finish", "station", "output"}
+        self._outside: dict[str, tuple] = {}   # agent_id -> capacity_zone 밖에 있던 마지막 위치
+        self._balanced: set[str] = set()       # 이미 scale_balanced가 난 scale_id
 
     # ------------------------------------------------------------------ 벽/시야
 
@@ -122,9 +183,11 @@ class ScenarioEnvironment(Environment):
 
     # ------------------------------------------------------------------ 물체 배치
 
-    def add_goal_zone(self, zone_id, x, y, width, height, label="") -> None:
+    # agents: 모여야 하는 에이전트 id 목록 (None이면 전원)
+    def add_goal_zone(self, zone_id, x, y, width, height, label="", agents=None) -> None:
         self.objects[zone_id] = {"object_id": zone_id, "x": x, "y": y, "type": "goal_zone",
-                                 "width": width, "height": height, "label": label}
+                                 "width": width, "height": height, "label": label,
+                                 "agents": list(agents) if agents else None}
 
     def add_switch_plate(self, plate_id, x, y, opens, radius=10.0) -> None:
         self.objects[plate_id] = {"object_id": plate_id, "x": x, "y": y, "type": "switch_plate",
@@ -142,13 +205,15 @@ class ScenarioEnvironment(Environment):
         self.objects[lever_id] = {"object_id": lever_id, "x": x, "y": y, "type": "lever", "on": False,
                                   "linked_door_ids": [], "label": label, "cooldown": cooldown, "ready_at_step": 0}
 
-    def add_keypad(self, panel_id, x, y, code, mode="sequence", display_id=None, opens=None, label="") -> None:
+    # operators: 이 패널을 누를 수 있는 에이전트 id 목록 (None이면 누구나)
+    def add_keypad(self, panel_id, x, y, code, mode="sequence", display_id=None, opens=None, label="",
+                   operators=None) -> None:
         if mode not in ("sequence", "mastermind"):
             raise ValueError(f"unknown keypad mode: {mode!r}")
         self.objects[panel_id] = {"object_id": panel_id, "x": x, "y": y, "type": "keypad", "label": label,
                                   "mode": mode, "length": len(code), "entered": [], "attempts": 0,
-                                  "solved": False, "_code": list(code), "_display": display_id,
-                                  "_opens": list(opens or [])}
+                                  "solved": False, "operators": list(operators) if operators else None,
+                                  "_code": list(code), "_display": display_id, "_opens": list(opens or [])}
 
     def add_keypad_button(self, button_id, x, y, panel, label) -> None:
         self.objects[button_id] = {"object_id": button_id, "x": x, "y": y, "type": "button",
@@ -179,10 +244,11 @@ class ScenarioEnvironment(Environment):
         self._spawners.append({"id": spawner_id, "area": list(area), "every": every, "max_alive": max_alive,
                                "prefix": prefix, "points": points, "label": label, "count": 0})
 
-    def add_receptacle(self, receptacle_id, x, y, accepts, target=1, radius=20.0, label="") -> None:
+    # opens: delivered가 target에 도달하면 영구히 여는 문 목록 (통행료 함 등)
+    def add_receptacle(self, receptacle_id, x, y, accepts, target=1, radius=20.0, label="", opens=None) -> None:
         self.objects[receptacle_id] = {"object_id": receptacle_id, "x": x, "y": y, "type": "receptacle",
                                        "accepts": list(accepts), "target": target, "delivered": 0,
-                                       "radius": radius, "label": label}
+                                       "radius": radius, "label": label, "opens": list(opens or [])}
 
     def add_checkpoint(self, checkpoint_id, x, y, radius=12.0, hidden=False, label="") -> None:
         self.objects[checkpoint_id] = {"object_id": checkpoint_id, "x": x, "y": y, "type": "checkpoint",
@@ -192,6 +258,65 @@ class ScenarioEnvironment(Environment):
     def add_variant_clue(self, clue_id, x, y, content, variants, hidden=False) -> None:
         self.add_clue(clue_id, x, y, content, hidden=hidden)
         self.objects[clue_id]["_variants"] = copy.deepcopy(variants)
+
+    # required명이 같은 step에 같은 방향(angle_tolerance도 이내)으로 밀면 push_distance만큼 이동
+    def add_push_block(self, block_id, x, y, radius=12.0, required=2, push_distance=20.0, label="") -> None:
+        self.objects[block_id] = {"object_id": block_id, "x": x, "y": y, "type": "block", "radius": radius,
+                                  "required": required, "push_distance": push_distance, "label": label,
+                                  "_start": (x, y)}
+
+    def add_block_target(self, target_id, x, y, radius=10.0, label="") -> None:
+        self.objects[target_id] = {"object_id": target_id, "x": x, "y": y, "type": "block_target",
+                                   "radius": radius, "filled": False, "label": label}
+
+    def add_reset_lever(self, lever_id, x, y, blocks) -> None:
+        self.objects[lever_id] = {"object_id": lever_id, "x": x, "y": y, "type": "lever", "on": False,
+                                  "linked_door_ids": [], "reset": True, "blocks": list(blocks)}
+
+    # input 접두사 아이템을 반경 안에 내려놓으면 process_steps 뒤 (out_x, out_y)에 "<output>_<n>" 아이템 생성.
+    # 한 번에 하나씩 가공 (뒤에 온 것은 차례를 기다림)
+    def add_station(self, station_id, x, y, input, output, process_steps=3, radius=15.0, out_x=None, out_y=None,
+                    label="") -> None:
+        self.objects[station_id] = {"object_id": station_id, "x": x, "y": y, "type": "station", "input": input,
+                                    "output": output, "process_steps": process_steps, "radius": radius,
+                                    "out_x": x if out_x is None else out_x, "out_y": y if out_y is None else out_y,
+                                    "busy_until": 0, "queued": 0, "made": 0, "label": label}
+
+    # 한 에이전트가 hold_limit step 넘게 들고 있으면 원위치로 돌아감 (다른 에이전트가 받으면 다시 셈).
+    # 들고 있는 동안 한 번의 이동이 carry_speed로 제한됨. drop_by_step: 지금 든 사람이 내려놓아야 하는 step
+    def add_cargo(self, cargo_id, x, y, hold_limit=10, carry_speed=10.0, label="") -> None:
+        self.add_item(cargo_id, x, y, category=ITEM_NORMAL)
+        self.objects[cargo_id].update({"cargo": True, "hold_limit": hold_limit, "carry_speed": carry_speed,
+                                       "label": label, "drop_by_step": None, "_origin": (x, y),
+                                       "_carrier": None, "_held_since": None})
+
+    def add_weighted_item(self, item_id, x, y, weight, label="") -> None:
+        self.add_item(item_id, x, y, category=ITEM_NORMAL)
+        self.objects[item_id].update({"label": label, "_weight": weight})
+
+    # target이 없으면 반경 안 물건 무게 합을 reading에 숫자로, 있으면 "too light"/"too heavy"/"balanced"만 표시
+    def add_scale(self, scale_id, x, y, radius=15.0, target=None, label="") -> None:
+        self.objects[scale_id] = {"object_id": scale_id, "x": x, "y": y, "type": "scale", "radius": radius,
+                                  "reading": 0 if target is None else "empty", "label": label,
+                                  "_target": target}
+
+    def add_capacity_zone(self, zone_id, x, y, width, height, capacity=1, label="") -> None:
+        self.objects[zone_id] = {"object_id": zone_id, "x": x, "y": y, "type": "capacity_zone",
+                                 "width": width, "height": height, "capacity": capacity, "label": label}
+
+    # contents: [{"kind": "key"/"item"/..., "id": ..., 그 add_<kind>의 나머지 인자}, ...]
+    def add_chest(self, chest_id, x, y, contents, radius=8.0, label="") -> None:
+        self.objects[chest_id] = {"object_id": chest_id, "x": x, "y": y, "type": "chest", "locked": True,
+                                  "radius": radius, "label": label, "_contents": copy.deepcopy(contents)}
+
+    # 아무 동작 없이 이름표(label)만 있는 바닥 표시 (예: 색깔 매트). 물건을 올려 신호로 쓰는 용도
+    def add_marker(self, marker_id, x, y, label="", radius=12.0) -> None:
+        self.objects[marker_id] = {"object_id": marker_id, "x": x, "y": y, "type": "marker",
+                                   "label": label, "radius": radius}
+
+    def add_coin(self, coin_id, x, y, value=5.0) -> None:
+        self.add_item(coin_id, x, y, category=ITEM_NORMAL)
+        self.objects[coin_id].update({"coin": True, "value": value})
 
     # ------------------------------------------------------------------ 관찰
 
@@ -233,9 +358,30 @@ class ScenarioEnvironment(Environment):
                                                     "content": f"Your message was NOT sent: {reason}"})
                 return {"type": "noop"}
             self._last_sent[agent_id] = self.step_count
-        return super().apply_action(agent_id, action, observation)
+        final = super().apply_action(agent_id, action, observation)
+        if final.get("type") == "move_forward":
+            self._record_push(agent_id)
+        return final
+
+    # 이번 step에 전진을 시도했고, 끝난 위치가 블록에 맞닿아 있으며(반경 + 1 이내) 블록이 정면 45도
+    # 이내에 있으면 민 것으로 기록 (블록에 막혔든, 딱 맞닿는 데서 멈췄든)
+    def _record_push(self, agent_id: str) -> None:
+        agent = self.agents[agent_id]
+        last = agent.last_move or {}
+        if last.get("step") != self.step_count or not last.get("requested_distance"):
+            return
+        for block in [o for o in self.objects.values() if o["type"] == "block"]:
+            dx, dy = block["x"] - agent.x, block["y"] - agent.y
+            if math.hypot(dx, dy) > block["radius"] + 1.0:
+                continue
+            angle = abs((math.degrees(math.atan2(dy, dx)) - agent.facing + 180) % 360 - 180)
+            if angle <= 45:
+                self._pushes.setdefault(block["object_id"], []).append((agent_id, agent.facing))
+                return
 
     def _message_refusal(self, agent_id: str, action: dict):
+        if self.scenario_rules.get("message_disabled"):
+            return "messages are disabled in this map"
         max_chars = self.scenario_rules.get("message_max_chars")
         interval = self.scenario_rules.get("message_interval")
         if interval:
@@ -272,6 +418,10 @@ class ScenarioEnvironment(Environment):
             Environment._deliver(self, receiver_id, message)
 
     def _move_agent(self, agent_id: str, dx: float, dy: float) -> None:
+        speeds = [o["carry_speed"] for o in self.agents[agent_id].inventory if o.get("carry_speed")]
+        distance = math.hypot(dx, dy)
+        if speeds and distance > min(speeds):
+            dx, dy = dx / distance * min(speeds), dy / distance * min(speeds)
         super()._move_agent(agent_id, dx, dy)
         self.travel[agent_id] = self.travel.get(agent_id, 0.0) + self.agents[agent_id].last_move["distance"]
 
@@ -279,6 +429,10 @@ class ScenarioEnvironment(Environment):
         button = self.objects.get(button_id)
         if button is not None and button.get("type") == "button" and "panel" in button:
             agent = self.agents[agent_id]
+            panel = self.objects.get(button["panel"]) or {}
+            if panel.get("operators") and agent_id not in panel["operators"]:
+                self._log("keypad_denied", [agent_id], panel_id=button["panel"])
+                return
             if math.hypot(agent.x - button["x"], agent.y - button["y"]) <= self.interact_radius:
                 self._keypad_input(agent_id, button)
             return
@@ -290,6 +444,16 @@ class ScenarioEnvironment(Environment):
             return
         agent = self.agents[agent_id]
         if math.hypot(agent.x - lever["x"], agent.y - lever["y"]) > self.interact_radius:
+            return
+        if lever.get("reset"):
+            moved = []
+            for block_id in lever["blocks"]:
+                block = self.objects.get(block_id)
+                if block is not None and (block["x"], block["y"]) != tuple(block["_start"]):
+                    block["x"], block["y"] = block["_start"]
+                    moved.append(block_id)
+            self._log("lever_pulled", [agent_id], lever_id=lever_id, on=False)
+            self._log("blocks_reset", [agent_id], lever_id=lever_id, blocks=moved)
             return
         if lever.get("latch"):
             lever["on"] = True
@@ -311,14 +475,55 @@ class ScenarioEnvironment(Environment):
     def pick_up(self, agent_id: str, object_id: str) -> None:
         obj = self.objects.get(object_id)
         super().pick_up(agent_id, object_id)
-        if obj is not None and object_id not in self.objects and obj.get("bonus"):
+        if obj is None or object_id in self.objects:
+            return
+        if obj.get("bonus"):
             self._log("bonus_collected", [agent_id], object_id=object_id, points=obj.get("_points", 0.0))
+        if obj.get("cargo") and obj["_carrier"] != agent_id:
+            if obj["_carrier"] is not None:
+                self._log("cargo_handoff", [obj["_carrier"], agent_id], object_id=object_id,
+                          from_agent=obj["_carrier"], to_agent=agent_id)
+            obj["_carrier"], obj["_held_since"] = agent_id, self.step_count
+            obj["drop_by_step"] = self.step_count + obj["hold_limit"]
+
+    # 상자(chest)를 노린 열쇠면 상자를 열고 내용물을 꺼냄. 그 밖에는 기존 처리 (문)
+    def use_key(self, agent_id: str, key_object_id: str) -> None:
+        agent = self.agents[agent_id]
+        key = next((o for o in agent.inventory if o["object_id"] == key_object_id), None)
+        chest = self.objects.get(key["unlocks"]) if key is not None and key.get("type") == "key" else None
+        if chest is None or chest.get("type") != "chest":
+            super().use_key(agent_id, key_object_id)
+            return
+        if not chest["locked"] or math.hypot(agent.x - chest["x"], agent.y - chest["y"]) > self.interact_radius + chest["radius"]:
+            return
+        chest["locked"] = False
+        agent.inventory.remove(key)
+        spawned = []
+        for i, item in enumerate(chest["_contents"]):
+            item = dict(item)
+            kind, item_id = item.pop("kind"), item.pop("id")
+            angle = 2 * math.pi * i / max(1, len(chest["_contents"]))
+            getattr(self, f"add_{kind}")(item_id, round(chest["x"] + 6 * math.cos(angle), 1),
+                                         round(chest["y"] + 6 * math.sin(angle), 1), **item)
+            spawned.append(item_id)
+        self._log("chest_opened", [agent_id], object_id=chest["object_id"], key_id=key_object_id, contents=spawned)
 
     def drop(self, agent_id: str, object_id: str) -> None:
         super().drop(agent_id, object_id)
         obj = self.objects.get(object_id)
         if obj is None:
             return
+        for station in [o for o in self.objects.values() if o["type"] == "station"]:
+            if (math.hypot(obj["x"] - station["x"], obj["y"] - station["y"]) <= station["radius"]
+                    and object_id.startswith(station["input"])):
+                del self.objects[object_id]
+                finish = max(self.step_count, station["busy_until"]) + station["process_steps"]
+                station["busy_until"] = finish
+                station["queued"] += 1
+                self._jobs.append({"finish": finish, "station": station["object_id"], "by": agent_id})
+                self._log("item_processing", [agent_id], object_id=object_id, station_id=station["object_id"],
+                          ready_at=finish)
+                return
         for receptacle in [o for o in self.objects.values() if o["type"] == "receptacle"]:
             if math.hypot(obj["x"] - receptacle["x"], obj["y"] - receptacle["y"]) > receptacle["radius"]:
                 continue
@@ -330,6 +535,11 @@ class ScenarioEnvironment(Environment):
                       delivered=receptacle["delivered"])
             if receptacle["delivered"] == receptacle["target"]:
                 self._log("delivery_complete", [agent_id], receptacle_id=receptacle["object_id"])
+                for door_id in receptacle.get("opens", []):
+                    door = self.objects.get(door_id)
+                    if door is not None:
+                        door["latched"] = True
+                        self._set_door_locked(door, False, "receptacle", [agent_id], receptacle["object_id"])
             return
 
     # ------------------------------------------------------------------ 장치 로직
@@ -500,10 +710,127 @@ class ScenarioEnvironment(Environment):
         for zone in [o for o in self.objects.values() if o["type"] == "goal_zone"]:
             if zone["object_id"] in self._assembled or not self.agents:
                 continue
-            if all(abs(a.x - zone["x"]) <= zone["width"] / 2 and abs(a.y - zone["y"]) <= zone["height"] / 2
-                   for a in self.agents.values()):
+            members = [self.agents[a] for a in (zone.get("agents") or self.agents) if a in self.agents]
+            if members and all(self._in_rect(a, zone) for a in members):
                 self._assembled.add(zone["object_id"])
-                self._log("team_assembled", sorted(self.agents), zone_id=zone["object_id"])
+                self._log("team_assembled", sorted(a.agent_id for a in members), zone_id=zone["object_id"])
+
+    @staticmethod
+    def _in_rect(agent, zone) -> bool:
+        return abs(agent.x - zone["x"]) <= zone["width"] / 2 and abs(agent.y - zone["y"]) <= zone["height"] / 2
+
+    # 이번 step의 밀기를 방향별로 묶어, required명 이상이 같은 방향(30도 이내)으로 민 블록을 움직임
+    def _update_blocks(self) -> None:
+        pushes, self._pushes = self._pushes, {}
+        for block_id, entries in pushes.items():
+            block = self.objects.get(block_id)
+            if block is None:
+                continue
+            best = []
+            for _, facing in entries:
+                group = [(a, f) for a, f in entries if abs((f - facing + 180) % 360 - 180) <= 30]
+                if len({a for a, _ in group}) > len({a for a, _ in best}):
+                    best = group
+            pushers = sorted({a for a, _ in best})
+            if len(pushers) < block["required"]:
+                self._log("push_too_weak", sorted({a for a, _ in entries}), object_id=block_id,
+                          required=block["required"])
+                continue
+            heading = math.atan2(sum(math.sin(math.radians(f)) for _, f in best),
+                                 sum(math.cos(math.radians(f)) for _, f in best))
+            nx = block["x"] + block["push_distance"] * math.cos(heading)
+            ny = block["y"] + block["push_distance"] * math.sin(heading)
+            if self._block_fits(block, nx, ny):
+                block["x"], block["y"] = round(nx, 2), round(ny, 2)
+                self._log("block_moved", pushers, object_id=block_id, position=(block["x"], block["y"]))
+            else:
+                self._log("block_stuck", pushers, object_id=block_id)
+
+    def _block_fits(self, block, x, y) -> bool:
+        r = block["radius"]
+        if not (r <= x <= self.game_map.map_width - r and r <= y <= self.game_map.map_height - r):
+            return False
+        for wx, wy, ww, wh in self._walls():
+            if math.hypot(x - min(max(x, wx), wx + ww), y - min(max(y, wy), wy + wh)) < r:
+                return False
+        return not any(o is not block and o["type"] in ("block", "door") and o.get("locked", True)
+                       and math.hypot(x - o["x"], y - o["y"]) < r + o["radius"]
+                       for o in self.objects.values())
+
+    def _update_block_targets(self) -> None:
+        targets = [o for o in self.objects.values() if o["type"] == "block_target"]
+        blocks = [o for o in self.objects.values() if o["type"] == "block"]
+        for target in targets:
+            filled = any(math.hypot(b["x"] - target["x"], b["y"] - target["y"]) <= target["radius"] for b in blocks)
+            if filled != target["filled"]:
+                target["filled"] = filled
+                self._log("target_filled" if filled else "target_cleared", [], object_id=target["object_id"])
+        if targets and not self._targets_logged and all(t["filled"] for t in targets):
+            self._targets_logged = True
+            self._log("all_targets_filled", [])
+
+    def _finish_jobs(self) -> None:
+        for job in [j for j in self._jobs if j["finish"] <= self.step_count]:
+            self._jobs.remove(job)
+            station = self.objects.get(job["station"])
+            if station is None:  # 단계형 맵에서 단계가 바뀌어 가공대가 치워진 경우
+                continue
+            station["made"] += 1
+            station["queued"] -= 1
+            item_id = f"{station['output']}_{station['object_id']}_{station['made']}"
+            self.add_item(item_id, station["out_x"], station["out_y"])
+            self._log("item_processed", [job["by"]], object_id=item_id, station_id=station["object_id"])
+
+    # 한 사람이 hold_limit step 넘게 든 화물은 원위치로 (들고 있지 않아도 마지막으로 든 사람의 시간은 계속 감)
+    def _spoil_cargo(self) -> None:
+        for agent in self.agents.values():
+            for cargo in [o for o in agent.inventory if o.get("cargo")]:
+                if self.step_count >= cargo["drop_by_step"]:
+                    agent.inventory.remove(cargo)
+                    self._return_cargo(cargo, agent.agent_id)
+        for cargo in [o for o in self.objects.values() if o.get("cargo") and o["drop_by_step"] is not None]:
+            if self.step_count >= cargo["drop_by_step"] and (cargo["x"], cargo["y"]) != tuple(cargo["_origin"]):
+                del self.objects[cargo["object_id"]]
+                self._return_cargo(cargo, cargo["_carrier"])
+
+    def _return_cargo(self, cargo, agent_id) -> None:
+        cargo["x"], cargo["y"] = cargo["_origin"]
+        cargo["_carrier"], cargo["_held_since"], cargo["drop_by_step"] = None, None, None
+        self.objects[cargo["object_id"]] = cargo
+        self._log("cargo_spoiled", [agent_id] if agent_id else [], object_id=cargo["object_id"])
+
+    def _update_scales(self) -> None:
+        for scale in [o for o in self.objects.values() if o["type"] == "scale"]:
+            total = sum(o.get("_weight", 0) for o in self.objects.values()
+                        if o["type"] == "item" and math.hypot(o["x"] - scale["x"], o["y"] - scale["y"]) <= scale["radius"])
+            target = scale["_target"]
+            if target is None:
+                scale["reading"] = total
+                continue
+            scale["reading"] = ("empty" if total == 0 else "balanced" if total == target
+                                else "too light" if total < target else "too heavy")
+            if scale["reading"] == "balanced" and scale["object_id"] not in self._balanced:
+                self._balanced.add(scale["object_id"])
+                self._log("scale_balanced", [], scale_id=scale["object_id"], weight=total)
+
+    # 정원을 넘으면 안에 있던 전원을 들어오기 직전 자리로 되돌림
+    def _update_capacity_zones(self) -> None:
+        zones = [o for o in self.objects.values() if o["type"] == "capacity_zone"]
+        for agent in self.agents.values():
+            if not any(self._in_rect(agent, z) for z in zones):
+                self._outside[agent.agent_id] = (agent.x, agent.y)
+        for zone in zones:
+            inside = [a for a in self.agents.values() if self._in_rect(a, zone)]
+            if len(inside) <= zone["capacity"]:
+                continue
+            for agent in inside:
+                agent.x, agent.y = self._outside.get(agent.agent_id, (agent.x, agent.y))
+            self._log("zone_overloaded", sorted(a.agent_id for a in inside), zone_id=zone["object_id"])
+
+    # scoring.score_episode가 회차 끝에 더하는 개인 점수: 들고 있는 동전 {agent_id: [(점수, 사유, 대상)]}
+    def final_points(self) -> dict:
+        return {agent_id: [(o["value"], "보유 동전", o["object_id"]) for o in agent.inventory if o.get("coin")]
+                for agent_id, agent in self.agents.items()}
 
     def _count_holds(self) -> None:
         for agent in self.agents.values():
@@ -521,11 +848,17 @@ class ScenarioEnvironment(Environment):
         self._expire_bonus_items()
         self._update_spawners()
         self._update_periodic_doors()
+        self._finish_jobs()
+        self._spoil_cargo()
 
     def _update_pressure_plates(self) -> None:
         super()._update_pressure_plates()
+        self._update_blocks()
+        self._update_block_targets()
+        self._update_capacity_zones()
         self._update_switch_plates()
         self._update_sync_pads()
+        self._update_scales()
         self._update_checkpoints_and_zones()
         self._count_holds()
         self._check_stage()
@@ -589,6 +922,13 @@ class ScenarioEnvironment(Environment):
             self.stage_index = len(self.stages)
             self._log("all_stages_completed", sorted(self.agents))
 
+    def _count_events(self, event_type) -> dict:
+        counts: dict[str, int] = {}
+        for event in self.event_log.filter(event_type=event_type):
+            for agent_id in event["agent_ids"]:
+                counts[agent_id] = counts.get(agent_id, 0) + 1
+        return counts
+
     # scoring.score_episode가 team["metrics"]에 넣는 시나리오 지표
     def scenario_metrics(self) -> dict:
         bonus: dict[str, float] = {}
@@ -600,6 +940,9 @@ class ScenarioEnvironment(Environment):
             "distance_travelled": {a: round(d, 2) for a, d in self.travel.items()},
             "team_distance": round(sum(self.travel.values()), 2),
             "plate_hold_steps": dict(self.hold_steps),
+            "coins_held": {a: sum(o["value"] for o in ag.inventory if o.get("coin")) for a, ag in self.agents.items()},
+            "deliveries": self._count_events("item_delivered"),
+            "handoffs": len(self.event_log.filter(event_type="cargo_handoff")),
             "bonus_points": bonus,
             "messages": dict(self.message_stats),
         }

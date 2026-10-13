@@ -1,0 +1,97 @@
+{
+  "seed": 0,
+  "width": 480,
+  "height": 320,
+  "walls": [
+    [
+      150,
+      0,
+      10,
+      150
+    ],
+    [
+      300,
+      170,
+      10,
+      150
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 60,
+      "y": 260,
+      "facing": 0
+    },
+    {
+      "id": "B",
+      "x": 80,
+      "y": 290,
+      "facing": 0
+    }
+  ],
+  "objects": [
+    {
+      "kind": "cargo",
+      "id": "cargo",
+      "x": 40,
+      "y": 280,
+      "params": {
+        "hold_limit": 10,
+        "carry_speed": 10.0,
+        "label": "overheating cargo"
+      }
+    },
+    {
+      "kind": "receptacle",
+      "id": "dock",
+      "x": 440,
+      "y": 40,
+      "params": {
+        "accepts": [
+          "cargo"
+        ],
+        "target": 1,
+        "radius": 20.0,
+        "label": "cooling dock"
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "notice",
+      "x": 80,
+      "y": 300,
+      "params": {
+        "hidden": false,
+        "content": {
+          "goal": "Bring the cargo (south-west corner) to the cooling dock (north-east corner) and drop it there.",
+          "heat": "The cargo overheats in one agent's hands: 10 steps after you pick it up (see its 'drop_by_step'), it jumps back to the south-west corner - even if you dropped it meanwhile, unless your teammate picked it up. It cools down only when the OTHER agent takes it.",
+          "weight": "Carrying it slows you to 10 units per step; empty-handed you move up to 20.",
+          "distance": "The dock is far: about 470 units in a straight line."
+        }
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "delivery_complete",
+      "receptacle_id": "dock"
+    }
+  ],
+  "puzzles": [
+    "s19_hot_cargo"
+  ],
+  "hints": [
+    "Deliver the cargo to the receptacle 'dock' (north-east corner)."
+  ],
+  "config": {
+    "recommended_steps": 200,
+    "source": "scenarios/s19_hot_cargo.py"
+  },
+  "scenario": "s19_hot_cargo",
+  "rules": {},
+  "briefings": {
+    "A": "You and your teammate start in the south-west corner. Read the clue 'notice'. Object guide: item with \"cargo\": true: whoever carries it moves at most 'carry_speed' units per step. One agent may only keep it until step 'drop_by_step' (hold_limit steps after picking it up); after that it jumps back to its starting place. The count restarts only when a DIFFERENT agent picks it up. receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal).\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "You and your teammate start in the south-west corner. Read the clue 'notice'. Object guide: item with \"cargo\": true: whoever carries it moves at most 'carry_speed' units per step. One agent may only keep it until step 'drop_by_step' (hold_limit steps after picking it up); after that it jumps back to its starting place. The count restarts only when a DIFFERENT agent picks it up. receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal).\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

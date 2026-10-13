@@ -1,0 +1,201 @@
+{
+  "seed": 0,
+  "width": 460,
+  "height": 320,
+  "walls": [
+    [
+      220,
+      0,
+      20,
+      210
+    ],
+    [
+      0,
+      200,
+      90.0,
+      10
+    ],
+    [
+      130.0,
+      200,
+      90.0,
+      10
+    ],
+    [
+      240,
+      200,
+      90.0,
+      10
+    ],
+    [
+      370.0,
+      200,
+      90.0,
+      10
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 110,
+      "y": 120,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 350,
+      "y": 120,
+      "facing": 270
+    }
+  ],
+  "objects": [
+    {
+      "kind": "weighted_item",
+      "id": "crate_a1",
+      "x": 40,
+      "y": 60,
+      "params": {
+        "weight": 3,
+        "label": "crate"
+      }
+    },
+    {
+      "kind": "weighted_item",
+      "id": "crate_a2",
+      "x": 80,
+      "y": 60,
+      "params": {
+        "weight": 7,
+        "label": "crate"
+      }
+    },
+    {
+      "kind": "weighted_item",
+      "id": "crate_a3",
+      "x": 120,
+      "y": 60,
+      "params": {
+        "weight": 5,
+        "label": "crate"
+      }
+    },
+    {
+      "kind": "weighted_item",
+      "id": "crate_a4",
+      "x": 160,
+      "y": 60,
+      "params": {
+        "weight": 9,
+        "label": "crate"
+      }
+    },
+    {
+      "kind": "weighted_item",
+      "id": "crate_b1",
+      "x": 280,
+      "y": 60,
+      "params": {
+        "weight": 4,
+        "label": "crate"
+      }
+    },
+    {
+      "kind": "weighted_item",
+      "id": "crate_b2",
+      "x": 320,
+      "y": 60,
+      "params": {
+        "weight": 6,
+        "label": "crate"
+      }
+    },
+    {
+      "kind": "weighted_item",
+      "id": "crate_b3",
+      "x": 360,
+      "y": 60,
+      "params": {
+        "weight": 8,
+        "label": "crate"
+      }
+    },
+    {
+      "kind": "weighted_item",
+      "id": "crate_b4",
+      "x": 400,
+      "y": 60,
+      "params": {
+        "weight": 2,
+        "label": "crate"
+      }
+    },
+    {
+      "kind": "scale",
+      "id": "scale_A",
+      "x": 110,
+      "y": 150,
+      "params": {
+        "radius": 15.0,
+        "label": "room A test scale"
+      }
+    },
+    {
+      "kind": "scale",
+      "id": "scale_B",
+      "x": 350,
+      "y": 150,
+      "params": {
+        "radius": 15.0,
+        "label": "room B test scale"
+      }
+    },
+    {
+      "kind": "scale",
+      "id": "vault_scale",
+      "x": 230,
+      "y": 280,
+      "params": {
+        "radius": 20.0,
+        "target": 23,
+        "label": "vault scale"
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "vault_note",
+      "x": 230,
+      "y": 230,
+      "params": {
+        "hidden": false,
+        "content": {
+          "goal": "The vault opens when the crates lying on vault_scale weigh EXACTLY 23 in total.",
+          "vault_scale": "vault_scale never shows numbers - only 'too light', 'too heavy' or 'balanced'.",
+          "test_scales": "Each room has a test scale that shows the exact total weight of the crates lying on it.",
+          "crates": "Room A has crates crate_a1..a4 and room B has crate_b1..b4. Their weights are hidden."
+        }
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "scale_balanced",
+      "scale_id": "vault_scale"
+    }
+  ],
+  "puzzles": [
+    "s20_scales"
+  ],
+  "hints": [
+    "Make vault_scale read 'balanced' (crates on it weigh exactly 23)."
+  ],
+  "config": {
+    "recommended_steps": 200,
+    "source": "scenarios/s20_scales.py"
+  },
+  "scenario": "s20_scales",
+  "rules": {},
+  "briefings": {
+    "A": "You start in room A (north-west). Agent B is in room B (north-east). Both rooms open south into a shared hall with the vault scale. Read vault_note in the hall. Object guide: Items here have hidden weights; you can only learn them by putting them on a scale. scale: 'reading' is the total weight of items lying within its radius. A scale with a goal shows only 'empty', 'too light', 'too heavy' or 'balanced'.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "You start in room B (north-east). Agent A is in room A (north-west). Both rooms open south into a shared hall with the vault scale. Read vault_note in the hall. Object guide: Items here have hidden weights; you can only learn them by putting them on a scale. scale: 'reading' is the total weight of items lying within its radius. A scale with a goal shows only 'empty', 'too light', 'too heavy' or 'balanced'.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

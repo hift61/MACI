@@ -1,4 +1,4 @@
-"""시나리오 맵 패키지 (협력 실험용 고난도 환경 12종).
+"""시나리오 맵 패키지 (협력 실험용 고난도 환경 21종).
 
 구성
   engine.py   - ScenarioEnvironment: 시나리오 전용 물체/규칙 (기존 Environment 상속, 원본 수정 없음)
@@ -30,6 +30,16 @@ SCENARIO_NAMES = [
     "s13_crossed_testimony",
     "s14_silent_porters",
     "s15_glass_division",
+    # 아래는 장치 추가와 함께 만든 맵 (s16~s24)
+    "s16_remote_maze",
+    "s17_push_blocks",
+    "s18_assembly_line",
+    "s19_hot_cargo",
+    "s20_scales",
+    "s21_silent_signs",
+    "s22_narrow_bridge",
+    "s23_key_chests",
+    "s24_shared_purse",
 ]
 
 
