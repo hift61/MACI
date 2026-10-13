@@ -463,7 +463,8 @@ _OBSERVATION_DOC = """{"self": {"x", "y", "facing", "heading": {"x", "y"}, "last
   unknown action, or unknown receiver_id; it was replaced by noop) or "no_effect" (an interaction that
   changed nothing), with a reason.
 - notices: your most recent notices (oldest first), e.g. {"step", "type": "sequence_reset", "reason",
-  "caused_by_you"} when an input attempt is reset."""
+  "caused_by_you"} when an input attempt is reset, or {"type": "sync_fail"/"sync_success", "group"} after
+  a synchronized pad entry. last_action_result only says whether the action itself was valid."""
 
 
 # 샌드박스(_policy_harness.py)에서 실제로 허용하는 것을 그대로 안내 - 숨은 규칙에 걸려 실패하지 않도록

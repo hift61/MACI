@@ -234,6 +234,14 @@ def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConf
             add(agent_id, event["step"], reason, _target_of(event), points, cap, event["type"] if cap is not None else None)
 
     attempts, failed, failures = _attempts(env)
+    # 동기화 판(sync_pad) 진입도 시도로 셈: 판에 들어가는 것은 move_forward라 ATTEMPT_EFFECTS로는 잡히지 않음.
+    # 혼자 들어가 밀려난 것(sync_fail)은 밀려난 에이전트마다 헛된 시도 1회
+    sync_entries = sum(len(e["agent_ids"]) for e in env.event_log.entries if e["type"] == "sync_pad_entered")
+    sync_failures = [(e["step"], agent_id, "sync_pad")
+                     for e in env.event_log.entries if e["type"] == "sync_fail" for agent_id in e["agent_ids"]]
+    attempts += sync_entries
+    failed += len(sync_failures)
+    failures = failures + sync_failures
     failed_by_agent: dict[str, int] = {}
     for step, agent_id, action_type in failures:
         if agent_id not in agents:
@@ -294,8 +302,9 @@ def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConf
             "clear_step": cleared_at,
             "clear_bonus": clear_bonus,
             "time_bonus": round(time_bonus, 2),
-            "attempts": attempts,
-            "failed_attempts": failed,
+            "attempts": attempts,                 # 상호작용 행동 + 동기화 판 진입
+            "failed_attempts": failed,            # 효과 없는 상호작용 + 동시 진입 실패로 밀려남
+            "sync_failures": len(sync_failures),
             "score": round(team_score, 2),
             # 시나리오 맵이면 이동거리/판 지킨 시간/보너스/메시지 손실 등 지표 (점수 합계에는 안 들어감)
             **({"metrics": env.scenario_metrics()} if hasattr(env, "scenario_metrics") else {})

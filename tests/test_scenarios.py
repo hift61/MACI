@@ -176,6 +176,13 @@ class ScenarioRuleTests(unittest.TestCase):
         self.assertEqual((env.agents["A"].x, env.agents["A"].y), (105, 110))
         self.assertFalse(env.objects["pad_A"]["armed"])
         self.assertIn("sync_fail", event_types(env))
+        # 이동은 유효(ok)했지만 동기화는 실패 -> 알림으로 알려 주고, 시도/헛된 시도로 집계
+        self.assertEqual(env.get_observation("A")["last_action_result"]["status"], "ok")
+        self.assertEqual(env.get_observation("A")["notices"][-1]["type"], "sync_fail")
+        self.assertEqual(env.get_observation("B")["notices"], [])
+        from scoring import score_episode
+        team = score_episode(env, 150, [{"type": "sync_success", "group": "sync"}])["team"]
+        self.assertEqual((team["attempts"], team["failed_attempts"], team["sync_failures"]), (1, 1, 1))
 
     def test_periodic_gate_follows_its_schedule(self):
         module = load("s10_moving_world")

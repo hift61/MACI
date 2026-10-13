@@ -435,6 +435,8 @@ class ScenarioEnvironment(Environment):
                 state["solved"] = True
                 agent_ids = sorted(set().union(*(self._sync_inside[p["object_id"]] for p in members)))
                 self._log("sync_success", agent_ids, group=group)
+                for agent_id in self.agents:
+                    self._notify(agent_id, {"type": "sync_success", "group": group})
                 for door_id in {d for p in members for d in p["_opens"]}:
                     door = self.objects.get(door_id)
                     if door is not None:
@@ -455,6 +457,10 @@ class ScenarioEnvironment(Environment):
                 for pad in members:
                     pad["armed"] = False
                 self._log("sync_fail", pushed, group=group, disabled_until=state["disabled_until"])
+                # 이동 자체는 유효(ok)했으므로 last_action_result로는 실패가 안 보임 -> 밀려난 에이전트에게 알림
+                for agent_id in pushed:
+                    self._notify(agent_id, {"type": "sync_fail", "group": group,
+                                            "disabled_until": state["disabled_until"]})
 
     def _update_spawners(self) -> None:
         for spawner in self._spawners:
