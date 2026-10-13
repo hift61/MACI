@@ -14,6 +14,8 @@ SSH(키 로그인)로 원격 benchmark_runs 아래의 실행(manifest .jsonl)을
 - 가져오기: 그 실행의 파일을 benchmark_runs/pi/<원격 경로>로 내려받음 (대화 이력 파일은 크기 때문에 선택)
 - 이동 다시 보기: 내려받은 뒤 viewer.py로 열기
 - 실시간 따라보기: 진행 중인 실행의 새 step만 계속 이어 받아 viewer.py --live로 보기
+- LLM 출력 평가: 대화 이력의 LLM 응답 하나하나를 사람이 0~10점과 메모로 평가 (llm_outputs.py,
+  <manifest>.llm_ratings.<평가자>.json에 저장). 원격 실행은 대화 이력까지 내려받아 로컬 사본 옆에 저장
 원격 작업은 모두 원격의 python3에 아래 REMOTE_HELPER 스크립트를 보내 처리합니다(원격에 따로 설치할 것 없음).
 """
 from __future__ import annotations
@@ -29,6 +31,8 @@ import sys
 import tarfile
 import threading
 import time
+
+import llm_outputs
 
 ROOT = Path(__file__).resolve().parent
 LOCAL_DIR = ROOT / "benchmark_runs" / "pi"
@@ -237,7 +241,10 @@ class PiLogsApp:
         font = pygame.font.match_font("malgungothic,nanumgothic,applegothic")
         self.font, self.small, self.title = (pygame.font.Font(font, 18), pygame.font.Font(font, 14),
                                              pygame.font.Font(font, 26))
-        self.fields = {"host": host, "remote": remote_dir, "local": local_dir or str(ROOT / "benchmark_runs")}
+        self.fields = {"host": host, "remote": remote_dir, "local": local_dir or str(ROOT / "benchmark_runs"),
+                       "rater": "", "comment": ""}
+        # LLM 출력 평가 화면 상태: {"path", "outputs", "index", "ratings", "filter", "lines", "scroll"}
+        self.review: dict | None = None
         self.runner = runner
         self.source = source  # "remote" 또는 "local"
         self.focus = None
@@ -364,6 +371,125 @@ class PiLogsApp:
             self.open_viewer(path, live=True)
         self.background("실시간 따라보기 준비", lambda: self.client.download(rel, False), done)
 
+    # ---- LLM 출력 평가
+    def open_review(self) -> None:
+        if not self.selected:
+            self.status = "실행을 먼저 고르세요."
+            return
+        if not self.fields["rater"].strip():
+            self.status = "평가자 이름을 먼저 입력하세요 (아래 칸)."
+            self.focus = "rater"
+            return
+        rel = self.selected
+
+        def load(path):
+            outputs = llm_outputs.extract_outputs(path)
+            if not outputs:
+                raise ValueError("이 실행에는 LLM 출력이 없습니다 (규칙 기반 정책 등).")
+            return path, outputs
+
+        def done(result):
+            path, outputs = result
+            self.review = {"path": path, "outputs": outputs, "index": 0, "filter": None, "scroll": 0,
+                           "ratings": llm_outputs.load_ratings(path, self.fields["rater"])}
+            self.next_unrated(start=-1)
+            self.status = f"LLM 출력 {len(outputs)}개를 불러왔습니다. 숫자 키 0~9로 평가, ←/→ 이동."
+        if self.source == "local":
+            self.background("LLM 출력 불러오기", lambda: load(self.client.download(rel)), done)
+        else:
+            self.background("대화 이력 포함 가져오기", lambda: load(self.client.download(rel, True)), done)
+
+    def review_items(self) -> list[dict]:
+        outputs = self.review["outputs"]
+        agent = self.review["filter"]
+        return [o for o in outputs if agent is None or o["agent"] == agent]
+
+    def current_output(self) -> dict | None:
+        items = self.review_items() if self.review else []
+        return items[min(self.review["index"], len(items) - 1)] if items else None
+
+    def move_review(self, delta: int) -> None:
+        items = self.review_items()
+        if items:
+            self.review["index"] = min(len(items) - 1, max(0, self.review["index"] + delta))
+            self._show_output()
+
+    def next_unrated(self, start: int | None = None) -> None:
+        items = self.review_items()
+        begin = self.review["index"] if start is None else start
+        for offset in range(1, len(items) + 1):
+            index = (begin + offset) % len(items)
+            if items[index]["id"] not in self.review["ratings"]:
+                self.review["index"] = index
+                self._show_output()
+                return
+        self._show_output()
+        self.status = "모든 출력을 평가했습니다."
+
+    def set_filter(self, agent: str | None) -> None:
+        self.review["filter"], self.review["index"] = agent, 0
+        self._show_output()
+
+    def _show_output(self) -> None:
+        output = self.current_output()
+        if output is None:
+            self.review["lines"] = ["(이 에이전트의 출력이 없습니다)"]
+            return
+        rating = self.review["ratings"].get(output["id"])
+        self.fields["comment"] = rating.get("comment", "") if rating else ""
+        text = (llm_outputs.RUBRIC + "\n\n=== LLM 출력 ===\n" + output["output"]
+                + ("\n\n=== 하네스 응답 ===\n" + "\n".join(output["result"]) if output["result"] else "")
+                + "\n\n=== 이 출력 직전에 받은 입력 (앞부분) ===\n" + output["input"][:4000])
+        self.review["lines"] = self.wrap(text, 676)
+        self.review["scroll"] = 0
+
+    def rate(self, score) -> None:
+        output = self.current_output()
+        if output is None:
+            return
+        llm_outputs.save_rating(self.review["path"], self.fields["rater"], output, score, self.fields["comment"])
+        self.review["ratings"] = llm_outputs.load_ratings(self.review["path"], self.fields["rater"])
+        if score is not None:
+            self.next_unrated()
+
+    def wrap(self, value, width) -> list[str]:
+        lines = []
+        for paragraph in str(value).split("\n"):
+            rest = paragraph or " "
+            while rest:
+                n = min(len(rest), 220)
+                while n > 1 and self.small.size(rest[:n])[0] > width:
+                    n -= 1
+                lines.append(rest[:n])
+                rest = rest[n:]
+        return lines
+
+    def _draw_review(self, x: int) -> None:
+        pygame = self.pygame
+        review = self.review
+        output = self.current_output()
+        items = self.review_items()
+        self.button("평가 닫기", (x, 126, 120, 32), lambda: setattr(self, "review", None))
+        for i, (label, agent) in enumerate((("전체", None), ("A", "A"), ("B", "B"))):
+            self.button(label, (x + 132 + i * 66, 126, 60, 32), lambda a=agent: self.set_filter(a), review["filter"] == agent)
+        self.text(llm_outputs.summary(review["outputs"], review["ratings"]), x + 340, 134, width=356)
+        if output is not None:
+            rating = review["ratings"].get(output["id"])
+            self.text(f"{review['index'] + 1}/{len(items)}   에이전트 {output['agent']}   #{output['index']}   "
+                      f"step 약 {output['step']}   도구: {', '.join(t for t in output['tools'] if t) or '없음'}   "
+                      f"내 점수: {'-' if rating is None else rating['score']}", x, 166, self.font, width=696)
+        pygame.draw.rect(self.screen, (10, 15, 23), (x, 192, 696, 400), border_radius=8)
+        for i, line in enumerate(review["lines"][review["scroll"]:review["scroll"] + 19]):
+            self.text(line, x + 10, 198 + i * 20, width=676)
+        mine = review["ratings"].get(output["id"], {}).get("score") if output else None
+        for score in range(11):
+            self.button(str(score), (x + score * 56, 600, 50, 32), lambda v=score: self.rate(v), mine == score)
+        self.button("지우기", (x + 616, 600, 80, 32), lambda: self.rate(None))
+        self.button("◀ 이전", (x, 640, 100, 32), lambda: self.move_review(-1))
+        self.button("다음 ▶", (x + 108, 640, 100, 32), lambda: self.move_review(1))
+        self.button("다음 미평가", (x + 216, 640, 130, 32), self.next_unrated)
+        self.field("comment", "메모 (점수를 누르면 함께 저장)", x + 356, 632, 340)
+
     def open_viewer(self, path: Path, live: bool = False) -> None:
         flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         args = [sys.executable, str(ROOT / "viewer.py"), str(path)] + (["--live"] if live else [])
@@ -424,8 +550,13 @@ class PiLogsApp:
             self.widgets.append((pygame.Rect(rect), lambda p=run["path"]: self.select(p)))
         if not self.runs:
             self.text("목록이 비어 있습니다.", 40, 140, color=(154, 171, 193))
-        # 선택한 실행
+        # 선택한 실행 (또는 LLM 출력 평가 화면)
         x = 460
+        if self.review is not None:
+            self._draw_review(x)
+            self.text(self.status, 24, 728, color=(73, 166, 228), width=1130)
+            pygame.display.flip()
+            return
         run = next((r for r in self.runs if r["path"] == self.selected), None)
         if run:
             for i, line in enumerate(summary_lines(run, self.now)):
@@ -439,6 +570,8 @@ class PiLogsApp:
         if self.source == "remote":
             self.button("대화 이력 포함: " + ("예" if self.include_context else "아니오"), (x, 292, 250, 30),
                         lambda: setattr(self, "include_context", not self.include_context), self.include_context)
+        self.button("LLM 출력 평가", (x + 260, 292, 170, 30), self.open_review)
+        self.field("rater", "평가자", x + 440, 274, 256)
         pygame.draw.rect(self.screen, (10, 15, 23), (x, 330, 696, 386), border_radius=8)
         end = max(0, len(self.log_lines) - self.log_scroll)
         for i, line in enumerate(self.log_lines[max(0, end - 18):end]):
@@ -468,12 +601,22 @@ class PiLogsApp:
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     self.handle_click(event.pos)
                 elif event.type == pygame.MOUSEWHEEL:
-                    if pygame.mouse.get_pos()[0] < 450:
+                    if self.review is not None and pygame.mouse.get_pos()[0] >= 450:
+                        self.review["scroll"] = min(max(0, len(self.review["lines"]) - 19),
+                                                    max(0, self.review["scroll"] - event.y * 3))
+                    elif pygame.mouse.get_pos()[0] < 450:
                         self.list_scroll = min(max(0, len(self.runs) - 21), max(0, self.list_scroll - event.y))
                     else:
                         self.log_scroll = min(max(0, len(self.log_lines) - 18), max(0, self.log_scroll - event.y * 3))
                 elif event.type == pygame.TEXTINPUT and self.focus:
                     self.fields[self.focus] += event.text
+                elif event.type == pygame.KEYDOWN and not self.focus and self.review is not None:
+                    if event.key == pygame.K_LEFT:
+                        self.move_review(-1)
+                    elif event.key == pygame.K_RIGHT:
+                        self.move_review(1)
+                    elif pygame.K_0 <= event.key <= pygame.K_9:
+                        self.rate(event.key - pygame.K_0)
                 elif event.type == pygame.KEYDOWN and self.focus:
                     if event.key == pygame.K_BACKSPACE:
                         self.fields[self.focus] = self.fields[self.focus][:-1]
