@@ -46,7 +46,7 @@
       "kind": "checkpoint",
       "id": "C2",
       "x": 250,
-      "y": 30,
+      "y": 125,
       "params": {
         "radius": 12.0,
         "hidden": true,
@@ -118,72 +118,6 @@
         "hidden": true,
         "label": "C8"
       }
-    },
-    {
-      "kind": "variant_clue",
-      "id": "survey",
-      "x": 250,
-      "y": 170,
-      "params": {
-        "hidden": false,
-        "content": {
-          "note": "Survey sheet. Each agent's copy lists different checkpoints."
-        },
-        "variants": {
-          "A": {
-            "survey_of": "agent A",
-            "checkpoints": {
-              "C1": [
-                40,
-                40
-              ],
-              "C2": [
-                250,
-                30
-              ],
-              "C3": [
-                460,
-                50
-              ],
-              "C4": [
-                60,
-                200
-              ],
-              "C6": [
-                50,
-                360
-              ]
-            },
-            "note": "This survey lists only some checkpoints. There are 8 in total (C1-C8)."
-          },
-          "B": {
-            "survey_of": "agent B",
-            "checkpoints": {
-              "C3": [
-                460,
-                50
-              ],
-              "C5": [
-                440,
-                210
-              ],
-              "C6": [
-                50,
-                360
-              ],
-              "C7": [
-                260,
-                370
-              ],
-              "C8": [
-                450,
-                360
-              ]
-            },
-            "note": "This survey lists only some checkpoints. There are 8 in total (C1-C8)."
-          }
-        }
-      }
     }
   ],
   "objectives": [
@@ -195,16 +129,18 @@
     "s09_shared_budget"
   ],
   "hints": [
-    "Visit all eight checkpoints C1-C8 (each by at least one agent)."
+    "Visit all eight hidden checkpoints C1-C8 (each by at least one agent)."
   ],
   "config": {
-    "recommended_steps": 150,
+    "recommended_steps": 250,
     "source": "scenarios/s09_shared_budget.py"
   },
   "scenario": "s09_shared_budget",
-  "rules": {},
+  "rules": {
+    "show_reward": true
+  },
   "briefings": {
-    "A": "You and your teammate start in the middle of the map. Read the clue 'survey' - your copy lists only the checkpoints YOU know about (approximate coordinates); your teammate's copy is different. Every checkpoint C1-C8 must be visited by at least one of you; it does not matter who. Your team is ALSO judged on the total distance both of you walk, so avoid walking twice to the same place or both visiting the same checkpoint. Object guide: checkpoint: visited (and stays visited) as soon as any agent comes within its radius. Hidden checkpoints only show up when you are within about 15 units.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You and your teammate start in the middle of the map. Read the clue 'survey' - your copy lists only the checkpoints YOU know about (approximate coordinates); your teammate's copy is different. Every checkpoint C1-C8 must be visited by at least one of you; it does not matter who. Your team is ALSO judged on the total distance both of you walk, so avoid walking twice to the same place or both visiting the same checkpoint. Object guide: checkpoint: visited (and stays visited) as soon as any agent comes within its radius. Hidden checkpoints only show up when you are within about 15 units.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Eight hidden checkpoints C1-C8 are somewhere on the map. Every one must be visited by at least one of you; it does not matter who. Only one location is known: C2 is at about (250, 125), right next to where you start. Your observation's reward shows your scores, which go up when a checkpoint is visited. Object guide: checkpoint: visited (and stays visited) as soon as any agent comes within its radius. Hidden checkpoints only show up when you are within about 15 units.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Eight hidden checkpoints C1-C8 are somewhere on the map. Every one must be visited by at least one of you; it does not matter who. Only one location is known: C2 is at about (250, 125), right next to where you start. Your observation's reward shows your scores, which go up when a checkpoint is visited. Object guide: checkpoint: visited (and stays visited) as soon as any agent comes within its radius. Hidden checkpoints only show up when you are within about 15 units.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

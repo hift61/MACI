@@ -1,4 +1,5 @@
 """s05 확인의 문제 (통신 규약) - 메시지가 사라지거나 늦게 오는 상황에서 '같은 step'에 판 밟기.
+무전이 불안정하다는 사실은 단서에 없음 (에이전트가 직접 알아채야 함).
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
 from .common import agent, explain, make_spec, obj
@@ -17,8 +18,8 @@ def build():
                 "moving onto the pad from outside its radius.",
         "failure": "If only one pad is entered, both pads reject: whoever stands on a pad is pushed back a few "
                    "units and both pads ignore entries for 3 steps ('armed' becomes false).",
-        "radio": "The radio is unreliable: roughly one message in three is lost without notice, and others "
-                 "arrive up to 2 steps late. Every observation contains the shared step number (self.step).",
+        # 무전 상태(손실/지연)는 알려 주지 않음 - 메시지가 사라지거나 늦는다는 것을 스스로 알아채야 함
+        "clock": "Every observation contains the shared step number (self.step).",
     }
     objects = [
         obj("sync_pad", "pad_A", 105, 60, group="sync", tolerance=0, return_x=105, return_y=110, cooldown=3),

@@ -62,6 +62,22 @@ def _segments(start, end, gaps, make):
     return walls
 
 
+# 단계형 맵의 단계 하나 (scenarios/engine.py "단계" 참고). objects/walls/agents는 그 단계에만 쓰임
+def stage(title: str, briefing: str, objectives: list, objects: list, walls: list = None, agents: dict = None) -> dict:
+    result = {"title": title, "briefing": briefing, "objectives": objectives, "objects": objects}
+    if walls is not None:
+        result["walls"] = walls
+    if agents is not None:
+        result["agents"] = agents
+    return result
+
+
+STAGED_OBJECTIVES = [{"type": "all_stages_completed"}]
+STAGE_RULES = ("This map has several stages that must be cleared in order; observation 'stage' shows the current "
+               "stage number, title and briefing. Clearing a stage removes its objects, puts both agents back at "
+               "their start positions and loads the next stage. Your memory and conversation carry over.")
+
+
 def make_spec(name: str, width: int, height: int, walls: list, agents: list, objects: list,
               objectives: list, hints: list, briefings: dict, rules: dict = None,
               recommended_steps: int = 150, seed: int = 0) -> MapSpec:

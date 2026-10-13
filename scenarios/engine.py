@@ -28,6 +28,15 @@ objects 항목 kind가 아래 add_<kind> 이름과 같으면 mapgen.builder가 �
   message_max_chars: N              메시지 본문이 N자를 넘으면 전송 거부 (보낸 쪽 inbox에 system 알림)
   message_interval: N               한 에이전트가 N step에 한 번만 메시지를 보낼 수 있음 (위와 같이 거부)
   seed: int                         손실/지연/스폰 난수 시드 (MapSpec.seed에 더해짐)
+  show_reward: bool                 benchmark가 누적 점수를 관찰(reward)에 넣어 피드백으로 줌
+  stages: [단계, ...]               순서대로 깨야 하는 단계형 맵 (아래 "단계" 참고)
+
+단계 (rules["stages"]) - 각 단계는 {"title", "briefing", "objectives": [이벤트 조건, ...],
+  "objects": [MapSpec objects 항목], "walls": [[x, y, w, h], ...](생략하면 맵 벽), "agents": {id: [x, y, facing]}
+  (생략하면 맵 시작 위치)}. 단계의 objectives(EventLog 항목과 비교, scoring._matches 형식)가 그 단계 안에서 모두
+  충족되면 level_completed(level=번호)를 남기고, 그 단계 물체를 치운 뒤 에이전트를 시작 위치로 돌려놓고 다음 단계를
+  불러옴(level_started). 마지막 단계를 깨면 all_stages_completed - 단계형 맵의 클리어 조건. 대화와 메모리는
+  유지하고 정책 코드만 다시 짜게 함. 관찰의 "stage"에 현재 단계 번호/전체 수/제목/안내가 들어감.
 
 이름이 "_"로 시작하는 필드는 비밀 값(정답 코드, 배선, 주기 등)이라 관찰에서 지움 (_disguise).
 실패(영구 봉인) 상태는 만들지 않음 - 틀리면 리셋/밀려남/대기로만 대가를 치름.
@@ -49,6 +58,16 @@ MESSAGE_ACTIONS = ("send_message", "share_belief", "request_info", "confirm",
 PLATE_TYPES = ("pressure_plate", "switch_plate", "sync_pad")
 
 
+class _StageWall:
+    def __init__(self, x, y, width, height) -> None:
+        self.x, self.y, self.width, self.height = x, y, width, height
+
+
+# event가 condition의 모든 키/값을 그대로 가지면 충족 (scoring._matches와 같은 규칙)
+def _matches(event: dict, condition: dict) -> bool:
+    return all(event.get(key) == value for key, value in condition.items())
+
+
 class ScenarioEnvironment(Environment):
     def __init__(self, game_map, rules: dict = None, seed: int = 0, **kwargs) -> None:
         super().__init__(game_map, **kwargs)
@@ -66,6 +85,10 @@ class ScenarioEnvironment(Environment):
         self.travel: dict[str, float] = {}     # agent_id -> 실제 이동 거리 합
         self.hold_steps: dict[str, int] = {}   # agent_id -> 판(압력판/스위치판) 위에 있었던 step 수
         self.message_stats = {"lost": 0, "delayed": 0, "blocked": 0}
+        self.stages = list(self.scenario_rules.get("stages", []))
+        self.stage_index = None   # 현재 단계 번호(0부터). 단계형 맵이 아니면 None, 다 깨면 len(stages)
+        self._stage_ids: list[str] = []
+        self._stage_event_start = 0
 
     # ------------------------------------------------------------------ 벽/시야
 
@@ -185,6 +208,12 @@ class ScenarioEnvironment(Environment):
 
     def get_observation(self, agent_id: str) -> dict:
         observation = super().get_observation(agent_id)
+        if self.stages:
+            index = min(self.stage_index or 0, len(self.stages) - 1)
+            stage = self.stages[index]
+            observation["stage"] = {"stage": index + 1, "total": len(self.stages), "title": stage.get("title", ""),
+                                    "briefing": stage.get("briefing", ""),
+                                    "completed": self.stage_index is not None and self.stage_index >= len(self.stages)}
         for obj in observation["visible_objects"]:
             variants = self.objects.get(obj["object_id"], {}).get("_variants")
             if variants and agent_id in variants:
@@ -499,6 +528,66 @@ class ScenarioEnvironment(Environment):
         self._update_sync_pads()
         self._update_checkpoints_and_zones()
         self._count_holds()
+        self._check_stage()
+
+    # ------------------------------------------------------------------ 단계
+
+    # builder가 에이전트까지 배치한 뒤 부름: 시작 위치를 기억하고 첫 단계를 불러옴
+    def begin_stages(self) -> None:
+        if not self.stages or self.stage_index is not None:
+            return
+        self._base_walls = list(self.game_map.walls)
+        self._start_states = {aid: (a.x, a.y, a.facing) for aid, a in self.agents.items()}
+        self._load_stage(0)
+
+    def _load_stage(self, index: int) -> None:
+        stage = self.stages[index]
+        for object_id in self._stage_ids:
+            self.objects.pop(object_id, None)
+        for agent in self.agents.values():
+            agent.inventory = [o for o in agent.inventory if o["object_id"] not in self._stage_ids]
+        self.game_map.walls = ([_StageWall(*wall) for wall in stage["walls"]] if "walls" in stage
+                               else list(self._base_walls))
+        for agent_id, agent in self.agents.items():
+            x, y, facing = stage.get("agents", {}).get(agent_id, self._start_states[agent_id])
+            agent.x, agent.y, agent.facing, agent.last_move = float(x), float(y), float(facing) % 360, None
+        for item in stage["objects"]:
+            getattr(self, f"add_{item['kind']}")(item["id"], item["x"], item["y"], **copy.deepcopy(item["params"]))
+        self._stage_ids = [item["id"] for item in stage["objects"]]
+        # 지난 단계 물체의 기억이 현재 물체처럼 보이지 않게 함 (curriculum과 같은 처리)
+        self._known = {}
+        self._refresh_plans()
+        self.stage_index = index
+        self._stage_event_start = len(self.event_log.entries)
+        self._log("level_started", sorted(self.agents), level=index + 1, title=stage.get("title", ""))
+        for agent_id in self.agents:
+            self._notify(agent_id, {"type": "stage_started", "stage": index + 1, "total": len(self.stages),
+                                    "title": stage.get("title", "")})
+
+    # 새 단계에서는 예전 단계용 코드가 맞지 않으므로 다음 턴에 정책 코드를 새로 짜게 함
+    def _refresh_plans(self) -> None:
+        for agent in self.agents.values():
+            policy = agent.policy
+            if policy is None:
+                continue
+            for name, value in (("generated_code", None), ("_next_review_step", None), ("_last_pos", None),
+                                ("_last_action", None), ("_stall_count", 0), ("_agent_states", {})):
+                if hasattr(policy, name):
+                    setattr(policy, name, copy.copy(value))
+
+    def _check_stage(self) -> None:
+        if self.stage_index is None or self.stage_index >= len(self.stages):
+            return
+        stage = self.stages[self.stage_index]
+        events = self.event_log.entries[self._stage_event_start:]
+        if not all(any(_matches(e, condition) for e in events) for condition in stage["objectives"]):
+            return
+        self._log("level_completed", sorted(self.agents), level=self.stage_index + 1)
+        if self.stage_index + 1 < len(self.stages):
+            self._load_stage(self.stage_index + 1)
+        else:
+            self.stage_index = len(self.stages)
+            self._log("all_stages_completed", sorted(self.agents))
 
     # scoring.score_episode가 team["metrics"]에 넣는 시나리오 지표
     def scenario_metrics(self) -> dict:

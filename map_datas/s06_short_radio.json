@@ -24,421 +24,1225 @@
       "facing": 270
     }
   ],
-  "objects": [
-    {
-      "kind": "keypad",
-      "id": "panel_A",
-      "x": 105,
-      "y": 200,
-      "params": {
-        "code": [
-          "r2c3",
-          "r4c1",
-          "r1c4",
-          "r3c2",
-          "r2c2",
-          "r4c4"
-        ],
-        "mode": "sequence",
-        "label": "4x4 panel of room A"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r1c1",
-      "x": 40,
-      "y": 40,
-      "params": {
-        "panel": "panel_A",
-        "label": "r1c1"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r1c2",
-      "x": 75,
-      "y": 40,
-      "params": {
-        "panel": "panel_A",
-        "label": "r1c2"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r1c3",
-      "x": 110,
-      "y": 40,
-      "params": {
-        "panel": "panel_A",
-        "label": "r1c3"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r1c4",
-      "x": 145,
-      "y": 40,
-      "params": {
-        "panel": "panel_A",
-        "label": "r1c4"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r2c1",
-      "x": 40,
-      "y": 75,
-      "params": {
-        "panel": "panel_A",
-        "label": "r2c1"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r2c2",
-      "x": 75,
-      "y": 75,
-      "params": {
-        "panel": "panel_A",
-        "label": "r2c2"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r2c3",
-      "x": 110,
-      "y": 75,
-      "params": {
-        "panel": "panel_A",
-        "label": "r2c3"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r2c4",
-      "x": 145,
-      "y": 75,
-      "params": {
-        "panel": "panel_A",
-        "label": "r2c4"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r3c1",
-      "x": 40,
-      "y": 110,
-      "params": {
-        "panel": "panel_A",
-        "label": "r3c1"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r3c2",
-      "x": 75,
-      "y": 110,
-      "params": {
-        "panel": "panel_A",
-        "label": "r3c2"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r3c3",
-      "x": 110,
-      "y": 110,
-      "params": {
-        "panel": "panel_A",
-        "label": "r3c3"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r3c4",
-      "x": 145,
-      "y": 110,
-      "params": {
-        "panel": "panel_A",
-        "label": "r3c4"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r4c1",
-      "x": 40,
-      "y": 145,
-      "params": {
-        "panel": "panel_A",
-        "label": "r4c1"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r4c2",
-      "x": 75,
-      "y": 145,
-      "params": {
-        "panel": "panel_A",
-        "label": "r4c2"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r4c3",
-      "x": 110,
-      "y": 145,
-      "params": {
-        "panel": "panel_A",
-        "label": "r4c3"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "A_r4c4",
-      "x": 145,
-      "y": 145,
-      "params": {
-        "panel": "panel_A",
-        "label": "r4c4"
-      }
-    },
-    {
-      "kind": "clue",
-      "id": "clue_A",
-      "x": 170,
-      "y": 235,
-      "params": {
-        "hidden": false,
-        "content": {
-          "about": "This note describes the code of panel_B in ROOM B (not the panel in your room).",
-          "code": "Press these 6 buttons of panel_B in order: the top row, the first column from the left; then the third row from the top, the third column from the left; then the second row from the top, the last column on the right; then the bottom row, the second column from the left; then the top row, the third column from the left; then the third row from the top, the first column from the left.",
-          "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top row, c1 = left column). A wrong press clears the panel; start again.",
-          "radio": "Radio limits: at most 10 characters per message and at most one message every 5 steps. Longer or more frequent messages are refused."
-        }
-      }
-    },
-    {
-      "kind": "keypad",
-      "id": "panel_B",
-      "x": 335,
-      "y": 200,
-      "params": {
-        "code": [
-          "r1c1",
-          "r3c3",
-          "r2c4",
-          "r4c2",
-          "r1c3",
-          "r3c1"
-        ],
-        "mode": "sequence",
-        "label": "4x4 panel of room B"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r1c1",
-      "x": 270,
-      "y": 40,
-      "params": {
-        "panel": "panel_B",
-        "label": "r1c1"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r1c2",
-      "x": 305,
-      "y": 40,
-      "params": {
-        "panel": "panel_B",
-        "label": "r1c2"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r1c3",
-      "x": 340,
-      "y": 40,
-      "params": {
-        "panel": "panel_B",
-        "label": "r1c3"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r1c4",
-      "x": 375,
-      "y": 40,
-      "params": {
-        "panel": "panel_B",
-        "label": "r1c4"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r2c1",
-      "x": 270,
-      "y": 75,
-      "params": {
-        "panel": "panel_B",
-        "label": "r2c1"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r2c2",
-      "x": 305,
-      "y": 75,
-      "params": {
-        "panel": "panel_B",
-        "label": "r2c2"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r2c3",
-      "x": 340,
-      "y": 75,
-      "params": {
-        "panel": "panel_B",
-        "label": "r2c3"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r2c4",
-      "x": 375,
-      "y": 75,
-      "params": {
-        "panel": "panel_B",
-        "label": "r2c4"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r3c1",
-      "x": 270,
-      "y": 110,
-      "params": {
-        "panel": "panel_B",
-        "label": "r3c1"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r3c2",
-      "x": 305,
-      "y": 110,
-      "params": {
-        "panel": "panel_B",
-        "label": "r3c2"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r3c3",
-      "x": 340,
-      "y": 110,
-      "params": {
-        "panel": "panel_B",
-        "label": "r3c3"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r3c4",
-      "x": 375,
-      "y": 110,
-      "params": {
-        "panel": "panel_B",
-        "label": "r3c4"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r4c1",
-      "x": 270,
-      "y": 145,
-      "params": {
-        "panel": "panel_B",
-        "label": "r4c1"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r4c2",
-      "x": 305,
-      "y": 145,
-      "params": {
-        "panel": "panel_B",
-        "label": "r4c2"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r4c3",
-      "x": 340,
-      "y": 145,
-      "params": {
-        "panel": "panel_B",
-        "label": "r4c3"
-      }
-    },
-    {
-      "kind": "keypad_button",
-      "id": "B_r4c4",
-      "x": 375,
-      "y": 145,
-      "params": {
-        "panel": "panel_B",
-        "label": "r4c4"
-      }
-    },
-    {
-      "kind": "clue",
-      "id": "clue_B",
-      "x": 260,
-      "y": 235,
-      "params": {
-        "hidden": false,
-        "content": {
-          "about": "This note describes the code of panel_A in ROOM A (not the panel in your room).",
-          "code": "Press these 6 buttons of panel_A in order: the second row from the top, the third column from the left; then the bottom row, the first column from the left; then the top row, the last column on the right; then the third row from the top, the second column from the left; then the second row from the top, the second column from the left; then the bottom row, the last column on the right.",
-          "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top row, c1 = left column). A wrong press clears the panel; start again.",
-          "radio": "Radio limits: at most 10 characters per message and at most one message every 5 steps. Longer or more frequent messages are refused."
-        }
-      }
-    }
-  ],
+  "objects": [],
   "objectives": [
     {
-      "type": "keypad_solved",
-      "panel_id": "panel_A"
-    },
-    {
-      "type": "keypad_solved",
-      "panel_id": "panel_B"
+      "type": "all_stages_completed"
     }
   ],
   "puzzles": [
     "s06_short_radio"
   ],
   "hints": [
-    "Solve panel_A (room A) and panel_B (room B)."
+    "Clear all three stages; each stage ends when both rooms' panels of that stage are solved."
   ],
   "config": {
-    "recommended_steps": 200,
+    "recommended_steps": 300,
     "source": "scenarios/s06_short_radio.py"
   },
   "scenario": "s06_short_radio",
   "rules": {
     "message_max_chars": 10,
-    "message_interval": 5
+    "message_interval": 5,
+    "stages": [
+      {
+        "title": "2-button codes",
+        "briefing": "Solve panel_A1 (room A) and panel_B1 (room B), 2 buttons each. Read clue_A1 / clue_B1: each holds the OTHER room's code.",
+        "objectives": [
+          {
+            "type": "keypad_solved",
+            "panel_id": "panel_A1"
+          },
+          {
+            "type": "keypad_solved",
+            "panel_id": "panel_B1"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "keypad",
+            "id": "panel_A1",
+            "x": 105,
+            "y": 200,
+            "params": {
+              "code": [
+                "r3c2",
+                "r1c4"
+              ],
+              "mode": "sequence",
+              "label": "4x4 panel of room A"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r1c1",
+            "x": 40,
+            "y": 40,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r1c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r1c2",
+            "x": 75,
+            "y": 40,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r1c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r1c3",
+            "x": 110,
+            "y": 40,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r1c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r1c4",
+            "x": 145,
+            "y": 40,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r1c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r2c1",
+            "x": 40,
+            "y": 75,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r2c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r2c2",
+            "x": 75,
+            "y": 75,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r2c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r2c3",
+            "x": 110,
+            "y": 75,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r2c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r2c4",
+            "x": 145,
+            "y": 75,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r2c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r3c1",
+            "x": 40,
+            "y": 110,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r3c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r3c2",
+            "x": 75,
+            "y": 110,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r3c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r3c3",
+            "x": 110,
+            "y": 110,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r3c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r3c4",
+            "x": 145,
+            "y": 110,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r3c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r4c1",
+            "x": 40,
+            "y": 145,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r4c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r4c2",
+            "x": 75,
+            "y": 145,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r4c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r4c3",
+            "x": 110,
+            "y": 145,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r4c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r4c4",
+            "x": 145,
+            "y": 145,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r4c4"
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_A1",
+            "x": 170,
+            "y": 235,
+            "params": {
+              "hidden": false,
+              "content": {
+                "about": "This note describes the code of panel_B1 in ROOM B (not the panel in your room).",
+                "code": "Press these 2 buttons of panel_B1 in order: the second row from the top, the first column from the left; then the bottom row, the third column from the left.",
+                "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top row, c1 = left column). A wrong press clears the panel; start again.",
+                "radio": "Radio limits: at most 10 characters per message and at most one message every 5 steps. Longer or more frequent messages are refused."
+              }
+            }
+          },
+          {
+            "kind": "keypad",
+            "id": "panel_B1",
+            "x": 335,
+            "y": 200,
+            "params": {
+              "code": [
+                "r2c1",
+                "r4c3"
+              ],
+              "mode": "sequence",
+              "label": "4x4 panel of room B"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r1c1",
+            "x": 270,
+            "y": 40,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r1c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r1c2",
+            "x": 305,
+            "y": 40,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r1c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r1c3",
+            "x": 340,
+            "y": 40,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r1c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r1c4",
+            "x": 375,
+            "y": 40,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r1c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r2c1",
+            "x": 270,
+            "y": 75,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r2c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r2c2",
+            "x": 305,
+            "y": 75,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r2c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r2c3",
+            "x": 340,
+            "y": 75,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r2c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r2c4",
+            "x": 375,
+            "y": 75,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r2c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r3c1",
+            "x": 270,
+            "y": 110,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r3c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r3c2",
+            "x": 305,
+            "y": 110,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r3c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r3c3",
+            "x": 340,
+            "y": 110,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r3c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r3c4",
+            "x": 375,
+            "y": 110,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r3c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r4c1",
+            "x": 270,
+            "y": 145,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r4c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r4c2",
+            "x": 305,
+            "y": 145,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r4c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r4c3",
+            "x": 340,
+            "y": 145,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r4c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r4c4",
+            "x": 375,
+            "y": 145,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r4c4"
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_B1",
+            "x": 260,
+            "y": 235,
+            "params": {
+              "hidden": false,
+              "content": {
+                "about": "This note describes the code of panel_A1 in ROOM A (not the panel in your room).",
+                "code": "Press these 2 buttons of panel_A1 in order: the third row from the top, the second column from the left; then the top row, the last column on the right.",
+                "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top row, c1 = left column). A wrong press clears the panel; start again.",
+                "radio": "Radio limits: at most 10 characters per message and at most one message every 5 steps. Longer or more frequent messages are refused."
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "4-button codes",
+        "briefing": "Solve panel_A2 (room A) and panel_B2 (room B), 4 buttons each. Read clue_A2 / clue_B2: each holds the OTHER room's code.",
+        "objectives": [
+          {
+            "type": "keypad_solved",
+            "panel_id": "panel_A2"
+          },
+          {
+            "type": "keypad_solved",
+            "panel_id": "panel_B2"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "keypad",
+            "id": "panel_A2",
+            "x": 105,
+            "y": 200,
+            "params": {
+              "code": [
+                "r1c2",
+                "r4c4",
+                "r2c1",
+                "r3c3"
+              ],
+              "mode": "sequence",
+              "label": "4x4 panel of room A"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r1c1",
+            "x": 40,
+            "y": 40,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r1c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r1c2",
+            "x": 75,
+            "y": 40,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r1c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r1c3",
+            "x": 110,
+            "y": 40,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r1c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r1c4",
+            "x": 145,
+            "y": 40,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r1c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r2c1",
+            "x": 40,
+            "y": 75,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r2c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r2c2",
+            "x": 75,
+            "y": 75,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r2c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r2c3",
+            "x": 110,
+            "y": 75,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r2c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r2c4",
+            "x": 145,
+            "y": 75,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r2c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r3c1",
+            "x": 40,
+            "y": 110,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r3c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r3c2",
+            "x": 75,
+            "y": 110,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r3c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r3c3",
+            "x": 110,
+            "y": 110,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r3c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r3c4",
+            "x": 145,
+            "y": 110,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r3c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r4c1",
+            "x": 40,
+            "y": 145,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r4c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r4c2",
+            "x": 75,
+            "y": 145,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r4c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r4c3",
+            "x": 110,
+            "y": 145,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r4c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r4c4",
+            "x": 145,
+            "y": 145,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r4c4"
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_A2",
+            "x": 170,
+            "y": 235,
+            "params": {
+              "hidden": false,
+              "content": {
+                "about": "This note describes the code of panel_B2 in ROOM B (not the panel in your room).",
+                "code": "Press these 4 buttons of panel_B2 in order: the bottom row, the first column from the left; then the second row from the top, the second column from the left; then the third row from the top, the last column on the right; then the top row, the third column from the left.",
+                "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top row, c1 = left column). A wrong press clears the panel; start again.",
+                "radio": "Radio limits: at most 10 characters per message and at most one message every 5 steps. Longer or more frequent messages are refused."
+              }
+            }
+          },
+          {
+            "kind": "keypad",
+            "id": "panel_B2",
+            "x": 335,
+            "y": 200,
+            "params": {
+              "code": [
+                "r4c1",
+                "r2c2",
+                "r3c4",
+                "r1c3"
+              ],
+              "mode": "sequence",
+              "label": "4x4 panel of room B"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r1c1",
+            "x": 270,
+            "y": 40,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r1c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r1c2",
+            "x": 305,
+            "y": 40,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r1c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r1c3",
+            "x": 340,
+            "y": 40,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r1c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r1c4",
+            "x": 375,
+            "y": 40,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r1c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r2c1",
+            "x": 270,
+            "y": 75,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r2c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r2c2",
+            "x": 305,
+            "y": 75,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r2c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r2c3",
+            "x": 340,
+            "y": 75,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r2c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r2c4",
+            "x": 375,
+            "y": 75,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r2c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r3c1",
+            "x": 270,
+            "y": 110,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r3c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r3c2",
+            "x": 305,
+            "y": 110,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r3c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r3c3",
+            "x": 340,
+            "y": 110,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r3c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r3c4",
+            "x": 375,
+            "y": 110,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r3c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r4c1",
+            "x": 270,
+            "y": 145,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r4c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r4c2",
+            "x": 305,
+            "y": 145,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r4c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r4c3",
+            "x": 340,
+            "y": 145,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r4c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r4c4",
+            "x": 375,
+            "y": 145,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r4c4"
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_B2",
+            "x": 260,
+            "y": 235,
+            "params": {
+              "hidden": false,
+              "content": {
+                "about": "This note describes the code of panel_A2 in ROOM A (not the panel in your room).",
+                "code": "Press these 4 buttons of panel_A2 in order: the top row, the second column from the left; then the bottom row, the last column on the right; then the second row from the top, the first column from the left; then the third row from the top, the third column from the left.",
+                "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top row, c1 = left column). A wrong press clears the panel; start again.",
+                "radio": "Radio limits: at most 10 characters per message and at most one message every 5 steps. Longer or more frequent messages are refused."
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "6-button codes",
+        "briefing": "Solve panel_A3 (room A) and panel_B3 (room B), 6 buttons each. Read clue_A3 / clue_B3: each holds the OTHER room's code.",
+        "objectives": [
+          {
+            "type": "keypad_solved",
+            "panel_id": "panel_A3"
+          },
+          {
+            "type": "keypad_solved",
+            "panel_id": "panel_B3"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "keypad",
+            "id": "panel_A3",
+            "x": 105,
+            "y": 200,
+            "params": {
+              "code": [
+                "r2c3",
+                "r4c1",
+                "r1c4",
+                "r3c2",
+                "r2c2",
+                "r4c4"
+              ],
+              "mode": "sequence",
+              "label": "4x4 panel of room A"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r1c1",
+            "x": 40,
+            "y": 40,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r1c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r1c2",
+            "x": 75,
+            "y": 40,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r1c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r1c3",
+            "x": 110,
+            "y": 40,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r1c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r1c4",
+            "x": 145,
+            "y": 40,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r1c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r2c1",
+            "x": 40,
+            "y": 75,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r2c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r2c2",
+            "x": 75,
+            "y": 75,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r2c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r2c3",
+            "x": 110,
+            "y": 75,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r2c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r2c4",
+            "x": 145,
+            "y": 75,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r2c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r3c1",
+            "x": 40,
+            "y": 110,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r3c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r3c2",
+            "x": 75,
+            "y": 110,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r3c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r3c3",
+            "x": 110,
+            "y": 110,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r3c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r3c4",
+            "x": 145,
+            "y": 110,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r3c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r4c1",
+            "x": 40,
+            "y": 145,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r4c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r4c2",
+            "x": 75,
+            "y": 145,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r4c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r4c3",
+            "x": 110,
+            "y": 145,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r4c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r4c4",
+            "x": 145,
+            "y": 145,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r4c4"
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_A3",
+            "x": 170,
+            "y": 235,
+            "params": {
+              "hidden": false,
+              "content": {
+                "about": "This note describes the code of panel_B3 in ROOM B (not the panel in your room).",
+                "code": "Press these 6 buttons of panel_B3 in order: the top row, the first column from the left; then the third row from the top, the third column from the left; then the second row from the top, the last column on the right; then the bottom row, the second column from the left; then the top row, the third column from the left; then the third row from the top, the first column from the left.",
+                "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top row, c1 = left column). A wrong press clears the panel; start again.",
+                "radio": "Radio limits: at most 10 characters per message and at most one message every 5 steps. Longer or more frequent messages are refused."
+              }
+            }
+          },
+          {
+            "kind": "keypad",
+            "id": "panel_B3",
+            "x": 335,
+            "y": 200,
+            "params": {
+              "code": [
+                "r1c1",
+                "r3c3",
+                "r2c4",
+                "r4c2",
+                "r1c3",
+                "r3c1"
+              ],
+              "mode": "sequence",
+              "label": "4x4 panel of room B"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r1c1",
+            "x": 270,
+            "y": 40,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r1c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r1c2",
+            "x": 305,
+            "y": 40,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r1c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r1c3",
+            "x": 340,
+            "y": 40,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r1c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r1c4",
+            "x": 375,
+            "y": 40,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r1c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r2c1",
+            "x": 270,
+            "y": 75,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r2c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r2c2",
+            "x": 305,
+            "y": 75,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r2c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r2c3",
+            "x": 340,
+            "y": 75,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r2c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r2c4",
+            "x": 375,
+            "y": 75,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r2c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r3c1",
+            "x": 270,
+            "y": 110,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r3c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r3c2",
+            "x": 305,
+            "y": 110,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r3c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r3c3",
+            "x": 340,
+            "y": 110,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r3c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r3c4",
+            "x": 375,
+            "y": 110,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r3c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r4c1",
+            "x": 270,
+            "y": 145,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r4c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r4c2",
+            "x": 305,
+            "y": 145,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r4c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r4c3",
+            "x": 340,
+            "y": 145,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r4c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r4c4",
+            "x": 375,
+            "y": 145,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r4c4"
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_B3",
+            "x": 260,
+            "y": 235,
+            "params": {
+              "hidden": false,
+              "content": {
+                "about": "This note describes the code of panel_A3 in ROOM A (not the panel in your room).",
+                "code": "Press these 6 buttons of panel_A3 in order: the second row from the top, the third column from the left; then the bottom row, the first column from the left; then the top row, the last column on the right; then the third row from the top, the second column from the left; then the second row from the top, the second column from the left; then the bottom row, the last column on the right.",
+                "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top row, c1 = left column). A wrong press clears the panel; start again.",
+                "radio": "Radio limits: at most 10 characters per message and at most one message every 5 steps. Longer or more frequent messages are refused."
+              }
+            }
+          }
+        ]
+      }
+    ]
   },
   "briefings": {
-    "A": "You are in room A (left) with panel_A. Agent B is in the other room. A wall separates you. Read clue_A: it holds the OTHER room's code, while your own code is written in your teammate's room. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You are in room B (right) with panel_B. Agent A is in the other room. A wall separates you. Read clue_B: it holds the OTHER room's code, while your own code is written in your teammate's room. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "You are in room A (left) with your room's panel. Agent B is in the other room. A wall separates you. Each stage's clue in your room holds the OTHER room's code, while your own code is written in your teammate's room. This map has several stages that must be cleared in order; observation 'stage' shows the current stage number, title and briefing. Clearing a stage removes its objects, puts both agents back at their start positions and loads the next stage. Your memory and conversation carry over. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "You are in room B (right) with your room's panel. Agent A is in the other room. A wall separates you. Each stage's clue in your room holds the OTHER room's code, while your own code is written in your teammate's room. This map has several stages that must be cleared in order; observation 'stage' shows the current stage number, title and briefing. Clearing a stage removes its objects, puts both agents back at their start positions and loads the next stage. Your memory and conversation carry over. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

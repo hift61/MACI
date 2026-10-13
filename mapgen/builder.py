@@ -46,6 +46,9 @@ def build_environment(spec: MapSpec, interact_radius: float = 15.0, reveal_goal:
     for agent in spec.agents:
         view = {key: agent[key] for key in ("view_radius", "view_angle") if key in agent}
         env.add_agent(agent["id"], x=agent["x"], y=agent["y"], facing=agent["facing"], **view)
+    # 단계형 시나리오 맵은 에이전트 배치가 끝난 뒤 첫 단계를 불러옴 (scenarios/engine.py)
+    if hasattr(env, "begin_stages"):
+        env.begin_stages()
 
     return env, task_descriptions(spec, reveal_goal=reveal_goal), list(spec.objectives)
 

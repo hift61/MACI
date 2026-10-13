@@ -92,17 +92,18 @@ class ScenarioSecretTests(unittest.TestCase):
     def test_secret_fields_are_not_observed(self):
         env, _, _ = build_environment(load("s04_half_mastermind").build())
         env.agents["A"].x, env.agents["A"].y, env.agents["A"].facing = 105, 60, 270
-        panel = self.visible(env, "A", "color_panel")
+        panel = self.visible(env, "A", "color_panel_1")
         self.assertIsNotNone(panel)
         self.assertNotIn("_code", panel)
-        self.assertEqual(panel["length"], 4)
+        self.assertEqual(panel["length"], 3)
 
         env, _, _ = build_environment(load("s03_split_experiment").build())
         gate = self.visible(env, "A", "G1") or env._disguise(env.objects["G1"])
         self.assertNotIn("_levers", gate)
 
         env, _, _ = build_environment(load("s11_pincer").build())
-        core = env._disguise(env.objects["core"])
+        env._load_stage(2)
+        core = env._disguise(env.objects["core_3"])
         self.assertNotIn("waypoints", core)
         self.assertEqual(core["category"], "coop")
 
@@ -193,10 +194,11 @@ class ScenarioRuleTests(unittest.TestCase):
 
     def test_switch_plate_does_not_relock_a_latched_door(self):
         env, _, _ = build_environment(load("s01_deadlock").build())
+        env._load_stage(1)
         env.agents["B"].x, env.agents["B"].y = 200, 271
-        env.pull_lever("B", "release_A")
+        env.pull_lever("B", "release_A2")
         env.step()
-        self.assertFalse(env.objects["door_A"]["locked"])
+        self.assertFalse(env.objects["door_A2"]["locked"])
 
     def test_spawned_items_avoid_walls(self):
         env, _, _ = build_environment(load("s08_boring_role").build())
@@ -208,6 +210,35 @@ class ScenarioRuleTests(unittest.TestCase):
             self.assertLess(item["y"], 150)
             self.assertFalse(any(wx <= item["x"] <= wx + ww and wy <= item["y"] <= wy + wh
                                  for wx, wy, ww, wh in env._walls()))
+
+
+class ScenarioStageTests(unittest.TestCase):
+    def test_stages_load_in_order_and_reset_positions(self):
+        env, _, objectives = build_environment(load("s04_half_mastermind").build())
+        self.assertEqual(objectives, [{"type": "all_stages_completed"}])
+        self.assertEqual(env.get_observation("A")["stage"]["stage"], 1)
+        self.assertIn("color_panel_1", env.objects)
+        env.agents["A"].x = 40
+        env.agents["A"].policy = type("P", (), {"generated_code": "x", "_stall_count": 2})()
+        env._solve_keypad("A", env.objects["color_panel_1"])
+        env._check_stage()
+        self.assertNotIn("color_panel_1", env.objects)
+        self.assertIn("color_panel_2", env.objects)
+        self.assertEqual((env.agents["A"].x, env.agents["A"].y), (105, 160))
+        self.assertIsNone(env.agents["A"].policy.generated_code)
+        observation = env.get_observation("A")
+        self.assertEqual(observation["stage"]["stage"], 2)
+        self.assertEqual(observation["notices"][-1]["type"], "stage_started")
+        self.assertEqual(observation["known_objects"].keys() & {"color_panel_1"}, set())
+        self.assertIn("level_completed", event_types(env))
+
+    def test_stage_walls_replace_the_map_walls(self):
+        env, _, _ = build_environment(load("s02_leapfrog").build())
+        first = len(env._walls())
+        env._load_stage(2)
+        self.assertGreater(len(env._walls()), first)
+        self.assertIn("d3_7", env.objects)
+        self.assertNotIn("d1_1", env.objects)
 
 
 if __name__ == "__main__":

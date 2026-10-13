@@ -60,7 +60,7 @@
         "content": {
           "pads": "sync_pad pad_A (room A) and pad_B (room B) must be entered in the SAME step. Entering means moving onto the pad from outside its radius.",
           "failure": "If only one pad is entered, both pads reject: whoever stands on a pad is pushed back a few units and both pads ignore entries for 3 steps ('armed' becomes false).",
-          "radio": "The radio is unreliable: roughly one message in three is lost without notice, and others arrive up to 2 steps late. Every observation contains the shared step number (self.step)."
+          "clock": "Every observation contains the shared step number (self.step)."
         },
         "hidden": false
       }
@@ -74,7 +74,7 @@
         "content": {
           "pads": "sync_pad pad_A (room A) and pad_B (room B) must be entered in the SAME step. Entering means moving onto the pad from outside its radius.",
           "failure": "If only one pad is entered, both pads reject: whoever stands on a pad is pushed back a few units and both pads ignore entries for 3 steps ('armed' becomes false).",
-          "radio": "The radio is unreliable: roughly one message in three is lost without notice, and others arrive up to 2 steps late. Every observation contains the shared step number (self.step)."
+          "clock": "Every observation contains the shared step number (self.step)."
         },
         "hidden": false
       }

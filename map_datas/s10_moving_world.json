@@ -12,25 +12,25 @@
     [
       0,
       100,
-      95.0,
+      99.0,
       10
     ],
     [
-      115.0,
+      111.0,
       100,
-      95.0,
+      99.0,
       10
     ],
     [
       230,
       100,
-      95.0,
+      99.0,
       10
     ],
     [
-      345.0,
+      341.0,
       100,
-      95.0,
+      99.0,
       10
     ]
   ],
@@ -55,9 +55,9 @@
       "x": 105,
       "y": 105,
       "params": {
-        "radius": 12.0,
-        "period": 7,
-        "open_steps": 2,
+        "radius": 6.0,
+        "period": 9,
+        "open_steps": 1,
         "phase": 0
       }
     },
@@ -68,7 +68,7 @@
       "y": 70,
       "params": {
         "group": "crossing",
-        "tolerance": 1,
+        "tolerance": 0,
         "return_x": 105,
         "return_y": 135,
         "cooldown": 3
@@ -82,8 +82,8 @@
       "params": {
         "content": {
           "gate": "The gate in front of you opens and closes by itself on a fixed repeating schedule. The other room's gate follows a DIFFERENT schedule that only your teammate can watch.",
-          "pads": "Behind each gate is a sync_pad (pad_A, pad_B). Both pads must be entered within 1 step of each other. A lone entry pushes that agent back out in front of the gate and disables both pads for 3 steps.",
-          "tip": "Gates only stay open for a short time, so be right in front of your gate when it opens. Every observation contains the shared step number (self.step)."
+          "pads": "Behind each gate is a sync_pad (pad_A, pad_B). Both pads must be entered in exactly the same step. A lone entry pushes that agent back out in front of the gate and disables both pads for 3 steps.",
+          "tip": "A gate stays open for a single step only, so be right in front of your gate when it opens. Every observation contains the shared step number (self.step)."
         },
         "hidden": false
       }
@@ -94,9 +94,9 @@
       "x": 335,
       "y": 105,
       "params": {
-        "radius": 12.0,
-        "period": 5,
-        "open_steps": 2,
+        "radius": 6.0,
+        "period": 7,
+        "open_steps": 1,
         "phase": 3
       }
     },
@@ -107,7 +107,7 @@
       "y": 70,
       "params": {
         "group": "crossing",
-        "tolerance": 1,
+        "tolerance": 0,
         "return_x": 335,
         "return_y": 135,
         "cooldown": 3
@@ -121,8 +121,8 @@
       "params": {
         "content": {
           "gate": "The gate in front of you opens and closes by itself on a fixed repeating schedule. The other room's gate follows a DIFFERENT schedule that only your teammate can watch.",
-          "pads": "Behind each gate is a sync_pad (pad_A, pad_B). Both pads must be entered within 1 step of each other. A lone entry pushes that agent back out in front of the gate and disables both pads for 3 steps.",
-          "tip": "Gates only stay open for a short time, so be right in front of your gate when it opens. Every observation contains the shared step number (self.step)."
+          "pads": "Behind each gate is a sync_pad (pad_A, pad_B). Both pads must be entered in exactly the same step. A lone entry pushes that agent back out in front of the gate and disables both pads for 3 steps.",
+          "tip": "A gate stays open for a single step only, so be right in front of your gate when it opens. Every observation contains the shared step number (self.step)."
         },
         "hidden": false
       }
@@ -138,10 +138,10 @@
     "s10_moving_world"
   ],
   "hints": [
-    "Enter pad_A and pad_B (behind the two timed gates) within 1 step of each other."
+    "Enter pad_A and pad_B (behind the two timed gates) in exactly the same step."
   ],
   "config": {
-    "recommended_steps": 150,
+    "recommended_steps": 200,
     "source": "scenarios/s10_moving_world.py"
   },
   "scenario": "s10_moving_world",

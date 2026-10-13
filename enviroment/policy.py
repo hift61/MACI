@@ -54,6 +54,10 @@ def _create_with_retry(client, **kwargs):
             time.sleep(delay)
 
 
+class PolicyGaveUp(RuntimeError):
+    """Code recovery failed too many times in a row; the episode cannot continue."""
+
+
 class Policy:
     @property
     def token_usage(self):
@@ -743,7 +747,8 @@ class CodePolicy(Policy):
         extra_params: dict | None = None,
         sandbox_timeout: float = 5.0,
         stall_limit: int = 3,
-        max_replans: int = 10
+        max_replans: int = 10,
+        max_recovery_attempts: int = 10
     ) -> None:
         self.client = OpenAI(base_url=base_url, api_key=api_key)
         self.model = model
@@ -756,6 +761,9 @@ class CodePolicy(Policy):
         self.last_error = None       # 가장 최근 decide() 호출에서 발생한 예외 (없으면 None)
         self.stall_limit = stall_limit    # 위치가 이만큼 연속으로 그대로면 재생성
         self.max_replans = max_replans    # 일반 정체 재계획 최대 횟수 (실행 오류 복구는 별도)
+        # 한 번의 복구 대기에서 연속으로 실패해도 되는 재생성 횟수. 넘으면 PolicyGaveUp으로 회차를 끝냄
+        # (예: 대화 이력이 모델 context 한도를 넘어 모든 요청이 거부되면 무한히 기다리게 되므로)
+        self.max_recovery_attempts = max_recovery_attempts
         self.replans: list[dict] = []     # 재생성 기록 [{"step", "reason"}]
         self.last_replan = None           # 이번 decide() 호출에서 재생성했으면 그 기록 (manifest용)
         self._last_pos = None             # 직전 관찰의 위치
@@ -853,7 +861,11 @@ class CodePolicy(Policy):
     def _wait_for_recovery(self, observation):
         self._debug('recovery_wait_started', step=observation['self'].get('step'), error=self._execution_error)
         print(f"[CODE RECOVERY] step {observation['self'].get('step')}: waiting for working code", flush=True)
+        started = self._repair_attempts
         while True:
+            if self._repair_attempts - started >= self.max_recovery_attempts and self._repair_thread is None:
+                raise PolicyGaveUp(f'no working code after {self.max_recovery_attempts} repair attempts: '
+                                   f'{str(self._execution_error)[-500:]}')
             try:
                 action = self._recover(observation)
                 if self._execution_error is None:
@@ -968,6 +980,8 @@ class CodePolicy(Policy):
                 else:
                     self.last_error = None
                     action = result["action"]
+        except PolicyGaveUp:
+            raise
         except Exception:
             self.last_error = traceback.format_exc()
             self._execution_error = self.last_error
@@ -1070,7 +1084,11 @@ class CentralCodePolicy(CodePolicy):
         step = next(iter(observations.values()))['self'].get('step')
         self._debug('recovery_wait_started', step=step, error=self._execution_error)
         print(f'[CODE RECOVERY] step {step}: waiting for working code', flush=True)
+        started = self._repair_attempts
         while True:
+            if self._repair_attempts - started >= self.max_recovery_attempts:
+                raise PolicyGaveUp(f'no working code after {self.max_recovery_attempts} repair attempts: '
+                                   f'{str(self._execution_error)[-500:]}')
             self._repair_attempts += 1
             reason = f'decide() failed: {self._execution_error}'
             self.last_replan = {'step': step, 'reason': reason, 'kind': 'execution_repair'}

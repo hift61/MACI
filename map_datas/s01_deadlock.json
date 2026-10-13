@@ -48,131 +48,370 @@
       "facing": 270
     }
   ],
-  "objects": [
-    {
-      "kind": "door",
-      "id": "door_A",
-      "x": 100,
-      "y": 185,
-      "params": {
-        "locked": true,
-        "radius": 12.0
-      }
-    },
-    {
-      "kind": "door",
-      "id": "door_B",
-      "x": 340,
-      "y": 185,
-      "params": {
-        "locked": true,
-        "radius": 12.0
-      }
-    },
-    {
-      "kind": "switch_plate",
-      "id": "plate_A",
-      "x": 30,
-      "y": 30,
-      "params": {
-        "opens": [
-          "door_B"
-        ]
-      }
-    },
-    {
-      "kind": "switch_plate",
-      "id": "plate_B",
-      "x": 410,
-      "y": 30,
-      "params": {
-        "opens": [
-          "door_A"
-        ]
-      }
-    },
-    {
-      "kind": "latch_lever",
-      "id": "release_A",
-      "x": 200,
-      "y": 285,
-      "params": {
-        "doors": [
-          "door_A"
-        ]
-      }
-    },
-    {
-      "kind": "latch_lever",
-      "id": "release_B",
-      "x": 240,
-      "y": 285,
-      "params": {
-        "doors": [
-          "door_B"
-        ]
-      }
-    },
-    {
-      "kind": "goal_zone",
-      "id": "courtyard",
-      "x": 220,
-      "y": 245,
-      "params": {
-        "width": 440,
-        "height": 110,
-        "label": "courtyard"
-      }
-    },
-    {
-      "kind": "clue",
-      "id": "clue_A",
-      "x": 150,
-      "y": 30,
-      "params": {
-        "content": {
-          "plate_A": "Standing on plate_A (this room) holds open door_B - the door of room B, NOT your own door.",
-          "door_A": "Your door door_A opens only while someone stands on plate_B in room B, or forever once lever release_A in the courtyard is pulled.",
-          "courtyard": "release_A and release_B are levers in the courtyard just below the two rooms."
-        },
-        "hidden": false
-      }
-    },
-    {
-      "kind": "clue",
-      "id": "clue_B",
-      "x": 290,
-      "y": 30,
-      "params": {
-        "content": {
-          "plate_B": "Standing on plate_B (this room) holds open door_A - the door of room A, NOT your own door.",
-          "door_B": "Your door door_B opens only while someone stands on plate_A in room A, or forever once lever release_B in the courtyard is pulled.",
-          "courtyard": "release_A and release_B are levers in the courtyard just below the two rooms."
-        },
-        "hidden": false
-      }
-    }
-  ],
+  "objects": [],
   "objectives": [
     {
-      "type": "team_assembled",
-      "zone_id": "courtyard"
+      "type": "all_stages_completed"
     }
   ],
   "puzzles": [
     "s01_deadlock"
   ],
   "hints": [
-    "Both agents must stand inside the goal_zone 'courtyard' at the same time."
+    "Clear all three stages; each stage ends when both agents stand in its courtyard goal_zone."
   ],
   "config": {
-    "recommended_steps": 120,
+    "recommended_steps": 300,
     "source": "scenarios/s01_deadlock.py"
   },
   "scenario": "s01_deadlock",
-  "rules": {},
+  "rules": {
+    "stages": [
+      {
+        "title": "one-way door",
+        "briefing": "Only room B is locked this time. Both of you must stand in the courtyard (yard_1) below the rooms at the same time.",
+        "objectives": [
+          {
+            "type": "team_assembled",
+            "zone_id": "yard_1"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "door",
+            "id": "door_B1",
+            "x": 340,
+            "y": 185,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "plate_A1",
+            "x": 30,
+            "y": 30,
+            "params": {
+              "opens": [
+                "door_B1"
+              ]
+            }
+          },
+          {
+            "kind": "goal_zone",
+            "id": "yard_1",
+            "x": 220,
+            "y": 245,
+            "params": {
+              "width": 440,
+              "height": 110,
+              "label": "courtyard"
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_A1",
+            "x": 150,
+            "y": 30,
+            "params": {
+              "hidden": false,
+              "content": {
+                "plate_A1": "Standing on plate_A1 (this room) holds open door_B1 - the door of room B.",
+                "your_door": "Your own doorway at the bottom of room A has no door; you can walk out any time."
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_B1",
+            "x": 290,
+            "y": 30,
+            "params": {
+              "hidden": false,
+              "content": {
+                "door_B1": "Your door door_B1 opens only while someone stands on plate_A1 in room A."
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "symmetric deadlock",
+        "briefing": "Both rooms are locked now. Both of you must stand in the courtyard (yard_2) at the same time.",
+        "objectives": [
+          {
+            "type": "team_assembled",
+            "zone_id": "yard_2"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "door",
+            "id": "door_A2",
+            "x": 100,
+            "y": 185,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "door",
+            "id": "door_B2",
+            "x": 340,
+            "y": 185,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "plate_A2",
+            "x": 30,
+            "y": 30,
+            "params": {
+              "opens": [
+                "door_B2"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "plate_B2",
+            "x": 410,
+            "y": 30,
+            "params": {
+              "opens": [
+                "door_A2"
+              ]
+            }
+          },
+          {
+            "kind": "latch_lever",
+            "id": "release_A2",
+            "x": 200,
+            "y": 285,
+            "params": {
+              "doors": [
+                "door_A2"
+              ]
+            }
+          },
+          {
+            "kind": "latch_lever",
+            "id": "release_B2",
+            "x": 240,
+            "y": 285,
+            "params": {
+              "doors": [
+                "door_B2"
+              ]
+            }
+          },
+          {
+            "kind": "goal_zone",
+            "id": "yard_2",
+            "x": 220,
+            "y": 245,
+            "params": {
+              "width": 440,
+              "height": 110,
+              "label": "courtyard"
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_A2",
+            "x": 150,
+            "y": 30,
+            "params": {
+              "content": {
+                "plate_A2": "Standing on plate_A2 (this room) holds open door_B2 - the door of room B, NOT your own door.",
+                "door_A2": "Your door door_A2 opens only while someone stands on plate_B2 in room B, or forever once lever release_A2 in the courtyard is pulled.",
+                "courtyard": "release_A2 and release_B2 are levers in the courtyard just below the two rooms."
+              },
+              "hidden": false
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_B2",
+            "x": 290,
+            "y": 30,
+            "params": {
+              "content": {
+                "plate_B2": "Standing on plate_B2 (this room) holds open door_A2 - the door of room A, NOT your own door.",
+                "door_B2": "Your door door_B2 opens only while someone stands on plate_A2 in room A, or forever once lever release_B2 in the courtyard is pulled.",
+                "courtyard": "release_A2 and release_B2 are levers in the courtyard just below the two rooms."
+              },
+              "hidden": false
+            }
+          }
+        ]
+      },
+      {
+        "title": "hard deadlock",
+        "briefing": "Both rooms are locked again and each room is split by a partition. Both of you must stand in the courtyard (yard_3) at the same time.",
+        "objectives": [
+          {
+            "type": "team_assembled",
+            "zone_id": "yard_3"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "door",
+            "id": "door_A3",
+            "x": 100,
+            "y": 185,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "door",
+            "id": "door_B3",
+            "x": 340,
+            "y": 185,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "plate_A3",
+            "x": 30,
+            "y": 30,
+            "params": {
+              "opens": [
+                "door_B3"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "plate_B3",
+            "x": 410,
+            "y": 30,
+            "params": {
+              "opens": [
+                "door_A3"
+              ]
+            }
+          },
+          {
+            "kind": "latch_lever",
+            "id": "release_A3",
+            "x": 420,
+            "y": 285,
+            "params": {
+              "doors": [
+                "door_A3"
+              ]
+            }
+          },
+          {
+            "kind": "latch_lever",
+            "id": "release_B3",
+            "x": 20,
+            "y": 285,
+            "params": {
+              "doors": [
+                "door_B3"
+              ]
+            }
+          },
+          {
+            "kind": "goal_zone",
+            "id": "yard_3",
+            "x": 220,
+            "y": 245,
+            "params": {
+              "width": 440,
+              "height": 110,
+              "label": "courtyard"
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_A3",
+            "x": 50,
+            "y": 150,
+            "params": {
+              "content": {
+                "plate_A3": "Standing on plate_A3 (this room, behind the partition) holds open door_B3 - the door of room B, NOT your own door.",
+                "door_A3": "Your door door_A3 opens only while someone stands on plate_B3 in room B, or forever once its release lever somewhere outside the rooms is pulled."
+              },
+              "hidden": false
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_B3",
+            "x": 390,
+            "y": 150,
+            "params": {
+              "content": {
+                "plate_B3": "Standing on plate_B3 (this room, behind the partition) holds open door_A3 - the door of room A, NOT your own door.",
+                "door_B3": "Your door door_B3 opens only while someone stands on plate_A3 in room A, or forever once its release lever somewhere outside the rooms is pulled."
+              },
+              "hidden": false
+            }
+          }
+        ],
+        "walls": [
+          [
+            200,
+            0,
+            40,
+            180
+          ],
+          [
+            0,
+            180,
+            90.0,
+            10
+          ],
+          [
+            110.0,
+            180,
+            90.0,
+            10
+          ],
+          [
+            240,
+            180,
+            90.0,
+            10
+          ],
+          [
+            350.0,
+            180,
+            90.0,
+            10
+          ],
+          [
+            0,
+            95,
+            150,
+            10
+          ],
+          [
+            290,
+            95,
+            150,
+            10
+          ]
+        ]
+      }
+    ]
+  },
   "briefings": {
-    "A": "You start locked in room A (top-left). Agent B is locked in room B (top-right). Read clue_A in your room. Object guide: switch_plate: while ANY agent stands within its radius, every door in its 'opens' list is unlocked; when nobody stands on any plate for a door, that door locks again. lever with \"latch\": true: pull_lever opens its linked doors permanently. goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You start locked in room B (top-right). Agent A is locked in room A (top-left). Read clue_B in your room. Object guide: switch_plate: while ANY agent stands within its radius, every door in its 'opens' list is unlocked; when nobody stands on any plate for a door, that door locks again. lever with \"latch\": true: pull_lever opens its linked doors permanently. goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "You start in room A (top-left). Agent B starts in room B (top-right). Read the clue in your room each stage. This map has several stages that must be cleared in order; observation 'stage' shows the current stage number, title and briefing. Clearing a stage removes its objects, puts both agents back at their start positions and loads the next stage. Your memory and conversation carry over. Object guide: switch_plate: while ANY agent stands within its radius, every door in its 'opens' list is unlocked; when nobody stands on any plate for a door, that door locks again. lever with \"latch\": true: pull_lever opens its linked doors permanently. goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "You start in room B (top-right). Agent A starts in room A (top-left). Read the clue in your room each stage. This map has several stages that must be cleared in order; observation 'stage' shows the current stage number, title and briefing. Clearing a stage removes its objects, puts both agents back at their start positions and loads the next stage. Your memory and conversation carry over. Object guide: switch_plate: while ANY agent stands within its radius, every door in its 'opens' list is unlocked; when nobody stands on any plate for a door, that door locks again. lever with \"latch\": true: pull_lever opens its linked doors permanently. goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

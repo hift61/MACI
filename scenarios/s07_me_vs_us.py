@@ -1,4 +1,5 @@
 """s07 나 vs 우리 (사회적 딜레마) - 곧 사라지는 개인 보너스 보석 vs 둘이 함께 옮겨야 하는 팀 상자.
+힌트 없음: 안내판을 없애 운반 규칙, 보석 점수, 채점 방식을 알려 주지 않음.
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
 from .common import agent, explain, make_spec, obj
@@ -18,16 +19,9 @@ def build():
         obj("receptacle", "dock", 410, 280, accepts=["crate"], target=1, radius=20.0, label="loading dock"),
     ]
     objects += [obj("bonus_item", gid, x, y, points=GEM_POINTS, expires_at=GEM_EXPIRES) for gid, (x, y) in GEMS.items()]
-    objects.append(obj("clue", "notice", 230, 300, hidden=False, content={
-        "team_goal": "Deliver the crate to the dock (drop it inside the dock's radius). The crate is a coop item: "
-                     "it can only be picked up while BOTH of you stand within about 15 units of it, and its carrier "
-                     "cannot move unless the other agent stays within about 15 units.",
-        "gems": f"Three gems lie in the far corners. A gem is worth {int(GEM_POINTS)} personal points to whoever "
-                f"picks it up, but every gem vanishes at step {GEM_EXPIRES}.",
-        "scoring": "Your own score counts gems. The team score counts whether and how fast the crate reaches the dock.",
-    }))
-    guide = explain("receptacle", "bonus_item")
-    briefing = (f"You and your teammate start in the middle of a hall. Read the clue 'notice'. {guide}")
+    # 안내판(notice)과 보석/점수 설명 없음: 상자 운반 규칙과 보석의 의미를 직접 알아내야 함
+    guide = explain("receptacle")
+    briefing = f"You and your teammate start in the middle of a hall. {guide}"
     return make_spec(
         NAME, 460, 320, walls, [agent("A", 215, 250, 270), agent("B", 245, 250, 270)], objects,
         objectives=[{"type": "delivery_complete", "receptacle_id": "dock"}],

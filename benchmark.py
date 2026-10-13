@@ -29,7 +29,8 @@ if ENVIRONMENT_DIR not in sys.path:
     sys.path.insert(0, ENVIRONMENT_DIR)  # enviroment/*.py use flat sibling imports (from policy import ...)
 
 from enviroment import Environment  # noqa: E402
-from policy import CentralCodePolicy, CodePolicy, HybridPolicy, NoopPolicy, RandomPolicy, ToolUsePolicy  # noqa: E402
+from policy import (CentralCodePolicy, CodePolicy, HybridPolicy, NoopPolicy, PolicyGaveUp,  # noqa: E402
+                    RandomPolicy, ToolUsePolicy)
 from scoring import ScoreConfig, clear_step, score_episode  # noqa: E402
 from context_memory import ContextMemory, ContextConfig  # noqa: E402
 from mapgen import MapSpec, generate_map  # noqa: E402
@@ -176,6 +177,8 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
         raise ValueError(f"unknown environment: {environment_kind}")
     elif map_spec is not None:
         env, task_descriptions, objectives = build_environment(map_spec, reveal_goal=reveal_goal)
+        # 시나리오 맵이 점수를 관찰 피드백으로 주도록 정했으면 (rules.show_reward) 그대로 따름
+        reward_visible = reward_visible or bool((getattr(map_spec, "rules", None) or {}).get("show_reward"))
     else:
         env, task_descriptions = build_episode(reveal_goal=reveal_goal)
         objectives = GATE_OBJECTIVES
@@ -296,10 +299,18 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                    "agents": [{"agent": aid, "position": [a.x, a.y], "facing": a.facing}
                               for aid, a in env.agents.items()]}, scene, ensure_ascii=False)
 
+    stopped = None
     with open(log_path, "w", encoding="utf-8") as f:
         for step in range(1, steps + 1):
             emit_debug('step_started', next_step=step)
-            env.step()
+            try:
+                env.step()
+            except PolicyGaveUp as exc:
+                # 코드 복구가 계속 실패하면(예: context 한도 초과) 무한히 기다리지 않고 미완료로 끝냄
+                print(f"\nSTOPPED at step {step}: {exc}", flush=True)
+                emit_debug('policy_gave_up', error=str(exc))
+                stopped = str(exc)
+                break
 
             decisions_by_agent = {d["agent_id"]: d for d in env.decision_log.filter(step=step)}
             step_messages = [m for m in env.message_log.entries if m["step"] == step]
@@ -385,6 +396,7 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
     score["code_checks"] = {aid: p.code_checks.snapshot() for aid, p in policies.items()
                             if hasattr(p, "code_checks")}
     score["controller"] = controller
+    score["stopped"] = stopped
     score["score_config"] = score_config.to_dict()
     score_path = os.path.splitext(log_path)[0] + ".score.json"
     with open(score_path, "w", encoding="utf-8") as f:

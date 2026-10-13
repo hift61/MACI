@@ -12,6 +12,8 @@ plan 항목
   ("until", fn)           fn(env)가 True가 될 때까지 noop
   ("barrier", name)       모든 에이전트가 같은 barrier에 도착한 다음 step에 함께 출발 (2인 운반용)
   ("call", fn)            fn(env, agent_id, observation)이 action을 주면 실행, None이면 다음 항목
+  ("stage", n)            단계형 맵에서 n단계가 시작될 때까지 대기. n단계가 시작되면 그 앞에 남은 항목은 건너뜀
+                          (단계가 바뀌면 에이전트가 시작 위치로 돌아가므로, 지난 단계의 남은 이동을 버림)
 """
 import math
 import threading
@@ -33,6 +35,12 @@ class ScriptPolicy:
         self._waited = 0
 
     def decide(self, observation: dict) -> dict:
+        stage = getattr(self.env, "stage_index", None)
+        if stage is not None:
+            started = [i for i, item in enumerate(self.plan) if item[0] == "stage" and item[1] - 1 <= stage]
+            if started:
+                self.plan = self.plan[started[-1] + 1:]
+                self._waited = 0
         while self.plan:
             action = self._run(self.plan[0], observation)
             if action is not None:
@@ -81,6 +89,8 @@ class ScriptPolicy:
             return None if ready else {"type": "noop"}
         if kind == "call":
             return item[1](self.env, self.agent_id, obs)
+        if kind == "stage":
+            return {"type": "noop"}
         raise ValueError(f"unknown plan item: {item!r}")
 
 
@@ -112,7 +122,7 @@ def unlocked(door_id):
 
 
 # module: 시나리오 모듈, mode: "solution" 또는 "mistake". 반환: (클리어 step 또는 None, env)
-def run(module, mode: str = "solution", max_steps: int = 400):
+def run(module, mode: str = "solution", max_steps: int = 1000):
     env, _, objectives = build_environment(module.build())
     plans = getattr(module, mode)(env)
     oracle = Oracle(env.agents)

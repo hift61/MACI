@@ -1,17 +1,20 @@
-"""s06 짧은 무전 (통신 규약) - 10자/5 step 제한 무전으로 상대 방 4x4 패널의 6자리 순서를 서로 전달.
+"""s06 짧은 무전 (통신 규약) - 10자/5 step 제한 무전으로 상대 방 4x4 패널의 순서를 서로 전달. 단계형 3단계.
+  같은 무전 제한 아래 코드 길이만 2 -> 4 -> 6칸으로 늘어남 (3단계가 원래 s06과 같은 난이도)
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
-from .common import agent, explain, make_spec, obj
+from .common import STAGE_RULES, STAGED_OBJECTIVES, agent, explain, make_spec, obj, stage
 
 NAME = "s06_short_radio"
 TITLE = "짧은 무전"
 FAMILY = "통신 규약"
 
-RULES = {"message_max_chars": 10, "message_interval": 5}
+RADIO = {"message_max_chars": 10, "message_interval": 5}
 ROOM_X0 = {"A": 0, "B": 230}
-CODES = {  # 각 방 패널의 정답 (그 정답은 '다른 방' 단서에 적혀 있음)
-    "A": ["r2c3", "r4c1", "r1c4", "r3c2", "r2c2", "r4c4"],
-    "B": ["r1c1", "r3c3", "r2c4", "r4c2", "r1c3", "r3c1"],
+CODES = {  # 단계 -> 각 방 패널의 정답 (그 정답은 '다른 방' 단서에 적혀 있음)
+    1: {"A": ["r3c2", "r1c4"], "B": ["r2c1", "r4c3"]},
+    2: {"A": ["r1c2", "r4c4", "r2c1", "r3c3"], "B": ["r4c1", "r2c2", "r3c4", "r1c3"]},
+    3: {"A": ["r2c3", "r4c1", "r1c4", "r3c2", "r2c2", "r4c4"],
+        "B": ["r1c1", "r3c3", "r2c4", "r4c2", "r1c3", "r3c1"]},
 }
 ROW_WORDS = ["the top row", "the second row from the top", "the third row from the top", "the bottom row"]
 COL_WORDS = ["the first column from the left", "the second column from the left",
@@ -28,57 +31,72 @@ def describe(code):
     return "; then ".join(parts) + "."
 
 
-def build():
-    walls = [[210, 0, 20, 260]]
+def _stage(n):
     objects = []
     for room in ("A", "B"):
         other = "B" if room == "A" else "A"
-        objects.append(obj("keypad", f"panel_{room}", ROOM_X0[room] + 105, 200, code=CODES[room],
+        objects.append(obj("keypad", f"panel_{room}{n}", ROOM_X0[room] + 105, 200, code=CODES[n][room],
                            mode="sequence", label=f"4x4 panel of room {room}"))
         for r in range(1, 5):
             for c in range(1, 5):
                 x, y = cell_pos(room, f"r{r}c{c}")
-                objects.append(obj("keypad_button", f"{room}_r{r}c{c}", x, y, panel=f"panel_{room}",
+                objects.append(obj("keypad_button", f"{room}{n}_r{r}c{c}", x, y, panel=f"panel_{room}{n}",
                                    label=f"r{r}c{c}"))
-        objects.append(obj("clue", f"clue_{room}", ROOM_X0[room] + (170 if room == "A" else 30), 235,
+        length = len(CODES[n][other])
+        objects.append(obj("clue", f"clue_{room}{n}", ROOM_X0[room] + (170 if room == "A" else 30), 235,
                            hidden=False, content={
-                               "about": f"This note describes the code of panel_{other} in ROOM {other} "
+                               "about": f"This note describes the code of panel_{other}{n} in ROOM {other} "
                                         f"(not the panel in your room).",
-                               "code": f"Press these 6 buttons of panel_{other} in order: {describe(CODES[other])}",
+                               "code": f"Press these {length} buttons of panel_{other}{n} in order: "
+                                       f"{describe(CODES[n][other])}",
                                "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top "
                                         "row, c1 = left column). A wrong press clears the panel; start again.",
                                "radio": "Radio limits: at most 10 characters per message and at most one message "
                                         "every 5 steps. Longer or more frequent messages are refused.",
                            }))
+    length = len(CODES[n]["A"])
+    return stage(f"{length}-button codes",
+                 f"Solve panel_A{n} (room A) and panel_B{n} (room B), {length} buttons each. Read clue_A{n} / "
+                 f"clue_B{n}: each holds the OTHER room's code.",
+                 [{"type": "keypad_solved", "panel_id": f"panel_A{n}"},
+                  {"type": "keypad_solved", "panel_id": f"panel_B{n}"}], objects)
+
+
+def build():
+    walls = [[210, 0, 20, 260]]
     guide = explain("keypad")
     briefings = {
-        room: f"You are in room {room} ({'left' if room == 'A' else 'right'}) with panel_{room}. Agent "
-              f"{'B' if room == 'A' else 'A'} is in the other room. A wall separates you. Read clue_{room}: it "
-              f"holds the OTHER room's code, while your own code is written in your teammate's room. {guide}"
+        room: f"You are in room {room} ({'left' if room == 'A' else 'right'}) with your room's panel. Agent "
+              f"{'B' if room == 'A' else 'A'} is in the other room. A wall separates you. Each stage's clue in your "
+              f"room holds the OTHER room's code, while your own code is written in your teammate's room. "
+              f"{STAGE_RULES} {guide}"
         for room in ("A", "B")
     }
     return make_spec(
-        NAME, 440, 260, walls, [agent("A", 105, 220, 270), agent("B", 335, 220, 270)], objects,
-        objectives=[{"type": "keypad_solved", "panel_id": "panel_A"},
-                    {"type": "keypad_solved", "panel_id": "panel_B"}],
-        hints=["Solve panel_A (room A) and panel_B (room B)."],
-        briefings=briefings, rules=RULES, recommended_steps=200)
+        NAME, 440, 260, walls, [agent("A", 105, 220, 270), agent("B", 335, 220, 270)], [],
+        objectives=STAGED_OBJECTIVES,
+        hints=["Clear all three stages; each stage ends when both rooms' panels of that stage are solved."],
+        briefings=briefings, rules={**RADIO, "stages": [_stage(n) for n in (1, 2, 3)]}, recommended_steps=300)
 
 
-def _presses(room, labels):
+def _presses(room, n, labels):
     plan = []
     for label in labels:
         x, y = cell_pos(room, label)
-        plan += [("goto", x, y), ("act", {"type": "press_button", "button_id": f"{room}_{label}"})]
+        plan += [("goto", x, y), ("act", {"type": "press_button", "button_id": f"{room}{n}_{label}"})]
     return plan
 
 
 def solution(env):
-    return {room: _presses(room, CODES[room]) for room in ("A", "B")}
+    return {room: [item for n in (1, 2, 3) for item in [("stage", n)] + _presses(room, n, CODES[n][room])]
+            for room in ("A", "B")}
 
 
-# 실수: A가 첫 칸을 잘못 누름(패널 초기화) -> 정답
+# 실수(3단계): A가 첫 칸을 잘못 누름(패널 초기화) -> 정답
 def mistake(env):
-    plans = solution(env)
-    plans["A"] = _presses("A", ["r1c1"]) + plans["A"]
+    plans = {room: [] for room in ("A", "B")}
+    for n in (1, 2, 3):
+        for room in ("A", "B"):
+            wrong = _presses("A", 3, ["r1c1"]) if (n, room) == (3, "A") else []
+            plans[room] += [("stage", n)] + wrong + _presses(room, n, CODES[n][room])
     return plans

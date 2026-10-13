@@ -138,6 +138,30 @@ class CentralControllerTests(unittest.TestCase):
                                   policy_kind='tooluse', controller='central')
 
 
+class RecoveryLimitTests(unittest.TestCase):
+    def test_endless_code_failures_end_the_episode_instead_of_waiting_forever(self):
+        from policy import CodePolicy
+        with tempfile.TemporaryDirectory() as folder, contextlib.redirect_stdout(io.StringIO()),                 patch.object(CodePolicy, '_generate_code', side_effect=ValueError('context too long')),                 patch('policy.time.sleep'):
+            path = Path(folder) / 'stuck.jsonl'
+            benchmark.run_episode('test', 'https://example.test/v1', 'key', {}, 5, str(path),
+                                  environment_kind='sequence_rooms', sequence_seed=3)
+            score = json.loads(path.with_suffix('.score.json').read_text(encoding='utf-8'))
+        self.assertIn('repair attempts', score['stopped'])
+        self.assertFalse(score['team']['cleared'])
+
+    def test_scenario_map_can_turn_on_reward_feedback(self):
+        from mapgen.spec import MapSpec
+        sys.path.insert(0, benchmark.HERE)
+        from scenarios import load
+        with tempfile.TemporaryDirectory() as folder, contextlib.redirect_stdout(io.StringIO()):
+            path = Path(folder) / 'reward.jsonl'
+            benchmark.run_episode('m', 'u', 'k', {}, 2, str(path), MapSpec.from_dict(
+                load('s09_shared_budget').build().to_dict()), policy_kind='noop')
+            record = json.loads(path.read_text(encoding='utf-8').splitlines()[0])
+        self.assertTrue(record['reward_visible'])
+        self.assertIn('Observation reward contains', record['task']['A'])
+
+
 class ExperimentTests(unittest.TestCase):
     def test_statistics(self):
         low, high = experiment.wilson_interval(8, 8)
