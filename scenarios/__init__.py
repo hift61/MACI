@@ -26,6 +26,10 @@ SCENARIO_NAMES = [
     "s10_moving_world",
     "s11_pincer",
     "s12_unreliable_eyes",
+    # 아래는 MAP_GUIDE.md(ARC-AGI-3 기조 + 실패 맵 분석)로 만든 맵
+    "s13_crossed_testimony",
+    "s14_silent_porters",
+    "s15_glass_division",
 ]
 
 

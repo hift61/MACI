@@ -1,0 +1,445 @@
+{
+  "seed": 0,
+  "width": 500,
+  "height": 400,
+  "walls": [],
+  "agents": [
+    {
+      "id": "A",
+      "x": 60,
+      "y": 330,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 440,
+      "y": 70,
+      "facing": 90
+    }
+  ],
+  "objects": [],
+  "objectives": [
+    {
+      "type": "all_stages_completed"
+    }
+  ],
+  "puzzles": [
+    "s15_glass_division"
+  ],
+  "hints": [
+    "Visit every checkpoint of every stage."
+  ],
+  "config": {
+    "recommended_steps": 440,
+    "source": "scenarios/s15_glass_division.py"
+  },
+  "scenario": "s15_glass_division",
+  "rules": {
+    "glass_walls": [
+      [
+        245,
+        0,
+        10,
+        400
+      ]
+    ],
+    "show_reward": true,
+    "stages": [
+      {
+        "title": "stage 1",
+        "briefing": "Visit every checkpoint c1_*.",
+        "objectives": [
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c1_1"
+          },
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c1_2"
+          },
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c1_3"
+          },
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c1_4"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "checkpoint",
+            "id": "c1_1",
+            "x": 80,
+            "y": 80,
+            "params": {
+              "radius": 12.0,
+              "hidden": false
+            }
+          },
+          {
+            "kind": "checkpoint",
+            "id": "c1_2",
+            "x": 180,
+            "y": 300,
+            "params": {
+              "radius": 12.0,
+              "hidden": false
+            }
+          },
+          {
+            "kind": "checkpoint",
+            "id": "c1_3",
+            "x": 320,
+            "y": 100,
+            "params": {
+              "radius": 12.0,
+              "hidden": false
+            }
+          },
+          {
+            "kind": "checkpoint",
+            "id": "c1_4",
+            "x": 430,
+            "y": 320,
+            "params": {
+              "radius": 12.0,
+              "hidden": false
+            }
+          }
+        ],
+        "walls": []
+      },
+      {
+        "title": "stage 2",
+        "briefing": "Visit every checkpoint c2_*.",
+        "objectives": [
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c2_1"
+          },
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c2_2"
+          },
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c2_3"
+          },
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c2_4"
+          },
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c2_5"
+          },
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c2_6"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "checkpoint",
+            "id": "c2_1",
+            "x": 60,
+            "y": 60,
+            "params": {
+              "radius": 12.0,
+              "hidden": true
+            }
+          },
+          {
+            "kind": "checkpoint",
+            "id": "c2_2",
+            "x": 200,
+            "y": 200,
+            "params": {
+              "radius": 12.0,
+              "hidden": true
+            }
+          },
+          {
+            "kind": "checkpoint",
+            "id": "c2_3",
+            "x": 120,
+            "y": 360,
+            "params": {
+              "radius": 12.0,
+              "hidden": true
+            }
+          },
+          {
+            "kind": "checkpoint",
+            "id": "c2_4",
+            "x": 300,
+            "y": 60,
+            "params": {
+              "radius": 12.0,
+              "hidden": true
+            }
+          },
+          {
+            "kind": "checkpoint",
+            "id": "c2_5",
+            "x": 450,
+            "y": 200,
+            "params": {
+              "radius": 12.0,
+              "hidden": true
+            }
+          },
+          {
+            "kind": "checkpoint",
+            "id": "c2_6",
+            "x": 350,
+            "y": 360,
+            "params": {
+              "radius": 12.0,
+              "hidden": true
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "board_2a",
+            "x": 120,
+            "y": 250,
+            "params": {
+              "hidden": false,
+              "content": {
+                "points": [
+                  [
+                    300,
+                    60
+                  ],
+                  [
+                    450,
+                    200
+                  ],
+                  [
+                    350,
+                    360
+                  ]
+                ]
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "board_2b",
+            "x": 380,
+            "y": 150,
+            "params": {
+              "hidden": false,
+              "content": {
+                "points": [
+                  [
+                    60,
+                    60
+                  ],
+                  [
+                    200,
+                    200
+                  ],
+                  [
+                    120,
+                    360
+                  ]
+                ]
+              }
+            }
+          }
+        ],
+        "walls": []
+      },
+      {
+        "title": "stage 3",
+        "briefing": "Visit every checkpoint c3_*.",
+        "objectives": [
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c3_1"
+          },
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c3_2"
+          },
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c3_3"
+          },
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c3_4"
+          },
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c3_5"
+          },
+          {
+            "type": "checkpoint_visited",
+            "object_id": "c3_6"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "checkpoint",
+            "id": "c3_1",
+            "x": 80,
+            "y": 120,
+            "params": {
+              "radius": 12.0,
+              "hidden": true
+            }
+          },
+          {
+            "kind": "checkpoint",
+            "id": "c3_2",
+            "x": 200,
+            "y": 330,
+            "params": {
+              "radius": 12.0,
+              "hidden": true
+            }
+          },
+          {
+            "kind": "checkpoint",
+            "id": "c3_3",
+            "x": 150,
+            "y": 40,
+            "params": {
+              "radius": 12.0,
+              "hidden": true
+            }
+          },
+          {
+            "kind": "checkpoint",
+            "id": "c3_4",
+            "x": 300,
+            "y": 250,
+            "params": {
+              "radius": 12.0,
+              "hidden": true
+            }
+          },
+          {
+            "kind": "checkpoint",
+            "id": "c3_5",
+            "x": 460,
+            "y": 60,
+            "params": {
+              "radius": 12.0,
+              "hidden": true
+            }
+          },
+          {
+            "kind": "checkpoint",
+            "id": "c3_6",
+            "x": 450,
+            "y": 370,
+            "params": {
+              "radius": 12.0,
+              "hidden": true
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "board_3a",
+            "x": 120,
+            "y": 250,
+            "params": {
+              "hidden": false,
+              "content": {
+                "points": [
+                  [
+                    300,
+                    250
+                  ],
+                  [
+                    460,
+                    60
+                  ],
+                  [
+                    450,
+                    370
+                  ]
+                ]
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "board_3b",
+            "x": 380,
+            "y": 150,
+            "params": {
+              "hidden": false,
+              "content": {
+                "points": [
+                  [
+                    80,
+                    120
+                  ],
+                  [
+                    200,
+                    330
+                  ],
+                  [
+                    150,
+                    40
+                  ]
+                ]
+              }
+            }
+          },
+          {
+            "kind": "door",
+            "id": "pocket_door",
+            "x": 450,
+            "y": 325,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "p3",
+            "x": 40,
+            "y": 40,
+            "params": {
+              "opens": [
+                "pocket_door"
+              ]
+            }
+          }
+        ],
+        "walls": [
+          [
+            390,
+            320,
+            48.0,
+            10
+          ],
+          [
+            462.0,
+            320,
+            38.0,
+            10
+          ],
+          [
+            390,
+            320,
+            10,
+            80
+          ]
+        ]
+      }
+    ]
+  },
+  "briefings": {
+    "A": "You start in the bottom-left. Agent B starts in the top-right.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "You start in the top-right. Agent A starts in the bottom-left.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

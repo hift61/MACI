@@ -36,12 +36,15 @@ class ScenarioSolvableTests(unittest.TestCase):
             "s10_moving_world": "sync_fail",
             "s11_pincer": "pickup_blocked",
             "s12_unreliable_eyes": "keypad_reset",
+            "s13_crossed_testimony": "keypad_attempt",
+            "s14_silent_porters": "pickup_blocked",
         }
         for name, event in expected.items():
             with self.subTest(scenario=name):
                 _, env = run(load(name), "mistake")
                 self.assertIn(event, event_types(env))
-        for name in ("s01_deadlock", "s04_half_mastermind", "s07_me_vs_us", "s08_boring_role"):
+        for name in ("s01_deadlock", "s04_half_mastermind", "s07_me_vs_us", "s08_boring_role",
+                     "s13_crossed_testimony", "s15_glass_division"):
             with self.subTest(scenario=name):
                 self.assertGreater(run(load(name), "mistake")[0], run(load(name), "solution")[0])
 
