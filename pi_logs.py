@@ -1,7 +1,12 @@
-"""라즈베리파이(원격 실행기)의 실행 로그를 노트북에서 보는 별도 앱.
+"""실행 로그를 보는 별도 앱 - 라즈베리파이(원격)와 이 컴퓨터(로컬) 모두.
 
-    python pi_logs.py
+    python pi_logs.py                      # 원격(라즈베리파이)
+    python pi_logs.py --local              # 로컬 benchmark_runs
+    python pi_logs.py --local D:/runs      # 다른 로컬 폴더
     python pi_logs.py --host jikun@100.105.194.90 --remote-dir ~/MACI/benchmark_runs
+
+창 위쪽의 '원본' 버튼으로 원격/로컬을 바꿀 수 있습니다. 로컬 모드에서는 내려받기 없이 파일을 바로 열고,
+진행 중인 실행도 그 파일을 viewer.py --live로 바로 따라봅니다.
 
 SSH(키 로그인)로 원격 benchmark_runs 아래의 실행(manifest .jsonl)을 모두 찾아 보여 줍니다(하위 폴더 포함).
 - 목록: 진행 중 / 클리어 / 실패 / 중단, 마지막 step, 모델, 총점
@@ -75,10 +80,13 @@ if action == "list":
                             controller=last.get("controller"))
             score = path[:-len(".jsonl")] + ".score.json"
             if os.path.exists(score):
-                with open(score) as f:
-                    s = json.load(f)
-                info.update(done=True, total=s.get("total"), cleared=s["team"]["cleared"],
-                            clear_step=s["team"]["clear_step"], stopped=s.get("stopped"))
+                try:
+                    with open(score, encoding="utf-8") as f:
+                        s = json.load(f)
+                    info.update(done=True, total=s.get("total"), cleared=s["team"]["cleared"],
+                                clear_step=s["team"]["clear_step"], stopped=s.get("stopped"))
+                except (ValueError, KeyError, OSError):
+                    info["score_error"] = True  # 깨진 점수 파일 하나 때문에 목록 전체가 실패하지 않게
             runs.append(info)
     print(json.dumps({"root": root, "now": time.time(), "runs": runs}))
 elif action == "tail":
@@ -105,6 +113,16 @@ elif action == "read":
         f.seek(int(sys.argv[4]))
         sys.stdout.buffer.write(f.read())
 '''
+
+
+def local_runner(args: list[str]) -> bytes:
+    """REMOTE_HELPER를 이 컴퓨터의 python으로 실행 (로컬 모드, 테스트)."""
+    flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+    result = subprocess.run([sys.executable, "-", *args], input=REMOTE_HELPER.encode("utf-8"), capture_output=True,
+                            timeout=180, creationflags=flags)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.decode("utf-8", "replace").strip()[-300:] or f"exit {result.returncode}")
+    return result.stdout
 
 
 class PiClient:
@@ -153,6 +171,26 @@ class PiClient:
         return len(data)
 
 
+class LocalClient(PiClient):
+    """로컬 폴더용: 목록/로그는 같은 도우미로 읽고, 파일은 내려받지 않고 그 자리의 파일을 씀."""
+
+    def __init__(self, folder: str, runner=None) -> None:
+        super().__init__("local", folder, runner or local_runner)
+        self.folder = Path(os.path.expanduser(folder)).resolve()
+
+    def path(self, rel: str) -> Path:
+        path = (self.folder / rel).resolve()
+        if self.folder not in path.parents:
+            raise ValueError("path escapes the local folder")
+        return path
+
+    def download(self, rel: str, include_context: bool = False) -> Path:
+        return self.path(rel)
+
+    def append_new(self, rel: str) -> int:
+        return 0  # 로컬 파일은 viewer --live가 직접 따라 읽음
+
+
 def local_path(rel: str) -> Path:
     path = (LOCAL_DIR / rel).resolve()
     if LOCAL_DIR.resolve() not in path.parents:
@@ -189,17 +227,19 @@ def summary_lines(run: dict, now: float) -> list[str]:
 
 
 class PiLogsApp:
-    def __init__(self, host: str, remote_dir: str, runner=None) -> None:
+    def __init__(self, host: str, remote_dir: str, runner=None, local_dir: str | None = None,
+                 source: str = "remote") -> None:
         import pygame
         self.pygame = pygame
         pygame.init()
         self.screen = pygame.display.set_mode((1180, 760))
-        pygame.display.set_caption("MACI 원격(라즈베리파이) 로그")
+        pygame.display.set_caption("MACI 실행 로그 (원격/로컬)")
         font = pygame.font.match_font("malgungothic,nanumgothic,applegothic")
         self.font, self.small, self.title = (pygame.font.Font(font, 18), pygame.font.Font(font, 14),
                                              pygame.font.Font(font, 26))
-        self.fields = {"host": host, "remote": remote_dir}
+        self.fields = {"host": host, "remote": remote_dir, "local": local_dir or str(ROOT / "benchmark_runs")}
         self.runner = runner
+        self.source = source  # "remote" 또는 "local"
         self.focus = None
         self.runs: list[dict] = []
         self.now = time.time()
@@ -220,7 +260,14 @@ class PiLogsApp:
 
     @property
     def client(self) -> PiClient:
+        if self.source == "local":
+            return LocalClient(self.fields["local"].strip(), self.runner)
         return PiClient(self.fields["host"].strip(), self.fields["remote"].strip(), self.runner)
+
+    def toggle_source(self) -> None:
+        self.source = "local" if self.source == "remote" else "remote"
+        self.runs, self.selected, self.log_lines, self.following = [], None, [], None
+        self.refresh()
 
     # ---- 원격 작업은 GUI가 멈추지 않게 백그라운드 스레드에서
     def background(self, label: str, work, done=None) -> None:
@@ -261,7 +308,7 @@ class PiLogsApp:
 
         def done(data):
             self.runs, self.now = data["runs"], data["now"]
-            self.status = f"원격 실행 {len(self.runs)}개 ({data['root']})"
+            self.status = f"{'로컬' if self.source == 'local' else '원격'} 실행 {len(self.runs)}개 ({data['root']})"
             followed = next((r for r in self.runs if r["path"] == self.following), None)
             if followed is not None and followed.get("done"):
                 # 끝난 실행은 점수 파일까지 한 번 더 받아 오고 따라보기를 멈춤
@@ -284,6 +331,12 @@ class PiLogsApp:
         if not self.selected:
             self.status = "실행을 먼저 고르세요."
             return
+        if self.source == "local":
+            path = self.client.download(self.selected)
+            if open_viewer:
+                self.open_viewer(path)
+            self.status = f"로컬 파일: {path}"
+            return
         rel, context = self.selected, self.include_context
 
         def done(path):
@@ -301,6 +354,10 @@ class PiLogsApp:
             self.status = "실행을 먼저 고르세요."
             return
         rel = self.selected
+        if self.source == "local":  # 로컬 파일은 viewer --live가 직접 따라 읽음
+            self.open_viewer(self.client.download(rel), live=True)
+            self.status = "로컬 실행을 이동 창에서 실시간으로 따라봅니다."
+            return
 
         def done(path):
             self.following, self.last_follow = rel, time.time()
@@ -341,9 +398,14 @@ class PiLogsApp:
         pygame = self.pygame
         self.screen.fill((18, 23, 33))
         self.widgets = []
-        self.text("원격 실행 로그", 24, 14, self.title)
-        self.field("host", "SSH 주소", 24, 56, 300)
-        self.field("remote", "원격 로그 폴더", 340, 56, 330)
+        self.text("실행 로그", 24, 14, self.title)
+        self.button("원본: " + ("로컬" if self.source == "local" else "원격"), (160, 14, 150, 34), self.toggle_source,
+                    self.source == "local")
+        if self.source == "local":
+            self.field("local", "로컬 로그 폴더", 24, 56, 646)
+        else:
+            self.field("host", "SSH 주소", 24, 56, 300)
+            self.field("remote", "원격 로그 폴더", 340, 56, 330)
         self.button("새로고침", (690, 76, 120, 36), self.refresh)
         self.button("자동 새로고침: " + ("켬" if self.auto_refresh else "끔"), (822, 76, 200, 36),
                     lambda: setattr(self, "auto_refresh", not self.auto_refresh), self.auto_refresh)
@@ -369,12 +431,14 @@ class PiLogsApp:
             for i, line in enumerate(summary_lines(run, self.now)):
                 self.text(line, x, 130 + i * 20, width=700)
         self.button("로그 새로고침", (x, 252, 150, 34), self.load_log)
-        self.button("가져오기", (x + 160, 252, 120, 34), lambda: self.download(False))
+        if self.source == "remote":
+            self.button("가져오기", (x + 160, 252, 120, 34), lambda: self.download(False))
         self.button("이동 다시 보기", (x + 290, 252, 160, 34), lambda: self.download(True))
         self.button("실시간 따라보기" + (" 끄기" if self.following else ""), (x + 460, 252, 200, 34), self.follow,
                     bool(self.following))
-        self.button("대화 이력 포함: " + ("예" if self.include_context else "아니오"), (x, 292, 250, 30),
-                    lambda: setattr(self, "include_context", not self.include_context), self.include_context)
+        if self.source == "remote":
+            self.button("대화 이력 포함: " + ("예" if self.include_context else "아니오"), (x, 292, 250, 30),
+                        lambda: setattr(self, "include_context", not self.include_context), self.include_context)
         pygame.draw.rect(self.screen, (10, 15, 23), (x, 330, 696, 386), border_radius=8)
         end = max(0, len(self.log_lines) - self.log_scroll)
         for i, line in enumerate(self.log_lines[max(0, end - 18):end]):
@@ -423,8 +487,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--remote-dir", default=DEFAULT_REMOTE_DIR)
+    parser.add_argument("--local", nargs="?", const=str(ROOT / "benchmark_runs"), default=None,
+                        help="로컬 폴더를 봄 (폴더를 생략하면 이 프로젝트의 benchmark_runs)")
     args = parser.parse_args()
-    PiLogsApp(args.host, args.remote_dir).run()
+    PiLogsApp(args.host, args.remote_dir, local_dir=args.local,
+              source="local" if args.local else "remote").run()
 
 
 if __name__ == "__main__":

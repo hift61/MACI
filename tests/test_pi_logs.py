@@ -85,6 +85,41 @@ class PiLogsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             pi_logs.local_path('../../x.jsonl')
 
+    def test_local_mode_reads_files_in_place(self):
+        client = pi_logs.LocalClient(str(self.remote))
+        runs = {r['path'].replace('\\', '/') for r in client.list_runs()['runs']}
+        self.assertEqual(runs, {'trial/s01.jsonl', 'live.jsonl'})
+        self.assertEqual(client.tail_log('trial/s01.jsonl', 1), ['line 99'])
+        self.assertEqual(client.download('trial/s01.jsonl'), (self.remote / 'trial' / 's01.jsonl').resolve())
+        self.assertEqual(client.append_new('live.jsonl'), 0)
+        self.assertFalse(self.local.exists())  # nothing copied
+        with self.assertRaises(ValueError):
+            client.download('../outside.jsonl')
+
+    def test_window_switches_between_remote_and_local(self):
+        app = pi_logs.PiLogsApp('unused', 'unused-remote', local_dir=str(self.remote), source='local')
+        try:
+            opened = []
+            app.open_viewer = lambda path, live=False: opened.append((path, live))
+            app.refresh()
+            deadline = time.time() + 30
+            while (not app.runs or app.busy) and time.time() < deadline:
+                app.poll()
+                time.sleep(0.05)
+            self.assertIn('로컬 실행 2개', app.status)
+            app.selected = 'live.jsonl'
+            app.follow()
+            app.download(open_viewer=True)
+            self.assertEqual(opened, [((self.remote / 'live.jsonl').resolve(), True),
+                                      ((self.remote / 'live.jsonl').resolve(), False)])
+            app.draw()
+            app.toggle_source()
+            self.assertEqual(app.source, 'remote')
+            self.assertEqual(app.runs, [])
+            app.draw()
+        finally:
+            app.pygame.quit()
+
     def test_window_lists_selects_and_shows_the_log(self):
         app = pi_logs.PiLogsApp('unused', str(self.remote), local_runner)
         try:
