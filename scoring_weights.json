@@ -1,6 +1,9 @@
 {
   "token_allowance": 50000,
   "token_penalty_per_1000": 1.0,
+  "context_penalty_start": 500000,
+  "context_penalty_end": 1000000,
+  "context_penalty_divisor": 1000000000,
   "seen_points": 0.2,
   "seen_points_by_type": {
     "clue": 1.0
@@ -14,6 +17,10 @@
   "number_points": 3.0,
   "handoff_points": 2.0,
   "level_points": 10.0,
+  "delivery_points": 5.0,
+  "checkpoint_points": 3.0,
+  "keypad_points": 10.0,
+  "sync_points": 10.0,
   "trap_penalty": -30.0,
   "sequence_reset_penalty": -3.0,
   "invalid_action_penalty": -1.0,

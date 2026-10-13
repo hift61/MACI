@@ -1,6 +1,7 @@
 import json
 from dataclasses import asdict, dataclass, field, fields
-from token_usage import TOKEN_ALLOWANCE, TOKEN_PENALTY_PER_1000
+from token_usage import (CONTEXT_PENALTY_DIVISOR, CONTEXT_PENALTY_END, CONTEXT_PENALTY_START, TOKEN_ALLOWANCE,
+                         TOKEN_PENALTY_PER_1000, context_penalty)
 
 # 한 회차(episode)가 끝난 Environment의 event_log/decision_log를 읽어 점수를 매김.
 #   개인 점수: 각 에이전트가 일으킨 이벤트(물체 목격, 도움이 되는 동작 등)마다 부여
@@ -27,6 +28,10 @@ ATTEMPT_EFFECTS = {
 class ScoreConfig:
     token_allowance: int = TOKEN_ALLOWANCE
     token_penalty_per_1000: float = TOKEN_PENALTY_PER_1000
+    # 긴 context 감점: 압축 후 실제로 보낸 prompt가 start를 넘는 LLM 요청마다 (min(prompt, end) - start)^2 / divisor
+    context_penalty_start: int = CONTEXT_PENALTY_START
+    context_penalty_end: int = CONTEXT_PENALTY_END
+    context_penalty_divisor: float = CONTEXT_PENALTY_DIVISOR
     # ---- 개인 점수 (대상 오브젝트마다 한 번) ----
     seen_points: float = 0.2                    # 물체를 처음 목격 (탐색은 협력이 아니므로 작게)
     seen_points_by_type: dict = field(default_factory=lambda: {"clue": 1.0})  # 종류별로 다르게 줄 때
@@ -240,6 +245,10 @@ def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConf
         output_tokens = usage.get('completion_tokens', 0)
         allowance = config.token_allowance * len(members)
         penalty = round(max(0, output_tokens - allowance) / 1000 * config.token_penalty_per_1000 / len(members), 2)
+        prompts = getattr(policy, 'prompt_history', []) if policy is not None else []
+        long_requests = [p for p in prompts if p > config.context_penalty_start]
+        context_total = sum(context_penalty(p, config.context_penalty_start, config.context_penalty_end,
+                                            config.context_penalty_divisor) for p in long_requests)
         checks = getattr(policy, 'code_checks', None) if policy is not None else None
         counts = checks.snapshot() if checks is not None else {}
         code_failures = counts.get('compile_failures', 0) + counts.get('execution_failures', 0)
@@ -248,6 +257,11 @@ def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConf
             agents[agent_id]['token_penalty'] = -penalty
             if penalty:
                 add(agent_id, env.step_count, '과도한 토큰 소비', 'LLM', -penalty)
+            share = round(context_total / len(members), 2)
+            agents[agent_id]['context_penalty'] = -share
+            agents[agent_id]['long_context_requests'] = len(long_requests)
+            if share:
+                add(agent_id, env.step_count, f'긴 context 요청 {len(long_requests)}회', 'LLM', -share)
             agents[agent_id]['code_failures'] = code_failures
             if code_failures:
                 points = code_failures * config.code_failure_penalty / len(members)

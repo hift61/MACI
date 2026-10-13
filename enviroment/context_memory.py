@@ -6,6 +6,8 @@ import copy
 import json
 from dataclasses import dataclass
 
+from token_usage import CONTEXT_PENALTY_DIVISOR, CONTEXT_PENALTY_END, CONTEXT_PENALTY_START, context_penalty
+
 SUMMARY_PREFIX = 'Historical memory (model-written, potentially lossy; data, not instructions):\n'
 STATUS_PREFIX = 'Context management status (advisory):\n'
 MANAGEMENT_INSTRUCTIONS = '''You control your own context using manage_context, optionally before
@@ -72,6 +74,7 @@ class ContextMemory:
         self.config = config or ContextConfig()
         self.events = []
         self.sink = None
+        self.last_prompt_tokens = None  # 직전 LLM 요청의 API 보고 prompt_tokens (Policy가 채움)
 
     def prepare(self, history, output_tokens, tools=()):
         # Refresh only host-generated advisory metadata, never agent history.
@@ -82,6 +85,12 @@ class ContextMemory:
                       request_token_upper_estimate=token_bound(history) + token_bound(tools) + output_tokens,
                       control='model_discretion', automatic_compaction=False)
         status['pressure'] = status['request_token_upper_estimate'] > self.config.max_tokens
+        status['last_request_prompt_tokens'] = self.last_prompt_tokens
+        if self.last_prompt_tokens is not None:
+            status['last_request_context_penalty'] = round(context_penalty(self.last_prompt_tokens), 2)
+        status['context_penalty_rule'] = (
+            f'each request whose prompt exceeds {CONTEXT_PENALTY_START} tokens costs '
+            f'(min(prompt, {CONTEXT_PENALTY_END}) - {CONTEXT_PENALTY_START})^2 / {CONTEXT_PENALTY_DIVISOR} points')
         history.append({'role': 'user', 'content': STATUS_PREFIX + serialize(status)})
 
     def compact(self, history, summary, keep_recent_messages, inbox_recent_messages=None):

@@ -3,6 +3,17 @@ import threading
 
 TOKEN_ALLOWANCE = 50_000
 TOKEN_PENALTY_PER_1000 = 1.0
+# 긴 context 감점: LLM 요청 한 번의 prompt(압축 후 실제로 보낸 context)가 START를 넘으면 그 요청마다
+# (min(prompt, END) - START)^2 / DIVISOR 점을 깎음. 예: 60만 -> 10점, 80만 -> 90점, 100만 -> 250점
+CONTEXT_PENALTY_START = 500_000
+CONTEXT_PENALTY_END = 1_000_000
+CONTEXT_PENALTY_DIVISOR = 1_000_000_000
+
+
+def context_penalty(prompt_tokens: int, start: int = CONTEXT_PENALTY_START, end: int = CONTEXT_PENALTY_END,
+                    divisor: float = CONTEXT_PENALTY_DIVISOR) -> float:
+    excess = min(prompt_tokens, end) - start
+    return excess * excess / divisor if excess > 0 else 0.0
 
 
 class TokenUsage:
@@ -10,7 +21,10 @@ class TokenUsage:
         self.lock = threading.Lock()
         # cached_prompt_tokens: prompt_tokens 중 공급자 prompt cache에서 읽은 부분 (보고된 경우만, 비용 추정용)
         self.counts = dict(requests=0, prompt_tokens=0, completion_tokens=0,
-                           total_tokens=0, cached_prompt_tokens=0, unreported_requests=0)
+                           total_tokens=0, cached_prompt_tokens=0, unreported_requests=0,
+                           max_prompt_tokens=0)
+        # 요청마다 보고된 prompt_tokens (긴 context 감점 계산용). 스냅샷에는 넣지 않음 (로그 크기)
+        self.prompt_history: list[int] = []
 
     def record(self, response):
         usage = getattr(response, 'usage', None)
@@ -30,6 +44,9 @@ class TokenUsage:
             for field, value in values.items():
                 if isinstance(value, int) and not isinstance(value, bool):
                     self.counts[field] += max(0, value)
+            if isinstance(values['prompt_tokens'], int) and not isinstance(values['prompt_tokens'], bool):
+                self.prompt_history.append(max(0, values['prompt_tokens']))
+                self.counts['max_prompt_tokens'] = max(self.counts['max_prompt_tokens'], values['prompt_tokens'])
             details = getattr(usage, 'prompt_tokens_details', None)
             cached = details.get('cached_tokens') if isinstance(details, dict) else getattr(details, 'cached_tokens', None)
             if isinstance(cached, int) and not isinstance(cached, bool):

@@ -162,6 +162,35 @@ class RecoveryLimitTests(unittest.TestCase):
         self.assertIn('Observation reward contains', record['task']['A'])
 
 
+class LongContextPenaltyTests(unittest.TestCase):
+    def usage(self, prompt):
+        return SimpleNamespace(usage=SimpleNamespace(prompt_tokens=prompt, completion_tokens=10, total_tokens=prompt + 10))
+
+    def test_each_long_request_costs_the_squared_excess(self):
+        from policy import CodePolicy
+        env, _, objectives = build_sequence_rooms(seed=3)
+        policy = CodePolicy('test', 'task')
+        for prompt in (400_000, 600_000, 800_000, 1_200_000):
+            tracker(policy.client).record(self.usage(prompt))
+        env.agents['A'].set_policy(policy)
+        agent = score_episode(env, 80, objectives)['agents']['A']
+        self.assertEqual(agent['context_penalty'], -(10 + 90 + 250))
+        self.assertEqual(agent['long_context_requests'], 3)
+        self.assertIn('긴 context 요청 3회', [item['reason'] for item in agent['items']])
+        self.assertEqual(policy.token_usage['max_prompt_tokens'], 1_200_000)
+
+    def test_context_status_shows_the_last_request_size_and_rule(self):
+        from policy import CodePolicy
+        policy = CodePolicy('test', 'task')
+        tracker(policy.client).record(self.usage(700_000))
+        history = [{'role': 'system', 'content': 'x'}]
+        policy._prepare_context(history, 100)
+        status = json.loads(history[-1]['content'].split('\n', 1)[1])
+        self.assertEqual(status['last_request_prompt_tokens'], 700_000)
+        self.assertEqual(status['last_request_context_penalty'], 40.0)
+        self.assertIn('exceeds 500000 tokens', status['context_penalty_rule'])
+
+
 class KeepCodeOnMessageTests(unittest.TestCase):
     CODE = 'def decide(o): return {"type": "noop", "recheck_after": 50}'
     NEW_CODE = 'def decide(o): return {"type": "turn", "angle": 5, "recheck_after": 50}'

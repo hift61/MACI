@@ -64,6 +64,11 @@ class Policy:
         client = getattr(self, 'client', None)
         return tracker(client).snapshot() if client is not None else TokenUsage().snapshot()
 
+    @property
+    def prompt_history(self) -> list[int]:
+        client = getattr(self, 'client', None)
+        return list(tracker(client).prompt_history) if client is not None else []
+
     def _new_messages(self, observation):
         inbox = observation.get('inbox', [])
         reviewed = getattr(self, '_reviewed_inbox_count', 0)
@@ -138,6 +143,9 @@ class Policy:
         return self.context_memory.snapshot(self.conversation_history)
 
     def _prepare_context(self, history, output_tokens, tools=()):
+        # 직전 요청의 실제 prompt 크기를 상태 메시지에 보여 줘 긴 context 감점을 스스로 피할 수 있게 함
+        history_sizes = self.prompt_history
+        self.context_memory.last_prompt_tokens = history_sizes[-1] if history_sizes else None
         self.context_memory.prepare(history, output_tokens, tools)
 
     def _manage_context(self, **args):

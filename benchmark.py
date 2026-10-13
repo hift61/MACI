@@ -60,6 +60,10 @@ def penalty_description(config: ScoreConfig) -> str:
             f"{-config.invalid_action_penalty_cap:g}; each rejected or failing policy code submission/execution costs "
             f"{-config.code_failure_penalty:g}, up to {-config.code_failure_penalty_cap:g}; each interaction with no "
             f"effect costs {-config.failed_attempt_penalty:g}, up to {-config.failed_attempt_penalty_cap:g}. "
+            f"Long context is expensive: every LLM request whose prompt (your working context after any compression) "
+            f"exceeds {config.context_penalty_start:,} tokens costs (min(prompt, {config.context_penalty_end:,}) - "
+            f"{config.context_penalty_start:,})^2 / {config.context_penalty_divisor:,.0f} points (about 10 points at "
+            f"600,000 tokens and 90 at 800,000), so compress your history with manage_context in time. "
             "observation.last_action_result reports whether your previous action was ok, invalid or had no effect, "
             "and observation.notices lists recent events such as input resets.")
 
