@@ -1,7 +1,7 @@
 """s03 나눠 보는 실험 (공동 추론) - 숨은 배선(XOR)으로 문 4개를 여는 레버 6개, 문 상태는 각자 절반만 보임.
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
-from .common import agent, explain, hwall, make_spec, obj
+from .common import agent, hwall, make_spec, obj
 
 NAME = "s03_split_experiment"
 TITLE = "나눠 보는 실험"
@@ -25,29 +25,20 @@ def build():
     objects = [obj("switch_lever", lid, x, y, cooldown=3) for lid, (x, y) in LEVERS.items()]
     objects += [obj("logic_door", gid, x, y, levers=WIRING[gid], parity=1) for gid, (x, y) in GATES.items()]
     note = {
-        "wiring": "Each of the six levers (L1-L3 in room A, L4-L6 in room B) is secretly wired to some of the "
-                  "four gates G1-G4. Pulling a lever flips every gate it is wired to (open <-> closed).",
-        "rule": "A gate is open exactly when an ODD number of the levers wired to it are ON. All levers start OFF.",
-        "view": "G1 and G2 are in room A, G3 and G4 in room B. You can only watch the gates in your own room.",
-        "cooldown": "After a pull, a lever needs 3 steps before it can be pulled again (field ready_at_step).",
+        "wiring": "The levers L1-L6 are secretly wired to the gates G1-G4. Pulling a lever flips every gate it is "
+                  "wired to (open <-> closed).",
+        "rule": "A gate is open exactly when an odd number of the levers wired to it are on.",
     }
     objects += [
         obj("clue", "wiring_note_A", 180, 70, content=note, hidden=False),
         obj("clue", "wiring_note_B", 410, 70, content=note, hidden=False),
         obj("goal_zone", "exit", 220, 202, width=440, height=115, label="exit hall"),
     ]
-    guide = explain("switch_lever", "goal_zone")
-    briefings = {
-        "A": f"You are in room A (left) with levers L1-L3 and gates G1, G2 (G2 lies beyond G1). Agent B is in "
-             f"room B (right) with L4-L6 and gates G3, G4. A wall separates the rooms. Read wiring_note_A. {guide}",
-        "B": f"You are in room B (right) with levers L4-L6 and gates G3, G4 (G4 lies beyond G3). Agent A is in "
-             f"room A (left) with L1-L3 and gates G1, G2. A wall separates the rooms. Read wiring_note_B. {guide}",
-    }
     return make_spec(
         NAME, 440, 260, walls, [agent("A", 105, 70, 270), agent("B", 335, 70, 270)], objects,
         objectives=[{"type": "team_assembled", "zone_id": "exit"}],
-        hints=["Both agents must stand in the goal_zone 'exit' (below both rooms) at the same time."],
-        briefings=briefings, recommended_steps=150)
+        hints=["Both agents must stand in the goal_zone 'exit' at the same time."],
+        recommended_steps=150)
 
 
 def solution(env):

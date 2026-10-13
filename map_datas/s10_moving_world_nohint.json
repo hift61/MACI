@@ -1,0 +1,126 @@
+{
+  "seed": 0,
+  "width": 440,
+  "height": 260,
+  "walls": [
+    [
+      210,
+      0,
+      20,
+      260
+    ],
+    [
+      0,
+      100,
+      99.0,
+      10
+    ],
+    [
+      111.0,
+      100,
+      99.0,
+      10
+    ],
+    [
+      230,
+      100,
+      99.0,
+      10
+    ],
+    [
+      341.0,
+      100,
+      99.0,
+      10
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 105,
+      "y": 200,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 335,
+      "y": 200,
+      "facing": 270
+    }
+  ],
+  "objects": [
+    {
+      "kind": "periodic_door",
+      "id": "gate_A",
+      "x": 105,
+      "y": 105,
+      "params": {
+        "radius": 6.0,
+        "period": 9,
+        "open_steps": 1,
+        "phase": 0
+      }
+    },
+    {
+      "kind": "sync_pad",
+      "id": "pad_A",
+      "x": 105,
+      "y": 70,
+      "params": {
+        "group": "crossing",
+        "tolerance": 0,
+        "return_x": 105,
+        "return_y": 135,
+        "cooldown": 3
+      }
+    },
+    {
+      "kind": "periodic_door",
+      "id": "gate_B",
+      "x": 335,
+      "y": 105,
+      "params": {
+        "radius": 6.0,
+        "period": 7,
+        "open_steps": 1,
+        "phase": 3
+      }
+    },
+    {
+      "kind": "sync_pad",
+      "id": "pad_B",
+      "x": 335,
+      "y": 70,
+      "params": {
+        "group": "crossing",
+        "tolerance": 0,
+        "return_x": 335,
+        "return_y": 135,
+        "cooldown": 3
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "sync_success",
+      "group": "crossing"
+    }
+  ],
+  "puzzles": [
+    "s10_moving_world"
+  ],
+  "hints": [
+    "Enter pad_A and pad_B (behind the two timed gates) in exactly the same step."
+  ],
+  "config": {
+    "recommended_steps": 200,
+    "source": "scenarios/s10_moving_world.py",
+    "clue_hints": false
+  },
+  "scenario": "s10_moving_world_nohint",
+  "rules": {},
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

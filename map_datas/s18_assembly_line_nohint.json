@@ -1,0 +1,114 @@
+{
+  "seed": 0,
+  "width": 460,
+  "height": 300,
+  "walls": [],
+  "agents": [
+    {
+      "id": "A",
+      "x": 110,
+      "y": 150,
+      "facing": 0
+    },
+    {
+      "id": "B",
+      "x": 340,
+      "y": 150,
+      "facing": 180
+    }
+  ],
+  "objects": [
+    {
+      "kind": "spawner",
+      "id": "ore_vein",
+      "x": 0,
+      "y": 0,
+      "params": {
+        "area": [
+          30,
+          30,
+          190,
+          270
+        ],
+        "every": 6,
+        "max_alive": 2,
+        "prefix": "ore",
+        "label": "raw ore"
+      }
+    },
+    {
+      "kind": "station",
+      "id": "smelter",
+      "x": 290,
+      "y": 90,
+      "params": {
+        "input": "ore",
+        "output": "ingot",
+        "process_steps": 3,
+        "out_x": 290,
+        "out_y": 112,
+        "label": "smelter: ore -> ingot"
+      }
+    },
+    {
+      "kind": "station",
+      "id": "press",
+      "x": 160,
+      "y": 210,
+      "params": {
+        "input": "ingot",
+        "output": "gear",
+        "process_steps": 3,
+        "out_x": 160,
+        "out_y": 232,
+        "label": "press: ingot -> gear"
+      }
+    },
+    {
+      "kind": "receptacle",
+      "id": "dock",
+      "x": 370,
+      "y": 230,
+      "params": {
+        "accepts": [
+          "gear"
+        ],
+        "target": 3,
+        "radius": 20.0,
+        "label": "shipping dock"
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "delivery_complete",
+      "receptacle_id": "dock"
+    }
+  ],
+  "puzzles": [
+    "s18_assembly_line"
+  ],
+  "hints": [
+    "Deliver 3 gears to the receptacle 'dock' (east area)."
+  ],
+  "config": {
+    "recommended_steps": 300,
+    "source": "scenarios/s18_assembly_line.py",
+    "clue_hints": false
+  },
+  "scenario": "s18_assembly_line_nohint",
+  "rules": {
+    "glass_walls": [
+      [
+        225,
+        0,
+        10,
+        300
+      ]
+    ]
+  },
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

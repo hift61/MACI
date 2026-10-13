@@ -33,6 +33,8 @@ step 기반 실행은 유지한다. 새 명령의 거리는 속도나 초 단위
 
 생성 코드 검사: `policy_sandbox.compile_policy_code()`가 `py_compile`로 문법을 검사하고 `run_decide_code(..., checks=...)`가 컴파일 성공 후 샌드박스 실행을 수행합니다. 제출 게이트에도 같은 컴파일 검사를 적용합니다. 에이전트별 `CodeChecks`는 컴파일과 실행의 attempts/successes/failures를 별도로 집계합니다. `<실행 이름>.code_checks.jsonl`에 각 검사 결과를 즉시 추가하고 `decision.code_checks`, 점수 파일의 `code_checks[agent_id]`에 누적값을 기록합니다. 제출/실행 직전 검사는 각각 카운트하며 컴파일 실패는 실행 시도로 세지 않습니다.
 
+단서 힌트 버전 (2026-10-13): `run_episode(..., clue_hints=True)` / `--no-clue-hints`. False면 단서에서 장치 규칙 문장을 지우고 퍼즐 자료만 남긴 버전으로 실행합니다. 기본 맵은 `build_episode(clue_hints=False)`로 힌트 단서를 두지 않고, 맵 파일은 `scenarios.common.without_clue_hints(map_spec)`를 적용합니다. 맵 파일의 `config.clue_hints`가 False(`*_nohint.json`)여도 False로 봅니다. 사용한 값은 scene.json과 JSONL 각 행의 `clue_hints`에 기록합니다.
+
 실시간 디버깅: `run_episode(..., debug=True)` / `--debug`는 시간·step·에이전트·이벤트를 포함한 `[DEBUG]` 로그를 즉시 flush하고 `<실행 이름>.debug.jsonl`에도 저장합니다. LLM 요청 시작/완료/실패, 코드 검사, 복구 대기/성공, 행동·메시지·환경 이벤트를 기록하며 step이 끝나기 전에도 표시됩니다. GUI 실행 탭의 디버깅 토글을 켜면 디버그 탭으로 이동합니다. 결과 목록은 `.debug.jsonl` 및 `.code_checks.jsonl`을 제외합니다.
 
 누적 context: 각 Policy의 `conversation_history`는 에이전트별 리스트이며 코드 생성 게이트의 요청/응답/검사 결과를 유지합니다. 환경은 step 적용 후 `remember_step(observation, final_action, next_observation)`을 호출해 해당 에이전트의 허용된 관찰 및 실행 피드백만 추가합니다. CodePolicy의 코드 재사용 step에도 이력을 보관하며 다음 LLM 요청에 전체를 전달합니다. 도구 미지원 fallback도 과거 대화를 텍스트로 보존합니다. `decision.context_messages`에 이력 길이, `<실행 이름>.context.json`에 완료 시 전체 이력을 저장합니다.
@@ -45,7 +47,7 @@ CodePolicy 에이전트로 협력 에피소드 하나를 실행하고, 매 step�
 
 read_secret(filename: str = "key.txt") -> str : 프로젝트 폴더 기준 filename 내용을 읽어 API 키 반환. UTF-8 BOM과 앞뒤 공백을 제거하며 파일이 없거나 비어 있으면 SystemExit. 환경변수는 사용하지 않음. maci_judge.py도 동일한 방식으로 읽음
 
-build_episode() -> tuple[Environment, dict[str, str]] : 압력판 두 개를 동시에 밟아야 열리는 gate 맵과 에이전트 A/B를 만들고 (env, 에이전트별 과제 설명) 반환
+build_episode(reveal_goal=True, clue_hints=True) -> tuple[Environment, dict[str, str]] : 압력판 두 개를 동시에 밟아야 열리는 gate 맵과 에이전트 A/B를 만들고 (env, 에이전트별 과제 설명) 반환. 두 시작 지점 근처에 기본 힌트 단서 hint_a/hint_b("The gate opens only while every plate linked to it is occupied at the same time.")를 둠 (2026-10-13 정보 전달 원칙). clue_hints=False면 이 단서를 두지 않음
 
 GATE_OBJECTIVES : 기본 맵(build_episode)의 클리어 조건 [{"type": "door_unlocked", "door_id": "gate"}] (형식은 scoring._matches 참고)
 
@@ -355,7 +357,13 @@ hwall(y, x0, x1, gaps=(), t=10) -> list : 가로 벽 조각 목록. gaps [(가�
 
 vwall(x, y0, y1, gaps=(), t=10) -> list : 세로 벽 조각 목록
 
-make_spec(name, width, height, walls, agents, objects, objectives, hints, briefings, rules=None, recommended_steps=150, seed=0) -> MapSpec : scenario=name, puzzles=[name], config={"recommended_steps", "source": "scenarios/<name>.py"}, briefings 끝에 COMMON_RULES
+make_spec(name, width, height, walls, agents, objects, objectives, hints, briefings=None, rules=None, recommended_steps=150, seed=0) -> MapSpec : scenario=name, puzzles=[name], config={"recommended_steps", "source": "scenarios/<name>.py"}. briefings는 에이전트 전원에 대해 (주어진 개인 안내문 + 줄바꿈) + COMMON_RULES. 정보 전달 원칙(2026-10-13)에 따라 시나리오 맵은 개인 안내문을 주지 않음(COMMON_RULES만) - 물체 역할은 시스템 프롬프트, 목표는 objectives, 힌트는 맵 안 단서. explain()/OBJECT_HELP/STAGE_RULES는 예전 맵 호환용으로만 남음
+
+CLUE_DATA_KEYS : 퍼즐 자료로 보는 단서 content 키 {"code", "copy of the code", "sum of the digits", "checkpoints", "target weight of vault_scale"}. 새 맵에서 자료 키를 새로 쓰면 여기에 추가
+
+NOHINT_SUFFIX = "_nohint"
+
+without_clue_hints(spec) -> MapSpec : 같은 맵의 힌트 없는 버전. clue/variant_clue의 dict content에서 CLUE_DATA_KEYS 밖의 키(장치 규칙 문장)를 지우고, 남는 키가 없는 단서는 뺌. 문자열 content(variant_clue 등)는 자료로 보고 그대로 둠. 단계(rules.stages)의 물체에도 적용. scenario=<이름>_nohint, config.clue_hints=False. 나머지(물체, 목표, 벽, 규칙)는 같음
 
 ### scenarios/engine.py - ScenarioEnvironment(Class, Environment 상속)
 
@@ -501,11 +509,13 @@ carry_legs(start, waypoints, step=10.0) -> list : 2인 운반용으로 회전/�
 
 near(env, agent_id, x, y, radius=1.0) -> bool, unlocked(door_id) -> fn(env) : plan 조건용
 
-run(module, mode="solution", max_steps=400) -> tuple[int | None, env] : module.build()로 환경을 만들어 mode("solution"/"mistake") plan대로 돌리고 (클리어 step 또는 None, env) 반환
+run(module, mode="solution", max_steps=1000, clue_hints=True) -> tuple[int | None, env] : module.build()로 환경을 만들어(clue_hints=False면 common.without_clue_hints 적용) mode("solution"/"mistake") plan대로 돌리고 (클리어 step 또는 None, env) 반환
 
 ### scenarios/__main__.py (명령행)
 
-python -m scenarios [이름 ...] [--out-dir map_datas] [--check] [--list] : 시나리오를 <out-dir>/<이름>.json으로 내보냄 (기본 전부). --check면 내보내기 전에 정답/실수 plan으로 모두 클리어되는지 확인하고 실패가 있으면 종료 코드 1. --list는 이름/계열/제목만 출력
+python -m scenarios [이름 ...] [--out-dir map_datas] [--check] [--list] [--texts] : 시나리오마다 두 파일을 내보냄 (기본 전부): <out-dir>/<이름>.json(단서에 규칙 힌트 있음)과 <out-dir>/<이름>_nohint.json(without_clue_hints, 퍼즐 자료만). --check면 내보내기 전에 두 버전 모두 정답/실수 plan으로 클리어되는지 확인하고 실패가 있으면 종료 코드 1. --list는 이름/계열/제목만 출력. --texts는 맵마다 에이전트가 읽는 글(과제 설명의 맵별 부분, 맵 규칙, 단서/화면/이름표, 단계 안내, variant 내용)을 scenarios/AGENT_TEXTS.md로 생성. 단서 표의 마지막 열은 _nohint 버전에서의 내용((없음)/(같음)/남는 자료)
+
+agent_texts(names) -> str : --texts가 쓰는 마크다운 생성 함수
 
 ---
 
@@ -534,6 +544,16 @@ OpenAI function-calling(tool) 스키마 목록(TOOLS). Environment.apply_action(
 - 변수
 
 TOOLS : 모듈 상수(list[dict]). 각 항목은 {"type": "function", "function": {"name", "description", "parameters"(JSON schema)}} 형식. "issue_command"도 포함되어 있어, 중심 에이전트 역할의 LLM이 다른 에이전트에게 명령을 내리는 데 사용 가능
+
+---
+
+## environment_prompt.py
+
+모든 맵의 과제 설명에 공통으로 들어가는 문장을 만드는 모듈.
+
+environment_description(agent_id, agent_ids, width, height) -> str : 공통 설명 (에이전트 id, 맵 크기, 다른 에이전트, 메시지 사용, 토큰 감점, 시야 200·90도, 이동 방식, 관찰 구성)
+
+objective_description(objectives) -> str : " Goal: " + 목표 문장들("; "로 연결) + ".". objectives가 비면 "". 종류별 문장 (_GOAL_SENTENCES): door_unlocked -> "unlock door 'x'", item_picked_up -> "pick up 'x'", team_assembled -> "be inside goal_zone 'z' at the same time (everyone named in its 'agents' field, or all agents)", keypad_solved -> "open keypad 'p'", sync_success -> "succeed with the sync pads of group 'g'", delivery_complete -> "deliver items to receptacle 'r' until it reaches its target", all_checkpoints_visited -> "visit every checkpoint", all_targets_filled -> "get a block onto every block_target at the same time", scale_balanced -> "make scale 's' read 'balanced'", all_stages_completed -> "clear every stage in order (the current stage's goal is observation 'stage')". 모르는 종류는 JSON 그대로 (2026-10-13 전에는 문 말고는 전부 JSON이었음)
 
 ---
 
@@ -681,7 +701,7 @@ decide(self, observation: dict) -> dict : generated_code가 없으면 _generate_
 
 CODE_POLICY_SYSTEM_PROMPT : CodePolicy가 코드 생성 시 사용하는 system 프롬프트 (tools.TOOLS 기반 액션 스키마 설명 + 규칙 + 예시 포함)
 
-_OBSERVATION_DOC : CodePolicy/LiveCodePolicy 프롬프트에 들어가는 observation 형식 설명 (self의 필드, visible_objects/known_objects/walls/memory/inbox의 의미, 오브젝트 type별 필드, facing 각도 기준, action에 "memory"를 넣어 메모를 남기는 법, 상호작용 거리). Environment.get_observation이 바뀌면 같이 갱신해야 함
+_OBSERVATION_DOC : CodePolicy/LiveCodePolicy 프롬프트에 들어가는 observation 형식 설명 (self의 필드, visible_objects/known_objects/walls/memory/inbox의 의미, 오브젝트 type별 필드, facing 각도 기준, action에 "memory"를 넣어 메모를 남기는 법, 상호작용 거리). Environment.get_observation이 바뀌면 같이 갱신해야 함. 2026-10-13부터 stage/reward 관찰 필드 설명과 "Object roles" 절을 포함: 모든 물체 종류(door, key, button(+panel), lever(latch/reset/cooldown), pressure_plate(같은 문의 판은 모두 동시에), switch_plate, sync_pad, item(coop/bonus/coin/cargo, 숨은 무게), keypad(sequence/mastermind, operators), display, clue(사람마다 다를 수 있음), receptacle, station, scale, checkpoint, goal_zone, capacity_zone, block/block_target, chest, number_pad, portal, marker, 스스로 움직이는 물체, 메시지 제한 규칙)의 역할을 모든 맵에 공통으로 설명. 특정 맵의 위치/전략은 넣지 않음
 
 MAX_TOOL_ROUNDS : submit_policy_code 제출이 거부됐을 때(컴파일/안전성 검사 실패) 같은 _generate_code_with_submission_gate() 호출 안에서 재시도할 수 있는 최대 라운드 수 (기본 4)
 

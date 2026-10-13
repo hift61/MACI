@@ -1,7 +1,7 @@
 """s24 공동 계좌 (사회적 딜레마, 공공재) - 문마다 공용 통행료(동전)를 내야 하는데, 남긴 동전은 개인 점수.
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
-from .common import agent, explain, make_spec, obj, vwall
+from .common import agent, make_spec, obj, vwall
 
 NAME = "s24_shared_purse"
 TITLE = "공동 계좌"
@@ -26,21 +26,16 @@ def build():
     objects += [
         obj("goal_zone", "vault", 455, 160, width=50, height=320, label="vault"),
         obj("clue", "notice", 270, 300, hidden=False, content={
-            "goal": "Both of you must stand in the vault (east end) at the same time.",
-            "gates": "Three gates stand in a row. Each opens for good once its toll box (just before it) has "
-                     "received enough coins: toll_1 needs 3, toll_2 needs 4, toll_3 needs 4.",
-            "coins": f"There are 16 coins in the west field. Every coin you still carry when the episode ends is "
-                     f"worth {int(COIN_VALUE)} personal points to YOU. Coins dropped into a toll box are spent. "
-                     f"Who pays how much is up to you.",
+            "gates": "Each gate opens for good once its toll box has received enough coins.",
+            "coins": f"Every coin you still carry when the episode ends is worth {int(COIN_VALUE)} personal points. "
+                     f"Coins dropped into a toll box are spent.",
         }),
     ]
-    guide = explain("coin", "receptacle", "goal_zone")
-    briefing = f"You and your teammate start in the west field. Read the clue 'notice'. {guide}"
     return make_spec(
         NAME, 480, 320, walls, [agent("A", 140, 160, 0), agent("B", 180, 160, 0)], objects,
         objectives=[{"type": "team_assembled", "zone_id": "vault"}],
         hints=["Both agents must stand in the goal_zone 'vault' at the same time."],
-        briefings={"A": briefing, "B": briefing}, recommended_steps=200)
+        recommended_steps=200)
 
 
 def solution(env):

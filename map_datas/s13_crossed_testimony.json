@@ -179,13 +179,38 @@
           },
           {
             "kind": "clue",
+            "id": "panel_hint_1",
+            "x": 105,
+            "y": 100,
+            "params": {
+              "hidden": false,
+              "content": {
+                "panel": "panel_1 opens when the 3 digits of its code are pressed in the right order."
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "screen_hint_1",
+            "x": 330,
+            "y": 90,
+            "params": {
+              "hidden": false,
+              "content": {
+                "screen": "After a full entry this screen may show how close it was: 'exact' = right digit in the right place, 'misplaced' = right digit in the wrong place."
+              }
+            }
+          },
+          {
+            "kind": "clue",
             "id": "note_1a",
             "x": 150,
             "y": 210,
             "params": {
               "hidden": false,
               "content": {
-                "code": "5 7 8"
+                "copy of the code": "5 7 8",
+                "note": "A copy of the code. Copies may contain mistakes."
               }
             }
           },
@@ -197,7 +222,8 @@
             "params": {
               "hidden": false,
               "content": {
-                "code": "5 2 6"
+                "copy of the code": "5 2 6",
+                "note": "A copy of the code. Copies may contain mistakes."
               }
             }
           },
@@ -209,7 +235,8 @@
             "params": {
               "hidden": false,
               "content": {
-                "sum": 15
+                "sum of the digits": 15,
+                "note": "The digits of the code add up to this number."
               }
             }
           },
@@ -221,7 +248,8 @@
             "params": {
               "hidden": false,
               "content": {
-                "sum": 15
+                "sum of the digits": 15,
+                "note": "The digits of the code add up to this number."
               }
             }
           }
@@ -364,13 +392,38 @@
           },
           {
             "kind": "clue",
+            "id": "panel_hint_2",
+            "x": 105,
+            "y": 100,
+            "params": {
+              "hidden": false,
+              "content": {
+                "panel": "panel_2 opens when the 4 digits of its code are pressed in the right order."
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "screen_hint_2",
+            "x": 330,
+            "y": 90,
+            "params": {
+              "hidden": false,
+              "content": {
+                "screen": "After a full entry this screen may show how close it was: 'exact' = right digit in the right place, 'misplaced' = right digit in the wrong place."
+              }
+            }
+          },
+          {
+            "kind": "clue",
             "id": "note_2a",
             "x": 150,
             "y": 210,
             "params": {
               "hidden": false,
               "content": {
-                "code": "3 9 7 6"
+                "copy of the code": "3 9 7 6",
+                "note": "A copy of the code. Copies may contain mistakes."
               }
             }
           },
@@ -382,7 +435,8 @@
             "params": {
               "hidden": false,
               "content": {
-                "code": "8 9 1 6"
+                "copy of the code": "8 9 1 6",
+                "note": "A copy of the code. Copies may contain mistakes."
               }
             }
           }
@@ -526,13 +580,38 @@
           },
           {
             "kind": "clue",
+            "id": "panel_hint_3",
+            "x": 105,
+            "y": 100,
+            "params": {
+              "hidden": false,
+              "content": {
+                "panel": "panel_3 opens when the 5 digits of its code are pressed in the right order."
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "screen_hint_3",
+            "x": 330,
+            "y": 90,
+            "params": {
+              "hidden": false,
+              "content": {
+                "screen": "After a full entry this screen may show how close it was: 'exact' = right digit in the right place, 'misplaced' = right digit in the wrong place."
+              }
+            }
+          },
+          {
+            "kind": "clue",
             "id": "note_3a",
             "x": 150,
             "y": 210,
             "params": {
               "hidden": false,
               "content": {
-                "code": "4 0 4 9 2"
+                "copy of the code": "4 0 4 9 2",
+                "note": "A copy of the code. Copies may contain mistakes."
               }
             }
           },
@@ -544,7 +623,8 @@
             "params": {
               "hidden": false,
               "content": {
-                "code": "4 7 3 8 9"
+                "copy of the code": "4 7 3 8 9",
+                "note": "A copy of the code. Copies may contain mistakes."
               }
             }
           },
@@ -556,7 +636,8 @@
             "params": {
               "hidden": false,
               "content": {
-                "sum": 25
+                "sum of the digits": 25,
+                "note": "The digits of the code add up to this number."
               }
             }
           },
@@ -568,7 +649,8 @@
             "params": {
               "hidden": false,
               "content": {
-                "sum": 25
+                "sum of the digits": 25,
+                "note": "The digits of the code add up to this number."
               }
             }
           }
@@ -577,7 +659,7 @@
     ]
   },
   "briefings": {
-    "A": "You are in the left room. Agent B is in the right room behind a wall.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You are in the right room. Agent A is in the left room behind a wall.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

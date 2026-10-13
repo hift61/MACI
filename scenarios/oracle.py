@@ -180,8 +180,10 @@ def unlocked(door_id):
 
 
 # module: 시나리오 모듈, mode: "solution" 또는 "mistake". 반환: (클리어 step 또는 None, env)
-def run(module, mode: str = "solution", max_steps: int = 1000):
-    env, _, objectives = build_environment(module.build())
+def run(module, mode: str = "solution", max_steps: int = 1000, clue_hints: bool = True):
+    from scenarios.common import without_clue_hints
+    spec = module.build()
+    env, _, objectives = build_environment(spec if clue_hints else without_clue_hints(spec))
     plans = getattr(module, mode)(env)
     oracle = Oracle(env.agents)
     for agent_id, plan in plans.items():

@@ -20,6 +20,9 @@ STAGES = {  # 단계 -> (정답, A 방 쪽지, B 방 쪽지, 합계 쪽지 여�
 }
 
 
+COPY_NOTE = "A copy of the code. Copies may contain mistakes."
+
+
 def _digits(values):
     return " ".join(str(v) for v in values)
 
@@ -31,23 +34,27 @@ def _stage(n):
     objects += [obj("keypad_button", f"k{n}_{d}", x, 60, panel=panel, label=str(d)) for d, x in DIGIT_X.items()]
     objects += [
         obj("display", screen, 330, 40, content={}),
-        obj("clue", f"note_{n}a", 150, 210, hidden=False, content={"code": _digits(reading_a)}),
-        obj("clue", f"note_{n}b", 300, 210, hidden=False, content={"code": _digits(reading_b)}),
+        obj("clue", f"panel_hint_{n}", 105, 100, hidden=False, content={
+            "panel": f"{panel} opens when the {len(code)} digits of its code are pressed in the right order."}),
+        obj("clue", f"screen_hint_{n}", 330, 90, hidden=False, content={
+            "screen": "After a full entry this screen may show how close it was: 'exact' = right digit in the right "
+                      "place, 'misplaced' = right digit in the wrong place."}),
+        obj("clue", f"note_{n}a", 150, 210, hidden=False, content={"copy of the code": _digits(reading_a), "note": COPY_NOTE}),
+        obj("clue", f"note_{n}b", 300, 210, hidden=False, content={"copy of the code": _digits(reading_b), "note": COPY_NOTE}),
     ]
     if checksum:
-        objects += [obj("clue", f"sum_{n}a", 40, 230, hidden=False, content={"sum": sum(code)}),
-                    obj("clue", f"sum_{n}b", 410, 230, hidden=False, content={"sum": sum(code)})]
+        total = {"sum of the digits": sum(code), "note": "The digits of the code add up to this number."}
+        objects += [obj("clue", f"sum_{n}a", 40, 230, hidden=False, content=total),
+                    obj("clue", f"sum_{n}b", 410, 230, hidden=False, content=total)]
     return stage(f"{len(code)} digits", f"Open {panel}.", [{"type": "keypad_solved", "panel_id": panel}], objects)
 
 
 def build():
     walls = [[WALL_X, 0, 20, 260]]
-    briefings = {"A": "You are in the left room. Agent B is in the right room behind a wall.",
-                 "B": "You are in the right room. Agent A is in the left room behind a wall."}
     return make_spec(
         NAME, 440, 260, walls, [agent("A", 60, 200, 270), agent("B", 380, 120, 180)], [],
         objectives=STAGED_OBJECTIVES, hints=["Open the panel of every stage."],
-        briefings=briefings, rules={"stages": [_stage(n) for n in (1, 2, 3)]}, recommended_steps=280)
+        rules={"stages": [_stage(n) for n in (1, 2, 3)]}, recommended_steps=280)
 
 
 def _presses(n, digits):

@@ -68,6 +68,18 @@
               "target": 1,
               "radius": 20.0
             }
+          },
+          {
+            "kind": "clue",
+            "id": "hint_1",
+            "x": 85,
+            "y": 195,
+            "params": {
+              "hidden": false,
+              "content": {
+                "hint": "A crate is too heavy for one agent. Each dock accepts its own crate."
+              }
+            }
           }
         ],
         "walls": []
@@ -103,6 +115,18 @@
               ],
               "target": 1,
               "radius": 20.0
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "hint_2",
+            "x": 85,
+            "y": 195,
+            "params": {
+              "hidden": false,
+              "content": {
+                "hint": "A crate is too heavy for one agent. Each dock accepts its own crate."
+              }
             }
           }
         ],
@@ -195,6 +219,18 @@
               "target": 1,
               "radius": 20.0
             }
+          },
+          {
+            "kind": "clue",
+            "id": "hint_3",
+            "x": 85,
+            "y": 195,
+            "params": {
+              "hidden": false,
+              "content": {
+                "hint": "This crate moves on its own along a hidden path. The gate here opens and closes on its own schedule."
+              }
+            }
           }
         ],
         "walls": [
@@ -215,7 +251,7 @@
     ]
   },
   "briefings": {
-    "A": "You start on the left side of a hall.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You start in the top-right corner of a hall.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

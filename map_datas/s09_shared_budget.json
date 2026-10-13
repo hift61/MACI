@@ -118,6 +118,19 @@
         "hidden": true,
         "label": "C8"
       }
+    },
+    {
+      "kind": "clue",
+      "id": "survey_note",
+      "x": 250,
+      "y": 175,
+      "params": {
+        "hidden": false,
+        "content": {
+          "survey": "There are eight checkpoints, C1 to C8. They only show up when you are close to them.",
+          "visits": "It does not matter who visits a checkpoint."
+        }
+      }
     }
   ],
   "objectives": [
@@ -140,7 +153,7 @@
     "show_reward": true
   },
   "briefings": {
-    "A": "Eight hidden checkpoints C1-C8 are somewhere on the map. Every one must be visited by at least one of you; it does not matter who. Only one location is known: C2 is at about (250, 125), right next to where you start. Your observation's reward shows your scores, which go up when a checkpoint is visited. Object guide: checkpoint: visited (and stays visited) as soon as any agent comes within its radius. Hidden checkpoints only show up when you are within about 15 units.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "Eight hidden checkpoints C1-C8 are somewhere on the map. Every one must be visited by at least one of you; it does not matter who. Only one location is known: C2 is at about (250, 125), right next to where you start. Your observation's reward shows your scores, which go up when a checkpoint is visited. Object guide: checkpoint: visited (and stays visited) as soon as any agent comes within its radius. Hidden checkpoints only show up when you are within about 15 units.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

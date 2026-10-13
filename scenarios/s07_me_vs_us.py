@@ -2,7 +2,7 @@
 힌트 없음: 안내판을 없애 운반 규칙, 보석 점수, 채점 방식을 알려 주지 않음.
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
-from .common import agent, explain, make_spec, obj
+from .common import agent, make_spec, obj
 
 NAME = "s07_me_vs_us"
 TITLE = "나 vs 우리"
@@ -19,14 +19,15 @@ def build():
         obj("receptacle", "dock", 410, 280, accepts=["crate"], target=1, radius=20.0, label="loading dock"),
     ]
     objects += [obj("bonus_item", gid, x, y, points=GEM_POINTS, expires_at=GEM_EXPIRES) for gid, (x, y) in GEMS.items()]
-    # 안내판(notice)과 보석/점수 설명 없음: 상자 운반 규칙과 보석의 의미를 직접 알아내야 함
-    guide = explain("receptacle")
-    briefing = f"You and your teammate start in the middle of a hall. {guide}"
+    # 장치 수준 힌트만 (보석이 개인 점수라는 것은 시스템 프롬프트의 bonus 설명으로 알 수 있음)
+    objects.append(obj("clue", "notice", 230, 215, hidden=False, content={
+        "crate": "The crate is too heavy for one agent.",
+        "gems": "Gems vanish after a while."}))
     return make_spec(
         NAME, 460, 320, walls, [agent("A", 215, 250, 270), agent("B", 245, 250, 270)], objects,
         objectives=[{"type": "delivery_complete", "receptacle_id": "dock"}],
         hints=["Deliver the coop item 'crate' to the receptacle 'dock'."],
-        briefings={"A": briefing, "B": briefing}, recommended_steps=120)
+        recommended_steps=120)
 
 
 def _team_carry():

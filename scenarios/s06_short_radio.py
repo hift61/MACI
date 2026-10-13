@@ -2,7 +2,7 @@
   같은 무전 제한 아래 코드 길이만 2 -> 4 -> 6칸으로 늘어남 (3단계가 원래 s06과 같은 난이도)
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
-from .common import STAGE_RULES, STAGED_OBJECTIVES, agent, explain, make_spec, obj, stage
+from .common import STAGED_OBJECTIVES, agent, make_spec, obj, stage
 
 NAME = "s06_short_radio"
 TITLE = "짧은 무전"
@@ -36,7 +36,7 @@ def _stage(n):
     for room in ("A", "B"):
         other = "B" if room == "A" else "A"
         objects.append(obj("keypad", f"panel_{room}{n}", ROOM_X0[room] + 105, 200, code=CODES[n][room],
-                           mode="sequence", label=f"4x4 panel of room {room}"))
+                           mode="sequence", label="4x4 panel"))
         for r in range(1, 5):
             for c in range(1, 5):
                 x, y = cell_pos(room, f"r{r}c{c}")
@@ -45,38 +45,27 @@ def _stage(n):
         length = len(CODES[n][other])
         objects.append(obj("clue", f"clue_{room}{n}", ROOM_X0[room] + (170 if room == "A" else 30), 235,
                            hidden=False, content={
-                               "about": f"This note describes the code of panel_{other}{n} in ROOM {other} "
-                                        f"(not the panel in your room).",
+                               "about": f"This code opens panel_{other}{n}.",
                                "code": f"Press these {length} buttons of panel_{other}{n} in order: "
                                        f"{describe(CODES[n][other])}",
-                               "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top "
-                                        "row, c1 = left column). A wrong press clears the panel; start again.",
-                               "radio": "Radio limits: at most 10 characters per message and at most one message "
-                                        "every 5 steps. Longer or more frequent messages are refused.",
+                               "panel": "Panel buttons are labelled r<row>c<column> (r1 = top row, c1 = left "
+                                        "column).",
+                               "radio": "Messages here are limited to 10 characters and one message every 5 "
+                                        "steps.",
                            }))
     length = len(CODES[n]["A"])
-    return stage(f"{length}-button codes",
-                 f"Solve panel_A{n} (room A) and panel_B{n} (room B), {length} buttons each. Read clue_A{n} / "
-                 f"clue_B{n}: each holds the OTHER room's code.",
+    return stage(f"{length}-button codes", f"Open panel_A{n} and panel_B{n}.",
                  [{"type": "keypad_solved", "panel_id": f"panel_A{n}"},
                   {"type": "keypad_solved", "panel_id": f"panel_B{n}"}], objects)
 
 
 def build():
     walls = [[210, 0, 20, 260]]
-    guide = explain("keypad")
-    briefings = {
-        room: f"You are in room {room} ({'left' if room == 'A' else 'right'}) with your room's panel. Agent "
-              f"{'B' if room == 'A' else 'A'} is in the other room. A wall separates you. Each stage's clue in your "
-              f"room holds the OTHER room's code, while your own code is written in your teammate's room. "
-              f"{STAGE_RULES} {guide}"
-        for room in ("A", "B")
-    }
     return make_spec(
         NAME, 440, 260, walls, [agent("A", 105, 220, 270), agent("B", 335, 220, 270)], [],
         objectives=STAGED_OBJECTIVES,
         hints=["Clear all three stages; each stage ends when both rooms' panels of that stage are solved."],
-        briefings=briefings, rules={**RADIO, "stages": [_stage(n) for n in (1, 2, 3)]}, recommended_steps=300)
+        rules={**RADIO, "stages": [_stage(n) for n in (1, 2, 3)]}, recommended_steps=300)
 
 
 def _presses(room, n, labels):

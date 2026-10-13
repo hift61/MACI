@@ -1,0 +1,138 @@
+{
+  "seed": 0,
+  "width": 460,
+  "height": 300,
+  "walls": [
+    [
+      200,
+      0,
+      60,
+      135
+    ],
+    [
+      200,
+      165,
+      60,
+      135
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 100,
+      "y": 150,
+      "facing": 0
+    },
+    {
+      "id": "B",
+      "x": 360,
+      "y": 150,
+      "facing": 180
+    }
+  ],
+  "objects": [
+    {
+      "kind": "capacity_zone",
+      "id": "bridge",
+      "x": 230,
+      "y": 150,
+      "params": {
+        "width": 60,
+        "height": 30,
+        "capacity": 1,
+        "label": "rope bridge"
+      }
+    },
+    {
+      "kind": "spawner",
+      "id": "west_shed",
+      "x": 0,
+      "y": 0,
+      "params": {
+        "area": [
+          30,
+          30,
+          170,
+          270
+        ],
+        "every": 10,
+        "max_alive": 1,
+        "prefix": "blue",
+        "label": "blue box"
+      }
+    },
+    {
+      "kind": "spawner",
+      "id": "east_shed",
+      "x": 0,
+      "y": 0,
+      "params": {
+        "area": [
+          290,
+          30,
+          430,
+          270
+        ],
+        "every": 10,
+        "max_alive": 1,
+        "prefix": "red",
+        "label": "red box"
+      }
+    },
+    {
+      "kind": "receptacle",
+      "id": "east_dock",
+      "x": 420,
+      "y": 150,
+      "params": {
+        "accepts": [
+          "blue"
+        ],
+        "target": 3,
+        "radius": 20.0,
+        "label": "dock for blue boxes"
+      }
+    },
+    {
+      "kind": "receptacle",
+      "id": "west_dock",
+      "x": 40,
+      "y": 150,
+      "params": {
+        "accepts": [
+          "red"
+        ],
+        "target": 3,
+        "radius": 20.0,
+        "label": "dock for red boxes"
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "delivery_complete",
+      "receptacle_id": "east_dock"
+    },
+    {
+      "type": "delivery_complete",
+      "receptacle_id": "west_dock"
+    }
+  ],
+  "puzzles": [
+    "s22_narrow_bridge"
+  ],
+  "hints": [
+    "Deliver 3 blue boxes to east_dock and 3 red boxes to west_dock."
+  ],
+  "config": {
+    "recommended_steps": 300,
+    "source": "scenarios/s22_narrow_bridge.py",
+    "clue_hints": false
+  },
+  "scenario": "s22_narrow_bridge_nohint",
+  "rules": {},
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

@@ -1,7 +1,7 @@
 """s17 함께 밀기 (공동 계획, 동시 행동) - 둘이 같은 step에 같은 방향으로 밀어야 움직이는 블록 2개를 목표 칸에.
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
-from .common import agent, explain, hwall, make_spec, obj
+from .common import agent, hwall, make_spec, obj
 
 NAME = "s17_push_blocks"
 TITLE = "함께 밀기"
@@ -14,23 +14,19 @@ def build():
     objects = [
         obj("push_block", "block_1", 100, 150, radius=12.0, required=2, push_distance=20.0),
         obj("push_block", "block_2", 200, 250, radius=12.0, required=2, push_distance=20.0),
-        obj("block_target", "target_east", 300, 150, label="east end of the corridor"),
-        obj("block_target", "target_middle", 200, 150, label="middle of the corridor"),
+        obj("block_target", "target_east", 300, 150, label="target"),
+        obj("block_target", "target_middle", 200, 150, label="target"),
         obj("reset_lever", "reset", 40, 40, blocks=["block_1", "block_2"]),
         obj("clue", "notice", 40, 290, hidden=False, content={
-            "goal": "Get a block onto BOTH targets (target_east and target_middle) at the same time.",
-            "pushing": "A block only moves when both of you walk into it in the same step, facing the same "
-                       "direction. It then slides 20 units that way. Blocks cannot be pulled and stop at walls.",
-            "reset": "If a block gets stuck, pull the lever 'reset' (north-west corner) to put both blocks back.",
+            "blocks": "Blocks are too heavy for one agent and cannot be pulled back.",
+            "reset": "The lever 'reset' puts both blocks back where they started.",
         }),
     ]
-    briefing = ("You and your teammate start in the south-west. Read the clue 'notice'. "
-                + explain("push_block", "block_target", "reset_lever"))
     return make_spec(
         NAME, 400, 300, walls, [agent("A", 40, 250, 0), agent("B", 60, 270, 0)], objects,
         objectives=[{"type": "all_targets_filled"}],
         hints=["Place blocks on both block targets (target_east and target_middle) at the same time."],
-        briefings={"A": briefing, "B": briefing}, recommended_steps=200)
+        recommended_steps=200)
 
 
 def _push(heading, times):

@@ -86,10 +86,8 @@
       "params": {
         "hidden": false,
         "content": {
-          "goal": "Ship 3 gears: drop them on the shipping dock in the EAST area.",
-          "recipe": "ore (appears in the WEST area) -> smelter (EAST area) makes an ingot -> press (WEST area) makes a gear -> dock (EAST area).",
-          "counter": "A glass wall separates the two areas. Nobody can cross it, but an item dropped right against the glass can be picked up from the other side (pick_up works within about 15 units).",
-          "machines": "Each machine handles one item at a time and needs 3 steps per item."
+          "recipe": "ore -> the smelter makes an ingot -> the press makes a gear -> the dock takes gears.",
+          "glass": "Nobody can cross the glass, but an item lying right against it can be picked up from the other side."
         }
       }
     }
@@ -122,7 +120,7 @@
     ]
   },
   "briefings": {
-    "A": "You work in the WEST area (ore and the press are here). Agent B works in the EAST area behind the glass (smelter and dock). Read the clue 'work_order' (visible from both sides). Object guide: station: drop an item whose id starts with 'input' within its radius; after 'process_steps' steps a new item whose id starts with 'output' appears at (out_x, out_y). It works on one item at a time ('busy_until' = step when the current work ends, 'queued' = items waiting). receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal).\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You work in the EAST area (the smelter and the dock are here). Agent A works in the WEST area behind the glass (ore and the press). Read the clue 'work_order' (visible from both sides). Object guide: station: drop an item whose id starts with 'input' within its radius; after 'process_steps' steps a new item whose id starts with 'output' appears at (out_x, out_y). It works on one item at a time ('busy_until' = step when the current work ends, 'queued' = items waiting). receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal).\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

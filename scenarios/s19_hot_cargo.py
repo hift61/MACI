@@ -3,7 +3,7 @@
 """
 import math
 
-from .common import agent, explain, make_spec, obj
+from .common import agent, make_spec, obj
 
 NAME = "s19_hot_cargo"
 TITLE = "뜨거운 화물"
@@ -19,21 +19,16 @@ def build():
         obj("cargo", "cargo", *ORIGIN, hold_limit=HOLD_LIMIT, carry_speed=CARRY_SPEED, label="overheating cargo"),
         obj("receptacle", "dock", *DOCK, accepts=["cargo"], target=1, radius=20.0, label="cooling dock"),
         obj("clue", "notice", 80, 300, hidden=False, content={
-            "goal": "Bring the cargo (south-west corner) to the cooling dock (north-east corner) and drop it there.",
-            "heat": f"The cargo overheats in one agent's hands: {HOLD_LIMIT} steps after you pick it up (see its "
-                    f"'drop_by_step'), it jumps back to the south-west corner - even if you dropped it meanwhile, "
-                    f"unless your teammate picked it up. It cools down only when the OTHER agent takes it.",
-            "weight": f"Carrying it slows you to {int(CARRY_SPEED)} units per step; empty-handed you move up to 20.",
-            "distance": "The dock is far: about 470 units in a straight line.",
+            "heat": "The cargo overheats: one agent can keep it only for a limited time, then it jumps back to "
+                    "where it started. It counts again only when a different agent picks it up.",
+            "weight": "Carrying the cargo slows you down.",
         }),
     ]
-    briefing = ("You and your teammate start in the south-west corner. Read the clue 'notice'. "
-                + explain("cargo", "receptacle"))
     return make_spec(
         NAME, 480, 320, walls, [agent("A", 60, 260, 0), agent("B", 80, 290, 0)], objects,
         objectives=[{"type": "delivery_complete", "receptacle_id": "dock"}],
         hints=["Deliver the cargo to the receptacle 'dock' (north-east corner)."],
-        briefings={"A": briefing, "B": briefing}, recommended_steps=200)
+        recommended_steps=200)
 
 
 def _relay_points(legs=8):

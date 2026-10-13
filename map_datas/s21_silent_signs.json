@@ -25,7 +25,7 @@
       "y": 60,
       "params": {
         "hidden": false,
-        "content": "(The ink is too faint for you to read. Only agent A can read this note.)",
+        "content": "(The ink is too faint for you to read.)",
         "variants": {
           "A": "Code for color_panel, in this order: green, blue, red, yellow."
         }
@@ -47,7 +47,7 @@
         "operators": [
           "B"
         ],
-        "label": "4-colour panel (only agent B can press it)"
+        "label": "4-colour panel"
       }
     },
     {
@@ -237,10 +237,10 @@
       "params": {
         "hidden": false,
         "content": {
-          "silence": "Talking is impossible here: every message is refused.",
-          "panel": "color_panel takes 4 colours (out of red, green, blue, yellow, purple; no repeats). Only agent B can press it. A wrong colour clears it; 'attempts' counts wrong tries.",
-          "code": "Only agent A can read the note 'secret_code' (north-west corner).",
-          "yard": "There are five coloured mats in the middle of the yard and loose stones around. Anything you drop stays where you dropped it and everyone can see it."
+          "silence": "Messages are refused here.",
+          "secret_code": "Only agent A can read the faint note secret_code.",
+          "panel": "color_panel opens when 4 colours (out of red, green, blue, yellow, purple; none repeated) are pressed in the right order.",
+          "yard": "Anything dropped stays where it was dropped, and everyone can see it."
         }
       }
     }
@@ -266,7 +266,7 @@
     "message_disabled": true
   },
   "briefings": {
-    "A": "You and your teammate share one open yard. Messages are disabled in this map. Read the clue 'rules'. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries. marker: a floor sign with a 'label'. It does nothing by itself.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You and your teammate share one open yard. Messages are disabled in this map. Read the clue 'rules'. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries. marker: a floor sign with a 'label'. It does nothing by itself.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

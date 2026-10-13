@@ -2,7 +2,7 @@
   1단계 문 2개, 2단계 문 5개 (원래 s02), 3단계 문 7개 + 문마다 판이 위/아래 구석 중 어디 있는지 섞임
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
-from .common import STAGE_RULES, STAGED_OBJECTIVES, agent, explain, make_spec, obj, stage, vwall
+from .common import STAGED_OBJECTIVES, agent, make_spec, obj, stage, vwall
 
 NAME = "s02_leapfrog"
 TITLE = "징검다리 교대"
@@ -35,33 +35,24 @@ def _stage(n):
         ]
     exit_left = xs[-1] + 10
     count = len(xs)
-    corners = ("Each plate sits in a top or bottom corner of its section; which corner differs from door to door."
-               if n == 3 else "Near-side plates are in the top corners, far-side plates in the bottom corners.")
     objects += [
         obj("goal_zone", f"exit_{n}", (exit_left + WIDTH) / 2, 100, width=WIDTH - exit_left, height=HEIGHT,
             label="exit hall"),
         obj("clue", f"manual_{n}", 20, 180, hidden=False, content={
-            "doors": f"Doors d{n}_1..d{n}_{count} stand in a row from left to right. Each door d{n}_i is held open "
-                     f"by EITHER of two switch plates: b{n}_i on the near side (before the door) or f{n}_i on the "
-                     f"far side.",
-            "catch": f"Every plate is far from its door, so nobody can stand on a plate and walk through its door at "
-                     f"the same time. {corners} The exit hall lies beyond d{n}_{count}.",
+            "doors": "Each door here can be held open by either of two plates, one on each side of it.",
+            "catch": "No plate is close enough to its door to stand on it and walk through at the same time.",
         }),
     ]
-    return stage(f"{count} doors", f"Get both agents through all {count} doors into exit_{n} (beyond d{n}_{count}). "
-                 f"Read manual_{n}.", [{"type": "team_assembled", "zone_id": f"exit_{n}"}], objects, walls=walls)
+    return stage(f"{count} doors", f"Both of you stand inside exit_{n} at the same time.",
+                 [{"type": "team_assembled", "zone_id": f"exit_{n}"}], objects, walls=walls)
 
 
 def build():
-    guide = explain("switch_plate", "goal_zone")
-    briefing = (f"You and your teammate start together in the leftmost section. Read the clue 'manual' of each "
-                f"stage. You cannot see your teammate, and from a plate you usually cannot see its door. "
-                f"{STAGE_RULES} {guide}")
     return make_spec(
         NAME, WIDTH, HEIGHT, [], [agent("A", 30, 80, 0), agent("B", 30, 120, 0)], [],
         objectives=STAGED_OBJECTIVES,
         hints=["Clear all three stages; each stage ends when both agents stand in its exit hall goal_zone."],
-        briefings={"A": briefing, "B": briefing}, rules={"stages": [_stage(n) for n in (1, 2, 3)]},
+        rules={"stages": [_stage(n) for n in (1, 2, 3)]},
         recommended_steps=450)
 
 

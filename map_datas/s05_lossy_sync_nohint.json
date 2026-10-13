@@ -1,0 +1,85 @@
+{
+  "seed": 0,
+  "width": 440,
+  "height": 240,
+  "walls": [
+    [
+      210,
+      0,
+      20,
+      240
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 105,
+      "y": 180,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 335,
+      "y": 180,
+      "facing": 270
+    }
+  ],
+  "objects": [
+    {
+      "kind": "sync_pad",
+      "id": "pad_A",
+      "x": 105,
+      "y": 60,
+      "params": {
+        "group": "sync",
+        "tolerance": 0,
+        "return_x": 105,
+        "return_y": 110,
+        "cooldown": 3
+      }
+    },
+    {
+      "kind": "sync_pad",
+      "id": "pad_B",
+      "x": 335,
+      "y": 60,
+      "params": {
+        "group": "sync",
+        "tolerance": 0,
+        "return_x": 335,
+        "return_y": 110,
+        "cooldown": 3
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "sync_success",
+      "group": "sync"
+    }
+  ],
+  "puzzles": [
+    "s05_lossy_sync"
+  ],
+  "hints": [
+    "Enter pad_A and pad_B in exactly the same step."
+  ],
+  "config": {
+    "recommended_steps": 150,
+    "source": "scenarios/s05_lossy_sync.py",
+    "clue_hints": false
+  },
+  "scenario": "s05_lossy_sync_nohint",
+  "rules": {
+    "message_loss": 0.35,
+    "message_delay": [
+      0,
+      2
+    ],
+    "seed": 11
+  },
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

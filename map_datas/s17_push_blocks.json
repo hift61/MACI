@@ -71,7 +71,7 @@
       "x": 300,
       "y": 150,
       "params": {
-        "label": "east end of the corridor"
+        "label": "target"
       }
     },
     {
@@ -80,7 +80,7 @@
       "x": 200,
       "y": 150,
       "params": {
-        "label": "middle of the corridor"
+        "label": "target"
       }
     },
     {
@@ -103,9 +103,8 @@
       "params": {
         "hidden": false,
         "content": {
-          "goal": "Get a block onto BOTH targets (target_east and target_middle) at the same time.",
-          "pushing": "A block only moves when both of you walk into it in the same step, facing the same direction. It then slides 20 units that way. Blocks cannot be pulled and stop at walls.",
-          "reset": "If a block gets stuck, pull the lever 'reset' (north-west corner) to put both blocks back."
+          "blocks": "Blocks are too heavy for one agent and cannot be pulled back.",
+          "reset": "The lever 'reset' puts both blocks back where they started."
         }
       }
     }
@@ -128,7 +127,7 @@
   "scenario": "s17_push_blocks",
   "rules": {},
   "briefings": {
-    "A": "You and your teammate start in the south-west. Read the clue 'notice'. Object guide: block: a heavy solid block (radius 'radius'). It moves 'push_distance' units only when at least 'required' agents walk into it in the SAME step while facing the same direction (within 30 degrees); it moves in that direction. One agent alone cannot move it. Blocks stop at walls and cannot be pulled. block_target: becomes 'filled' while the centre of any block is within its radius. lever with \"reset\": true: pull_lever puts the blocks listed in 'blocks' back where they started.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You and your teammate start in the south-west. Read the clue 'notice'. Object guide: block: a heavy solid block (radius 'radius'). It moves 'push_distance' units only when at least 'required' agents walk into it in the SAME step while facing the same direction (within 30 degrees); it moves in that direction. One agent alone cannot move it. Blocks stop at walls and cannot be pulled. block_target: becomes 'filled' while the centre of any block is within its radius. lever with \"reset\": true: pull_lever puts the blocks listed in 'blocks' back where they started.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

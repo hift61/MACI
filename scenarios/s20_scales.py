@@ -1,7 +1,7 @@
 """s20 저울 맞추기 (공동 추론) - 숨은 무게의 상자를 각자 방 저울로 재고, 합쳐서 금고 저울을 정확히 맞춤.
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
-from .common import agent, explain, hwall, make_spec, obj
+from .common import agent, hwall, make_spec, obj
 
 NAME = "s20_scales"
 TITLE = "저울 맞추기"
@@ -19,28 +19,22 @@ def build():
     walls = [[220, 0, 20, 210]] + hwall(200, 0, 220, gaps=[(110, 40)]) + hwall(200, 240, 460, gaps=[(350, 40)])
     objects = [obj("weighted_item", cid, x, y, weight=w, label="crate") for cid, (x, y, w) in CRATES.items()]
     objects += [
-        obj("scale", "scale_A", 110, 150, radius=15.0, label="room A test scale"),
-        obj("scale", "scale_B", 350, 150, radius=15.0, label="room B test scale"),
+        obj("scale", "scale_A", 110, 150, radius=15.0, label="test scale"),
+        obj("scale", "scale_B", 350, 150, radius=15.0, label="test scale"),
         obj("scale", "vault_scale", 230, 280, radius=20.0, target=TARGET, label="vault scale"),
         obj("clue", "vault_note", 230, 230, hidden=False, content={
-            "goal": f"The vault opens when the crates lying on vault_scale weigh EXACTLY {TARGET} in total.",
-            "vault_scale": "vault_scale never shows numbers - only 'too light', 'too heavy' or 'balanced'.",
-            "test_scales": "Each room has a test scale that shows the exact total weight of the crates lying on it.",
-            "crates": "Room A has crates crate_a1..a4 and room B has crate_b1..b4. Their weights are hidden.",
+            "target weight of vault_scale": TARGET,
+            "vault": "vault_scale balances when the crates lying on it weigh exactly this target in total. It "
+                     "never shows numbers.",
+            "test_scales": "A test scale shows the exact total weight of the crates lying on it.",
+            "crates": "Crate weights are hidden.",
         }),
     ]
-    guide = explain("weighted_item", "scale")
-    briefings = {
-        "A": f"You start in room A (north-west). Agent B is in room B (north-east). Both rooms open south into a "
-             f"shared hall with the vault scale. Read vault_note in the hall. {guide}",
-        "B": f"You start in room B (north-east). Agent A is in room A (north-west). Both rooms open south into a "
-             f"shared hall with the vault scale. Read vault_note in the hall. {guide}",
-    }
     return make_spec(
         NAME, 460, 320, walls, [agent("A", 110, 120, 270), agent("B", 350, 120, 270)], objects,
         objectives=[{"type": "scale_balanced", "scale_id": "vault_scale"}],
         hints=[f"Make vault_scale read 'balanced' (crates on it weigh exactly {TARGET})."],
-        briefings=briefings, recommended_steps=200)
+        recommended_steps=200)
 
 
 def _pick(cid):

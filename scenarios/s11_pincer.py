@@ -4,7 +4,7 @@
 """
 import math
 
-from .common import STAGE_RULES, STAGED_OBJECTIVES, agent, explain, make_spec, obj, stage
+from .common import STAGED_OBJECTIVES, agent, make_spec, obj, stage
 
 NAME = "s11_pincer"
 TITLE = "포위"
@@ -19,26 +19,14 @@ def _dock(n):
     return obj("receptacle", f"dock_{n}", 420, 295, accepts=[f"core_{n}"], target=1, radius=20.0, label="core dock")
 
 
-def _deliver_text(n):
-    return (f"Once picked up, carry it together to dock_{n} (south-east) and drop it there. If you drop it anywhere "
-            f"else it starts running around again." if n > 1 else
-            f"Once picked up, carry it together to dock_{n} (south-east) and drop it there.")
-
-
-def _catch_text():
-    return ("It can only be picked up while BOTH of you are within about 15 units of it at the same moment, and its "
-            "carrier cannot move unless the other agent stays within about 15 units.")
-
-
 def _stage1():
     objects = [
         obj("item", "core_1", *STILL_CORE, category="coop", required_agents=2),
         _dock(1),
         obj("clue", "notice_1", 60, 300, hidden=False, content={
-            "core": "The power core core_1 (a coop item) is resting north-east of the central pillar.",
-            "catch": _catch_text(), "deliver": _deliver_text(1)}),
+            "core": "The power core is too heavy for one agent."}),
     ]
-    return stage("resting core", "Pick up core_1 together and deliver it to dock_1. Read notice_1.",
+    return stage("resting core", "Deliver core_1 to dock_1.",
                  [{"type": "delivery_complete", "receptacle_id": "dock_1"}], objects)
 
 
@@ -49,26 +37,20 @@ def _moving_stage(n):
             extra={"category": "coop", "required_agents": 2, "label": "power core", "_hide_path": True}),
         _dock(n),
         obj("clue", f"notice_{n}", 60, 300, hidden=False, content={
-            "core": f"The power core core_{n} (a coop item) keeps moving on its own around the central pillar. Its "
-                    f"path is not shown; you can only watch where it is while it is in your view.",
-            "catch": f"{_catch_text()} It moves about {speed:g} units per step"
-                     f"{' - faster than you can turn and follow' if speed >= 12 else ''}.",
-            "deliver": _deliver_text(n)}),
+            "core": f"The power core moves on its own along a hidden path, about {speed:g} units per step.",
+            "deliver": f"Dropped anywhere except dock_{n}, the core starts moving on its own again."}),
     ]
     return stage("slow core" if n == 2 else "fast core",
-                 f"Catch core_{n} together and deliver it to dock_{n}. Read notice_{n}.",
+                 f"Deliver core_{n} to dock_{n}.",
                  [{"type": "delivery_complete", "receptacle_id": f"dock_{n}"}], objects)
 
 
 def build():
     walls = [[180, 110, 100, 100]]  # 가운데 기둥 (시야를 가림)
-    guide = explain("receptacle")
-    briefing = f"You and your teammate start on opposite sides of a pillar. {STAGE_RULES} {guide}"
     return make_spec(
         NAME, 460, 320, walls, [agent("A", 60, 160, 0), agent("B", 400, 160, 180)], [],
         objectives=STAGED_OBJECTIVES,
         hints=["Clear all three stages; each stage ends when that stage's core is delivered to its dock."],
-        briefings={"A": briefing, "B": briefing},
         rules={"stages": [_stage1(), _moving_stage(2), _moving_stage(3)]}, recommended_steps=400)
 
 

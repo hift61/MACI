@@ -1,7 +1,7 @@
 """s18 조립 라인 (작업 분배, 흐름) - 원석 -> 주괴 -> 톱니바퀴가 유리벽 창구를 세 번 건너는 생산 라인.
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
-from .common import agent, explain, make_spec, obj
+from .common import agent, make_spec, obj
 
 NAME = "s18_assembly_line"
 TITLE = "조립 라인"
@@ -23,26 +23,16 @@ def build():
         obj("receptacle", "dock", 370, 230, accepts=["gear"], target=GEARS_NEEDED, radius=20.0,
             label="shipping dock"),
         obj("clue", "work_order", 200, 30, hidden=False, content={
-            "goal": f"Ship {GEARS_NEEDED} gears: drop them on the shipping dock in the EAST area.",
-            "recipe": "ore (appears in the WEST area) -> smelter (EAST area) makes an ingot -> press (WEST area) "
-                      "makes a gear -> dock (EAST area).",
-            "counter": "A glass wall separates the two areas. Nobody can cross it, but an item dropped right "
-                       "against the glass can be picked up from the other side (pick_up works within about 15 units).",
-            "machines": "Each machine handles one item at a time and needs 3 steps per item.",
+            "recipe": "ore -> the smelter makes an ingot -> the press makes a gear -> the dock takes gears.",
+            "glass": "Nobody can cross the glass, but an item lying right against it can be picked up from "
+                     "the other side.",
         }),
     ]
-    guide = explain("station", "receptacle")
-    briefings = {
-        "A": f"You work in the WEST area (ore and the press are here). Agent B works in the EAST area behind the "
-             f"glass (smelter and dock). Read the clue 'work_order' (visible from both sides). {guide}",
-        "B": f"You work in the EAST area (the smelter and the dock are here). Agent A works in the WEST area "
-             f"behind the glass (ore and the press). Read the clue 'work_order' (visible from both sides). {guide}",
-    }
     return make_spec(
         NAME, 460, 300, [], [agent("A", 110, 150, 0), agent("B", 340, 150, 180)], objects,
         objectives=[{"type": "delivery_complete", "receptacle_id": "dock"}],
         hints=[f"Deliver {GEARS_NEEDED} gears to the receptacle 'dock' (east area)."],
-        briefings=briefings, rules={"glass_walls": glass}, recommended_steps=300)
+        rules={"glass_walls": glass}, recommended_steps=300)
 
 
 def _a_cycle(oracle):

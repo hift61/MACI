@@ -1,7 +1,7 @@
 """s23 열쇠 상자 연쇄 (물류 계획) - 열쇠와 상자가 두 구역에 엇갈려 있고, 유리 창구로만 주고받음.
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
-from .common import agent, explain, make_spec, obj
+from .common import agent, make_spec, obj
 
 NAME = "s23_key_chests"
 TITLE = "열쇠 상자 연쇄"
@@ -27,25 +27,18 @@ def build():
         obj("receptacle", "altar", 60, 150, accepts=["crown", "scepter"], target=2, radius=20.0, label="altar"),
     ]
     note = {
-        "goal": "Place BOTH the crown and the scepter on the altar (WEST area).",
-        "chests": "Each chest opens with the key whose 'unlocks' field names it. What is inside only appears "
-                  "once the chest is opened. Keys are used up when they open a chest.",
-        "counter": "A solid wall separates the WEST and EAST areas, except for a glass window in the middle. You "
-                   "cannot cross it, but an item dropped right against the window can be picked up from the "
-                   "other side.",
+        "chests": "Each chest opens with the key whose 'unlocks' names it. What is inside only appears once "
+                  "the chest is opened.",
+        "glass": "Nobody can cross the wall or its glass window, but an item lying right against the glass "
+                 "can be picked up from the other side.",
     }
     objects += [obj("clue", "note_west", 30, 290, content=note, hidden=False),
                 obj("clue", "note_east", 430, 290, content=note, hidden=False)]
-    guide = explain("chest", "receptacle")
-    briefings = {
-        "A": f"You are in the WEST area. Agent B is in the EAST area. Read note_west. {guide}",
-        "B": f"You are in the EAST area. Agent A is in the WEST area. Read note_east. {guide}",
-    }
     return make_spec(
         NAME, 460, 300, walls, [agent("A", 120, 150, 0), agent("B", 340, 150, 180)], objects,
         objectives=[{"type": "delivery_complete", "receptacle_id": "altar"}],
         hints=["Deliver the crown and the scepter to the receptacle 'altar'."],
-        briefings=briefings, rules={"glass_walls": glass}, recommended_steps=200)
+        rules={"glass_walls": glass}, recommended_steps=200)
 
 
 def _pick(object_id):

@@ -171,3 +171,26 @@
 | 전략 힌트 | ○ (기본 맵, 두 방 퍼즐) | × | 일부 (s02, s12 등) | × |
 | 행동 결과 피드백 | × | last_action_result, notices | 같음 | 같음 (+ s15 reward) |
 | 감점 규칙 | × | ○ | ○ | ○ |
+
+---
+
+## 6. 2026-10-13 정보 전달 원칙 변경 (`scenarios-maps` 작업 브랜치, 아직 main에 없음)
+위 조사 결과를 바탕으로 모든 맵에 같은 원칙을 적용했습니다. 실제 글은 [scenarios/AGENT_TEXTS.md](scenarios/AGENT_TEXTS.md)에 자동 생성됩니다.
+
+| 층 | 바뀐 내용 |
+|---|---|
+| 시스템 프롬프트 (모든 맵) | `_OBSERVATION_DOC`에 **모든 물체 종류의 역할**(기존 + 시나리오 물체)과 `stage`, `reward` 필드 설명 추가 |
+| 목표 | `objective_description`이 JSON 대신 문장을 만듦 (예: `Goal: open keypad 'code_panel'.`, `Goal: clear every stage in order (...)`) |
+| 맵별 과제 설명 | 시나리오 24개 모두 개인 안내문(위치, 역할, Object guide, STAGE_RULES, 단서 읽기 지시) 삭제. 목표 문장 + 공통 문장만 |
+| 단계 안내 | 목표만 ("Open panel_2.", "Both of you stand inside yard_1 at the same time.") |
+| 단서/화면/이름표 | 두 버전: 힌트 버전은 퍼즐 자료 + 처음 문구 그대로의 구체적인 힌트, `_nohint` 버전은 퍼즐 자료만 (같은 날 여러 번 조정, 아래 참고). 위치("north-east", "room A"), 현재 상태, 전략("tell your teammate", "this note is for the other room") 삭제. 이름표의 위치도 삭제 |
+| s13~s15 (팀원 맵) | 힌트 버전에 패널/화면 뜻풀이, "사본에는 실수가 있을 수 있다", 합계의 의미, 상자 무게, 주기 문, 좌표판 뜻풀이를 추가. 자료는 자료 키(`copy of the code`, `sum of the digits`, `checkpoints`) |
+| s07 | 힌트 쪽지("The crate is too heavy for one agent.", "Gems vanish after a while.") 추가. 보석이 개인 점수라는 것은 시스템 프롬프트의 bonus 설명으로 알 수 있게 됨 (**4절 문제 4 해결**) |
+| 기본 맵 | 시작 지점 근처에 "The gate opens only while every plate linked to it is occupied at the same time." 쪽지 (힌트 버전만) |
+
+4절 문제 중 **2(목표 JSON)**, **3(단계 안내 불일치)**, **4(s07 딜레마)**, **5(설명 조건 섞임)**는 이 변경으로 해결됩니다. **1(무작위/에디터 맵 hints 미전달, 위치 힌트 옵션 무효)**은 그대로입니다. 물체 역할이 시스템 프롬프트로 가서 장치 사용법은 알 수 있게 됐지만, "위치 힌트" 옵션은 여전히 효과가 없습니다.
+
+남은 판단 거리:
+- **같은 날 추가 수정**: 처음에는 단서에 장치 수준 힌트를 넉넉히 넣었으나(예: "판은 다른 방의 문을 연다", 화면 값의 뜻, "사본은 틀릴 수 있다"), 한 줄("Plates open doors.")과 짧은 규칙 문장으로 줄여 보았다가, 최종적으로 **두 버전**으로 나눴습니다. 힌트 버전은 처음의 직접적, 구체적 힌트를 그대로 쓰고, `_nohint` 버전은 퍼즐 자료만 남깁니다. 힌트 버전의 "정보가 틀릴 수 있다"(s12, s13)는 팀원 MAP_GUIDE v1과 다르므로 공유가 필요합니다. 팀원 기준에 가까운 것은 `_nohint` 버전입니다.
+- **두 버전으로 분리**: 같은 맵의 `_nohint` 버전(`map_datas/<이름>_nohint.json`, `benchmark.py --no-clue-hints`)은 규칙 문장을 모두 빼고 퍼즐 자료(코드, 합계, 좌표, 목표 무게, variant 쪽지)만 남깁니다. 퍼즐 자료까지 빼면 s06, s12, s13, s15, s20, s21은 풀 수 없으므로 자료는 남겼습니다. 두 버전의 차이는 AGENT_TEXTS.md 단서 표의 마지막 열에 있습니다.
+- 두 방 순서 퍼즐, blind_code, curriculum(팀원 실험 환경)은 과제 설명의 **규칙 문장을 그대로 두었습니다**. 팀원 테스트가 그 문장을 요구하고, 전략은 이미 들어 있지 않습니다.

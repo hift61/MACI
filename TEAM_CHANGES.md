@@ -169,3 +169,15 @@ python -m scenarios --check
 6. **맵 수정은 `.py` 기준**: JSON을 직접 고치거나 에디터로 저장해도 실행은 됩니다. 하지만 `python -m scenarios`를 다시 돌리면 코드 기준으로 덮어씁니다.
 7. `glass_walls`(유리벽)는 s13, s15, s20에서 씁니다. 얇은 유리 너머의 물건은 주울 수 있습니다(줍기는 시선을 확인하지 않고 거리만 봄). 이 성질을 "창구"로 쓰는 맵이 있으니, 기존 `pick_up`에 시선 검사를 넣으면 s15, s20의 설계를 바꿔야 합니다.
 8. 이전 코드 검수에서 남은 버그 6건은 이번 작업에 포함하지 않았습니다(압력판이 열쇠로 연 문을 다시 잠금, 이미 열린 문에 열쇠 소모 등). 이번 맵들은 그 경로를 쓰지 않습니다.
+
+## 8. (2026-10-13) 에이전트 정보 전달 원칙 변경 - 모든 맵
+에이전트가 받는 정보를 버전별로 조사한 결과([AGENT_INFO_REPORT.md](AGENT_INFO_REPORT.md))를 바탕으로, 모든 맵에 같은 원칙을 적용했습니다.
+- **시스템 프롬프트**: `enviroment/policy.py`의 `_OBSERVATION_DOC`에 모든 물체 종류의 역할과 `stage`, `reward` 필드 설명을 추가했습니다(모든 맵 공통).
+- **목표**: `enviroment/environment_prompt.py`의 `objective_description`이 JSON 대신 문장을 만듭니다.
+- **맵별 과제 설명**: 시나리오 24개 모두 개인 안내문을 지우고 목표 문장 + 공통 문장만 남겼습니다. `make_spec`의 `briefings`는 이제 선택 인자입니다.
+- **단계 안내**: 목표만 씁니다.
+- **단서/화면**: 힌트 버전은 퍼즐 자료와 장치 작동을 직접적, 구체적으로 알려 주는 힌트("The plate in a room holds open the door of the OTHER room, not its own.", 벌칙, 속도, 화면 값의 뜻, "Copies may contain mistakes.")를 둡니다. 현재 상태, 위치/배치, 해결 순서 지시는 쓰지 않습니다. s13~s15에는 힌트를 늘렸고, s07과 기본 맵(benchmark.build_episode)에는 힌트 쪽지를 추가했습니다.
+- **두 버전**: `python -m scenarios`가 맵마다 `<이름>.json`(힌트 있음)과 `<이름>_nohint.json`(규칙 문장 없이 퍼즐 자료만, `scenarios.common.without_clue_hints`)을 내보냅니다. 런처 목록에 둘 다 나옵니다. `benchmark.py --no-clue-hints`는 기본 맵을 포함한 어떤 맵이든 힌트 없는 버전으로 실행하고, 로그에 `clue_hints`를 기록합니다. 힌트 효과를 비교 실험할 수 있습니다.
+- **문서**: [scenarios/MAP_HOWTO.md](scenarios/MAP_HOWTO.md) 6장(원칙), [scenarios/AGENT_TEXTS.md](scenarios/AGENT_TEXTS.md)(실제 글, `python -m scenarios --texts`로 생성), MAP_GUIDE.md에 변경 메모를 추가했습니다.
+- **테스트**: `test_task_descriptions_give_only_the_goal`(과제 설명에 위치어, 물체 설명, 단서 지시가 없는지)와 `test_system_prompt_explains_every_object_type`을 추가했습니다.
+- **그대로 둔 것**: 두 방 순서 퍼즐, blind_code, curriculum의 규칙 문장(팀원 테스트가 요구함). 무작위/에디터 맵의 `hints`와 "위치 힌트" 옵션(여전히 전달되지 않음).

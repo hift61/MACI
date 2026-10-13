@@ -1,0 +1,83 @@
+{
+  "seed": 0,
+  "width": 480,
+  "height": 320,
+  "walls": [
+    [
+      150,
+      0,
+      10,
+      150
+    ],
+    [
+      300,
+      170,
+      10,
+      150
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 60,
+      "y": 260,
+      "facing": 0
+    },
+    {
+      "id": "B",
+      "x": 80,
+      "y": 290,
+      "facing": 0
+    }
+  ],
+  "objects": [
+    {
+      "kind": "cargo",
+      "id": "cargo",
+      "x": 40,
+      "y": 280,
+      "params": {
+        "hold_limit": 10,
+        "carry_speed": 10.0,
+        "label": "overheating cargo"
+      }
+    },
+    {
+      "kind": "receptacle",
+      "id": "dock",
+      "x": 440,
+      "y": 40,
+      "params": {
+        "accepts": [
+          "cargo"
+        ],
+        "target": 1,
+        "radius": 20.0,
+        "label": "cooling dock"
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "delivery_complete",
+      "receptacle_id": "dock"
+    }
+  ],
+  "puzzles": [
+    "s19_hot_cargo"
+  ],
+  "hints": [
+    "Deliver the cargo to the receptacle 'dock' (north-east corner)."
+  ],
+  "config": {
+    "recommended_steps": 200,
+    "source": "scenarios/s19_hot_cargo.py",
+    "clue_hints": false
+  },
+  "scenario": "s19_hot_cargo_nohint",
+  "rules": {},
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

@@ -136,7 +136,7 @@
       "y": 150,
       "params": {
         "radius": 15.0,
-        "label": "room A test scale"
+        "label": "test scale"
       }
     },
     {
@@ -146,7 +146,7 @@
       "y": 150,
       "params": {
         "radius": 15.0,
-        "label": "room B test scale"
+        "label": "test scale"
       }
     },
     {
@@ -168,10 +168,10 @@
       "params": {
         "hidden": false,
         "content": {
-          "goal": "The vault opens when the crates lying on vault_scale weigh EXACTLY 23 in total.",
-          "vault_scale": "vault_scale never shows numbers - only 'too light', 'too heavy' or 'balanced'.",
-          "test_scales": "Each room has a test scale that shows the exact total weight of the crates lying on it.",
-          "crates": "Room A has crates crate_a1..a4 and room B has crate_b1..b4. Their weights are hidden."
+          "target weight of vault_scale": 23,
+          "vault": "vault_scale balances when the crates lying on it weigh exactly this target in total. It never shows numbers.",
+          "test_scales": "A test scale shows the exact total weight of the crates lying on it.",
+          "crates": "Crate weights are hidden."
         }
       }
     }
@@ -195,7 +195,7 @@
   "scenario": "s20_scales",
   "rules": {},
   "briefings": {
-    "A": "You start in room A (north-west). Agent B is in room B (north-east). Both rooms open south into a shared hall with the vault scale. Read vault_note in the hall. Object guide: Items here have hidden weights; you can only learn them by putting them on a scale. scale: 'reading' is the total weight of items lying within its radius. A scale with a goal shows only 'empty', 'too light', 'too heavy' or 'balanced'.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You start in room B (north-east). Agent A is in room A (north-west). Both rooms open south into a shared hall with the vault scale. Read vault_note in the hall. Object guide: Items here have hidden weights; you can only learn them by putting them on a scale. scale: 'reading' is the total weight of items lying within its radius. A scale with a goal shows only 'empty', 'too light', 'too heavy' or 'balanced'.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

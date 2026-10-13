@@ -463,7 +463,56 @@ _OBSERVATION_DOC = """{"self": {"x", "y", "facing", "heading": {"x", "y"}, "last
   unknown action, or unknown receiver_id; it was replaced by noop) or "no_effect" (an interaction that
   changed nothing), with a reason. Invalid actions and no-effect interactions reduce your score.
 - notices: your most recent notices (oldest first), e.g. {"step", "type": "sequence_reset", "reason",
-  "caused_by_you"} when an input attempt is reset."""
+  "caused_by_you"} when an input attempt is reset.
+- stage (only in maps with stages): {"stage", "total", "title", "briefing", "completed"}. briefing is the goal of the
+  current stage. Clearing a stage removes its objects, puts every agent back at its start and loads the next stage;
+  memory and conversation carry over.
+- reward (only when enabled): your cumulative individual_score, team_score and total_score.
+Object roles (the same for every map; a map may use only some of them):
+- door: blocks movement while "locked" is true. Some doors are opened by devices listed below, some open and close
+  on their own schedule, and some follow hidden lever wiring.
+- key: pick it up, then use_key within about 15 units of the door or chest named in "unlocks"; the key is used up.
+- button: press_button toggles the door in "linked_door_id". A button with "panel" instead types its "label" into
+  that keypad.
+- lever: pull_lever flips "on" and drives the doors in "linked_door_ids" (doors may also be wired without being
+  listed). "latch": true opens its doors for good; "reset": true puts the blocks in "blocks" back where they
+  started; "cooldown": it cannot be pulled again before "ready_at_step".
+- pressure_plate: its door stays unlocked only while the plate is occupied; when several pressure plates share a
+  door, all of them must be occupied at the same time.
+- switch_plate: while any agent stands on it, the doors in "opens" are unlocked; one occupied plate is enough.
+- sync_pad: all pads of one "group" must be entered within a short time of each other; a lone entry pushes that
+  agent back and the pads ignore entries for a few steps ("armed": false).
+- item: category "coop" can only be picked up while "required_agents" agents are within about 15 units, and its
+  carrier cannot move unless helpers stay within about 15 units. "bonus": picking it up gives you personal points;
+  it vanishes at "expires_at". "coin": every coin you still carry when the episode ends is worth "value" personal
+  points. "cargo": its carrier moves at most "carry_speed" per step; one agent may keep it only until
+  "drop_by_step", then it jumps back to its start; it counts again only when a different agent picks it up.
+  Some items have hidden weights.
+- keypad: a code panel ("length", "entered", "attempts", "solved", "operators" = who may press, null = anyone).
+  mode "sequence": each press is checked at once and a wrong press clears the entry. mode "mastermind": the code
+  is checked after "length" presses and the result appears on the display belonging to the panel.
+- display: shows the "content" produced by the machine it belongs to.
+- clue: read its "content". What one agent reads may differ from what another reads.
+- receptacle: drop an item whose id starts with one of "accepts" within "radius" to deliver it ("delivered",
+  "target"); reaching the target may open the doors in "opens".
+- station: drop an item whose id starts with "input" within "radius"; after "process_steps" steps an item whose
+  id starts with "output" appears at (out_x, out_y). It handles one item at a time ("busy_until", "queued").
+- scale: "reading" is the total weight of the items lying within "radius"; a scale with a goal only shows
+  "empty", "too light", "too heavy" or "balanced".
+- checkpoint: becomes "visited" when any agent comes within "radius"; hidden ones only appear within about 15 units.
+- goal_zone: a rectangle centred on (x, y) with "width"/"height"; "agents" lists who must be inside (null = all).
+- capacity_zone: a rectangle that holds at most "capacity" agents; if more are inside at the end of a step, all of
+  them are put back where they were before entering.
+- block: a solid block. It moves "push_distance" only when at least "required" agents walk into it in the same
+  step facing the same direction (within 30 degrees); it cannot be pulled. block_target: "filled" while a block's
+  centre is on it.
+- chest: a locked box; using its key next to it opens it and its contents appear beside it.
+- number_pad: entering its "touch_radius" inputs its "number" automatically, even when only passing through.
+- portal: entering it moves you to (dest_x, dest_y).
+- marker: a floor sign with a "label"; it does nothing.
+- Some objects move on their own, and their paths may be hidden.
+- Map rules may limit messages (lost, delayed, length or frequency limits, or disabled); a refused message is
+  reported in your inbox by "system"."""
 
 
 # 샌드박스(_policy_harness.py)에서 실제로 허용하는 것을 그대로 안내 - 숨은 규칙에 걸려 실패하지 않도록

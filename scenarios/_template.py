@@ -4,7 +4,7 @@
 래치 레버로 문을 영구히 연 뒤 둘이 오른쪽 구역에 모이면 클리어.
 SCENARIO_NAMES에 등록하지 않은 파일이라 맵으로 내보내지지 않음 (테스트에서만 검증).
 """
-from .common import agent, explain, make_spec, obj, vwall
+from .common import agent, make_spec, obj, vwall
 
 # ---- 1. 이름표 ------------------------------------------------------------
 NAME = "s00_template"   # 파일 이름과 같게 (맵 파일: map_datas/<NAME>.json)
@@ -23,19 +23,15 @@ def build():
         obj("door", "gate", 155, 100, locked=True, radius=12.0),
         obj("switch_plate", "plate", 30, 30, opens=["gate"]),
         obj("latch_lever", "latch", 250, 170, doors=["gate"]),
-        obj("goal_zone", "exit", 225, 100, width=150, height=200, label="east room"),
-        # 단서: 에이전트가 읽는 내용은 영어. dict로 주제별로 나누면 읽기 쉬움.
+        obj("goal_zone", "exit", 225, 100, width=150, height=200, label="exit"),
+        # 단서: 에이전트가 읽는 글은 영어. 퍼즐 자료는 CLUE_DATA_KEYS 키로, 구체적인 힌트는 다른 키로 쓰고, 현재 상태,
+        # 위치/배치, 해결 전략은 쓰지 않음 (MAP_HOWTO.md 6장). 물체 역할 설명은 시스템 프롬프트에 이미 있음.
         # hidden=False면 멀리서도(시야 안) 보이고, True면 15 이내로 가야 보임
         obj("clue", "note", 60, 180, hidden=False, content={
-            "plate": "Standing on 'plate' holds 'gate' open. Nobody can stand on the plate and walk "
-                     "through the gate at the same time.",
-            "latch": "The lever 'latch' in the east room opens the gate permanently.",
+            "plate": "No plate is close enough to its door to stand on it and walk through at the same time.",
+            "latch": "A latch lever can open a door for good.",
         }),
     ]
-
-    # 과제 설명 끝에 붙는 개인별 안내문 (영어). 상황 + 읽을 단서 + 새 물체 설명(explain)
-    guide = explain("switch_plate", "latch_lever", "goal_zone")
-    briefing = f"You and your teammate start in the west room. Read the clue 'note'. {guide}"
 
     return make_spec(
         NAME, 300, 200, walls,
@@ -43,9 +39,8 @@ def build():
         objects,
         # 클리어 조건: EventLog 이벤트와 키/값이 모두 같으면 충족 (MAP_GUIDE.md 4장 표)
         objectives=[{"type": "team_assembled", "zone_id": "exit"}],
-        # 목표 문장 (목표 공개 시 "Goal: ..."로 보여 줌, 영어)
-        hints=["Both agents must stand inside the goal_zone 'exit' (east room) at the same time."],
-        briefings={"A": briefing, "B": briefing},
+        # 사람이 읽는 목표 요약 (기록용). 에이전트에게는 objectives가 목표 문장으로 바뀌어 전달됨
+        hints=["Both agents must stand inside the goal_zone 'exit' at the same time."],
         rules={},                 # 메시지 손실/길이 제한 등이 필요하면 (MAP_GUIDE.md 5장)
         recommended_steps=60)     # LLM 실행 권장 step (오라클 클리어 step의 3~5배 정도)
 

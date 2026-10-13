@@ -189,10 +189,8 @@
       "y": 70,
       "params": {
         "content": {
-          "wiring": "Each of the six levers (L1-L3 in room A, L4-L6 in room B) is secretly wired to some of the four gates G1-G4. Pulling a lever flips every gate it is wired to (open <-> closed).",
-          "rule": "A gate is open exactly when an ODD number of the levers wired to it are ON. All levers start OFF.",
-          "view": "G1 and G2 are in room A, G3 and G4 in room B. You can only watch the gates in your own room.",
-          "cooldown": "After a pull, a lever needs 3 steps before it can be pulled again (field ready_at_step)."
+          "wiring": "The levers L1-L6 are secretly wired to the gates G1-G4. Pulling a lever flips every gate it is wired to (open <-> closed).",
+          "rule": "A gate is open exactly when an odd number of the levers wired to it are on."
         },
         "hidden": false
       }
@@ -204,10 +202,8 @@
       "y": 70,
       "params": {
         "content": {
-          "wiring": "Each of the six levers (L1-L3 in room A, L4-L6 in room B) is secretly wired to some of the four gates G1-G4. Pulling a lever flips every gate it is wired to (open <-> closed).",
-          "rule": "A gate is open exactly when an ODD number of the levers wired to it are ON. All levers start OFF.",
-          "view": "G1 and G2 are in room A, G3 and G4 in room B. You can only watch the gates in your own room.",
-          "cooldown": "After a pull, a lever needs 3 steps before it can be pulled again (field ready_at_step)."
+          "wiring": "The levers L1-L6 are secretly wired to the gates G1-G4. Pulling a lever flips every gate it is wired to (open <-> closed).",
+          "rule": "A gate is open exactly when an odd number of the levers wired to it are on."
         },
         "hidden": false
       }
@@ -234,7 +230,7 @@
     "s03_split_experiment"
   ],
   "hints": [
-    "Both agents must stand in the goal_zone 'exit' (below both rooms) at the same time."
+    "Both agents must stand in the goal_zone 'exit' at the same time."
   ],
   "config": {
     "recommended_steps": 150,
@@ -243,7 +239,7 @@
   "scenario": "s03_split_experiment",
   "rules": {},
   "briefings": {
-    "A": "You are in room A (left) with levers L1-L3 and gates G1, G2 (G2 lies beyond G1). Agent B is in room B (right) with L4-L6 and gates G3, G4. A wall separates the rooms. Read wiring_note_A. Object guide: lever with \"cooldown\": after a pull it cannot be pulled again until step 'ready_at_step'. goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You are in room B (right) with levers L4-L6 and gates G3, G4 (G4 lies beyond G3). Agent A is in room A (left) with L1-L3 and gates G1, G2. A wall separates the rooms. Read wiring_note_B. Object guide: lever with \"cooldown\": after a pull it cannot be pulled again until step 'ready_at_step'. goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

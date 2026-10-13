@@ -70,6 +70,47 @@ class ScenarioSolvableTests(unittest.TestCase):
                 self.assertIsNone(env.failure)
 
 
+class ClueHintVersionTests(unittest.TestCase):
+    """맵마다 두 버전: 단서에 장치 규칙 힌트가 있는 기본 버전과, 퍼즐 자료만 남긴 _nohint 버전"""
+
+    @staticmethod
+    def clues(spec):
+        objects = spec.objects + [o for st in (spec.rules or {}).get("stages", []) for o in st["objects"]]
+        return [o for o in objects if o["kind"] in ("clue", "variant_clue")]
+
+    def test_nohint_version_keeps_only_puzzle_data_and_still_clears(self):
+        from scenarios.common import CLUE_DATA_KEYS, without_clue_hints
+        for name in SCENARIO_NAMES:
+            with self.subTest(scenario=name):
+                spec = load(name).build()
+                bare = without_clue_hints(spec)
+                self.assertEqual(bare.scenario, name + "_nohint")
+                self.assertFalse(bare.config["clue_hints"])
+                for o in self.clues(bare):
+                    content = o["params"]["content"]
+                    if isinstance(content, dict):
+                        self.assertTrue(content and set(content) <= CLUE_DATA_KEYS, (o["id"], content))
+                # 단서 말고는 같은 맵
+                strip = lambda objs: [o for o in objs if o["kind"] not in ("clue", "variant_clue")]
+                self.assertEqual(strip(bare.objects), strip(spec.objects))
+                self.assertEqual(bare.objectives, spec.objectives)
+                self.assertIsNotNone(run(load(name), "solution", clue_hints=False)[0])
+
+    def test_hint_version_has_rule_sentences_somewhere(self):
+        from scenarios.common import CLUE_DATA_KEYS
+        for name in SCENARIO_NAMES:
+            with self.subTest(scenario=name):
+                keys = {k for o in self.clues(load(name).build())
+                        if isinstance(o["params"]["content"], dict) for k in o["params"]["content"]}
+                self.assertTrue(keys - CLUE_DATA_KEYS, f"{name} has no rule hint in its clues")
+
+    def test_default_map_can_drop_its_hint_clues(self):
+        from benchmark import build_episode
+        kinds = lambda env: [o.get("type") for o in env.objects.values()]
+        self.assertEqual(kinds(build_episode()[0]).count("clue"), 2)
+        self.assertEqual(kinds(build_episode(clue_hints=False)[0]).count("clue"), 0)
+
+
 class ScenarioFileTests(unittest.TestCase):
     def test_json_round_trip_builds_the_same_world(self):
         for name in SCENARIO_NAMES:
@@ -96,10 +137,31 @@ class ScenarioFileTests(unittest.TestCase):
                                               agents=[{"id": "A", "x": 10, "y": 10, "facing": 0}]))
         self.assertIs(type(env), Environment)
 
-    def test_briefings_reach_the_task_description(self):
-        _, tasks, _ = build_environment(load("s01_deadlock").build())
-        self.assertIn("room A", tasks["A"])
-        self.assertIn("Nothing in this map can make the task permanently impossible", tasks["B"])
+    def test_task_descriptions_give_only_the_goal(self):
+        # 정보 전달 원칙: 맵에서는 목표 문장만 (물체 설명, 위치, 역할, 단서 읽기 지시 없음)
+        import re
+        for name in SCENARIO_NAMES:
+            with self.subTest(scenario=name):
+                env, tasks, _ = build_environment(load(name).build())
+                for text in tasks.values():
+                    self.assertIn("Goal: ", text)
+                    self.assertNotIn('{"type"', text)  # 목표가 JSON이 아닌 문장
+                    self.assertIn("Nothing in this map can make the task permanently impossible", text)
+                    for banned in ("Object guide", "Read the clue", "Read manual", "room A (", "You start",
+                                   "several stages"):
+                        self.assertNotIn(banned, text)
+                    self.assertIsNone(re.search(r"\b(north|south|east|west)\b", text, re.I))
+                for stage in env.stages:
+                    self.assertNotIn("Read ", stage["briefing"])
+
+    def test_system_prompt_explains_every_object_type(self):
+        from policy import CODE_POLICY_SYSTEM_PROMPT
+        for kind in ("door", "key", "button", "lever", "pressure_plate", "switch_plate", "sync_pad", "item",
+                     "keypad", "display", "clue", "receptacle", "station", "scale", "checkpoint", "goal_zone",
+                     "capacity_zone", "block", "block_target", "chest", "number_pad", "portal", "marker"):
+            self.assertIn(f"{kind}:", CODE_POLICY_SYSTEM_PROMPT)
+        for field in ('"coin"', '"cargo"', '"bonus"', '"latch"', '"reset"', '"cooldown"', '"operators"'):
+            self.assertIn(field, CODE_POLICY_SYSTEM_PROMPT)
 
 
 class ScenarioSecretTests(unittest.TestCase):

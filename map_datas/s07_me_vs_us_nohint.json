@@ -1,0 +1,112 @@
+{
+  "seed": 0,
+  "width": 460,
+  "height": 320,
+  "walls": [
+    [
+      150,
+      70,
+      10,
+      90
+    ],
+    [
+      300,
+      70,
+      10,
+      90
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 215,
+      "y": 250,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 245,
+      "y": 250,
+      "facing": 270
+    }
+  ],
+  "objects": [
+    {
+      "kind": "item",
+      "id": "crate",
+      "x": 230,
+      "y": 150,
+      "params": {
+        "category": "coop",
+        "required_agents": 2
+      }
+    },
+    {
+      "kind": "receptacle",
+      "id": "dock",
+      "x": 410,
+      "y": 280,
+      "params": {
+        "accepts": [
+          "crate"
+        ],
+        "target": 1,
+        "radius": 20.0,
+        "label": "loading dock"
+      }
+    },
+    {
+      "kind": "bonus_item",
+      "id": "gem_1",
+      "x": 30,
+      "y": 30,
+      "params": {
+        "points": 25.0,
+        "expires_at": 40
+      }
+    },
+    {
+      "kind": "bonus_item",
+      "id": "gem_2",
+      "x": 430,
+      "y": 30,
+      "params": {
+        "points": 25.0,
+        "expires_at": 40
+      }
+    },
+    {
+      "kind": "bonus_item",
+      "id": "gem_3",
+      "x": 30,
+      "y": 290,
+      "params": {
+        "points": 25.0,
+        "expires_at": 40
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "delivery_complete",
+      "receptacle_id": "dock"
+    }
+  ],
+  "puzzles": [
+    "s07_me_vs_us"
+  ],
+  "hints": [
+    "Deliver the coop item 'crate' to the receptacle 'dock'."
+  ],
+  "config": {
+    "recommended_steps": 120,
+    "source": "scenarios/s07_me_vs_us.py",
+    "clue_hints": false
+  },
+  "scenario": "s07_me_vs_us_nohint",
+  "rules": {},
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

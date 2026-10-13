@@ -1,0 +1,584 @@
+{
+  "seed": 0,
+  "width": 440,
+  "height": 260,
+  "walls": [
+    [
+      210,
+      0,
+      20,
+      260
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 60,
+      "y": 200,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 380,
+      "y": 120,
+      "facing": 180
+    }
+  ],
+  "objects": [],
+  "objectives": [
+    {
+      "type": "all_stages_completed"
+    }
+  ],
+  "puzzles": [
+    "s13_crossed_testimony"
+  ],
+  "hints": [
+    "Open the panel of every stage."
+  ],
+  "config": {
+    "recommended_steps": 280,
+    "source": "scenarios/s13_crossed_testimony.py",
+    "clue_hints": false
+  },
+  "scenario": "s13_crossed_testimony_nohint",
+  "rules": {
+    "stages": [
+      {
+        "title": "3 digits",
+        "briefing": "Open panel_1.",
+        "objectives": [
+          {
+            "type": "keypad_solved",
+            "panel_id": "panel_1"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "keypad",
+            "id": "panel_1",
+            "x": 105,
+            "y": 25,
+            "params": {
+              "code": [
+                "5",
+                "2",
+                "8"
+              ],
+              "mode": "sequence",
+              "display_id": "screen_1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k1_0",
+            "x": 22,
+            "y": 60,
+            "params": {
+              "panel": "panel_1",
+              "label": "0"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k1_1",
+            "x": 40,
+            "y": 60,
+            "params": {
+              "panel": "panel_1",
+              "label": "1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k1_2",
+            "x": 58,
+            "y": 60,
+            "params": {
+              "panel": "panel_1",
+              "label": "2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k1_3",
+            "x": 76,
+            "y": 60,
+            "params": {
+              "panel": "panel_1",
+              "label": "3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k1_4",
+            "x": 94,
+            "y": 60,
+            "params": {
+              "panel": "panel_1",
+              "label": "4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k1_5",
+            "x": 112,
+            "y": 60,
+            "params": {
+              "panel": "panel_1",
+              "label": "5"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k1_6",
+            "x": 130,
+            "y": 60,
+            "params": {
+              "panel": "panel_1",
+              "label": "6"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k1_7",
+            "x": 148,
+            "y": 60,
+            "params": {
+              "panel": "panel_1",
+              "label": "7"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k1_8",
+            "x": 166,
+            "y": 60,
+            "params": {
+              "panel": "panel_1",
+              "label": "8"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k1_9",
+            "x": 184,
+            "y": 60,
+            "params": {
+              "panel": "panel_1",
+              "label": "9"
+            }
+          },
+          {
+            "kind": "display",
+            "id": "screen_1",
+            "x": 330,
+            "y": 40,
+            "params": {
+              "content": {}
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "note_1a",
+            "x": 150,
+            "y": 210,
+            "params": {
+              "hidden": false,
+              "content": {
+                "copy of the code": "5 7 8"
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "note_1b",
+            "x": 300,
+            "y": 210,
+            "params": {
+              "hidden": false,
+              "content": {
+                "copy of the code": "5 2 6"
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "sum_1a",
+            "x": 40,
+            "y": 230,
+            "params": {
+              "hidden": false,
+              "content": {
+                "sum of the digits": 15
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "sum_1b",
+            "x": 410,
+            "y": 230,
+            "params": {
+              "hidden": false,
+              "content": {
+                "sum of the digits": 15
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "4 digits",
+        "briefing": "Open panel_2.",
+        "objectives": [
+          {
+            "type": "keypad_solved",
+            "panel_id": "panel_2"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "keypad",
+            "id": "panel_2",
+            "x": 105,
+            "y": 25,
+            "params": {
+              "code": [
+                "3",
+                "9",
+                "1",
+                "6"
+              ],
+              "mode": "mastermind",
+              "display_id": "screen_2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k2_0",
+            "x": 22,
+            "y": 60,
+            "params": {
+              "panel": "panel_2",
+              "label": "0"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k2_1",
+            "x": 40,
+            "y": 60,
+            "params": {
+              "panel": "panel_2",
+              "label": "1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k2_2",
+            "x": 58,
+            "y": 60,
+            "params": {
+              "panel": "panel_2",
+              "label": "2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k2_3",
+            "x": 76,
+            "y": 60,
+            "params": {
+              "panel": "panel_2",
+              "label": "3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k2_4",
+            "x": 94,
+            "y": 60,
+            "params": {
+              "panel": "panel_2",
+              "label": "4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k2_5",
+            "x": 112,
+            "y": 60,
+            "params": {
+              "panel": "panel_2",
+              "label": "5"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k2_6",
+            "x": 130,
+            "y": 60,
+            "params": {
+              "panel": "panel_2",
+              "label": "6"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k2_7",
+            "x": 148,
+            "y": 60,
+            "params": {
+              "panel": "panel_2",
+              "label": "7"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k2_8",
+            "x": 166,
+            "y": 60,
+            "params": {
+              "panel": "panel_2",
+              "label": "8"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k2_9",
+            "x": 184,
+            "y": 60,
+            "params": {
+              "panel": "panel_2",
+              "label": "9"
+            }
+          },
+          {
+            "kind": "display",
+            "id": "screen_2",
+            "x": 330,
+            "y": 40,
+            "params": {
+              "content": {}
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "note_2a",
+            "x": 150,
+            "y": 210,
+            "params": {
+              "hidden": false,
+              "content": {
+                "copy of the code": "3 9 7 6"
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "note_2b",
+            "x": 300,
+            "y": 210,
+            "params": {
+              "hidden": false,
+              "content": {
+                "copy of the code": "8 9 1 6"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "5 digits",
+        "briefing": "Open panel_3.",
+        "objectives": [
+          {
+            "type": "keypad_solved",
+            "panel_id": "panel_3"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "keypad",
+            "id": "panel_3",
+            "x": 105,
+            "y": 25,
+            "params": {
+              "code": [
+                "4",
+                "7",
+                "3",
+                "9",
+                "2"
+              ],
+              "mode": "mastermind",
+              "display_id": "screen_3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k3_0",
+            "x": 22,
+            "y": 60,
+            "params": {
+              "panel": "panel_3",
+              "label": "0"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k3_1",
+            "x": 40,
+            "y": 60,
+            "params": {
+              "panel": "panel_3",
+              "label": "1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k3_2",
+            "x": 58,
+            "y": 60,
+            "params": {
+              "panel": "panel_3",
+              "label": "2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k3_3",
+            "x": 76,
+            "y": 60,
+            "params": {
+              "panel": "panel_3",
+              "label": "3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k3_4",
+            "x": 94,
+            "y": 60,
+            "params": {
+              "panel": "panel_3",
+              "label": "4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k3_5",
+            "x": 112,
+            "y": 60,
+            "params": {
+              "panel": "panel_3",
+              "label": "5"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k3_6",
+            "x": 130,
+            "y": 60,
+            "params": {
+              "panel": "panel_3",
+              "label": "6"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k3_7",
+            "x": 148,
+            "y": 60,
+            "params": {
+              "panel": "panel_3",
+              "label": "7"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k3_8",
+            "x": 166,
+            "y": 60,
+            "params": {
+              "panel": "panel_3",
+              "label": "8"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "k3_9",
+            "x": 184,
+            "y": 60,
+            "params": {
+              "panel": "panel_3",
+              "label": "9"
+            }
+          },
+          {
+            "kind": "display",
+            "id": "screen_3",
+            "x": 330,
+            "y": 40,
+            "params": {
+              "content": {}
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "note_3a",
+            "x": 150,
+            "y": 210,
+            "params": {
+              "hidden": false,
+              "content": {
+                "copy of the code": "4 0 4 9 2"
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "note_3b",
+            "x": 300,
+            "y": 210,
+            "params": {
+              "hidden": false,
+              "content": {
+                "copy of the code": "4 7 3 8 9"
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "sum_3a",
+            "x": 40,
+            "y": 230,
+            "params": {
+              "hidden": false,
+              "content": {
+                "sum of the digits": 25
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "sum_3b",
+            "x": 410,
+            "y": 230,
+            "params": {
+              "hidden": false,
+              "content": {
+                "sum of the digits": 25
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

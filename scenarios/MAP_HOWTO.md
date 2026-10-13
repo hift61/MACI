@@ -1,11 +1,14 @@
-# 시나리오 맵 만들기 가이드
+# 시나리오 맵 만들기: 작성 절차와 레퍼런스
+
+> 이 문서는 **파일을 어떻게 쓰는지**(절차, 물체/목표/규칙 레퍼런스, 검증, 자주 하는 실수)를 다룹니다.
+> **어떤 맵을 만들어야 하는지**(합격 기준, 난이도 설계)는 팀원 문서 [MAP_GUIDE.md](MAP_GUIDE.md)를 따릅니다.
 
 새 협력 맵을 `scenarios/`에 추가하는 방법입니다. 이 순서대로 하면 만든 맵이 다음 세 곳에 바로 들어갑니다.
 - 런처 맵 목록
 - `benchmark.py --map-file`
 - 테스트
 
-기존 21개 맵이 모두 이 방식으로 만들어졌으니, 막히면 비슷한 맵의 파일을 열어 보세요(아래 "참고할 맵" 표).
+기존 24개 맵이 모두 이 방식으로 만들어졌으니, 막히면 비슷한 맵의 파일을 열어 보세요(아래 "참고할 맵" 표).
 
 ---
 
@@ -26,7 +29,7 @@
 ### 고치는 파일 (경우에 따라)
 | 이런 경우 | 고칠 파일 |
 |---|---|
-| 새 물체나 새 규칙이 필요함 | `scenarios/engine.py`(구현), `scenarios/common.py`(`OBJECT_HELP` 설명문), `INTERFACE.md`("scenarios/" 절), `SCENARIOS.md` 0장 표, `tests/test_scenarios.py`(동작 테스트) - 7장 |
+| 새 물체나 새 규칙이 필요함 | `scenarios/engine.py`(구현), `enviroment/policy.py`(`_OBSERVATION_DOC`의 Object roles 한 줄), `INTERFACE.md`("scenarios/" 절), `SCENARIOS.md` 0장 표, `tests/test_scenarios.py`(동작 테스트) - 7장 |
 | 새 이벤트에 점수를 주고 싶음 | `enviroment/scoring.py`의 `ScoreConfig`와 `_individual_points`, `INTERFACE.md` scoring 절 |
 | 실수 스크립트에서 반드시 나와야 하는 이벤트를 테스트로 고정하고 싶음 | `tests/test_scenarios.py`의 `test_mistakes_really_happen_and_cost_time`의 `expected` |
 | 팀 공유 | `TEAM_CHANGES.md` 4절 표 |
@@ -34,7 +37,7 @@
 ### 읽기만 하는 파일 (참고용)
 | 파일 | 왜 보나 |
 |---|---|
-| `scenarios/common.py` | `obj`, `agent`, `hwall`, `vwall`, `make_spec`, `explain` 사용법 |
+| `scenarios/common.py` | `obj`, `agent`, `hwall`, `vwall`, `stage`, `make_spec` 사용법과 정보 전달 원칙 주석 |
 | `scenarios/engine.py` 맨 위 설명 | 시나리오 전용 물체와 규칙 목록 |
 | `scenarios/oracle.py` 맨 위 설명 | 검증 plan 항목 형식 |
 | `enviroment/enviroment.py`의 `add_*` | 기존 물체(문, 열쇠, 버튼, 레버, 압력판, 아이템, 포탈, 단서, mover) 인자 |
@@ -52,15 +55,15 @@
 | 에이전트마다 다른 정보 | s09_shared_budget, s12_unreliable_eyes (variant_clue) |
 | 동시 행동, 주기 문 | s05_lossy_sync, s10_moving_world (sync_pad, periodic_door) |
 | 움직이는 목표 | s11_pincer (mover + `_hide_path`) |
-| 유리벽 너머 원격 조작, 일부 에이전트만 도착하면 되는 목표 | s13_remote_maze (glass_walls, goal_zone `agents`) |
-| 함께 밀어야 하는 블록, 리셋 | s14_push_blocks (push_block, block_target, reset_lever) |
-| 가공/생산 라인, 유리 창구로 물건 주고받기 | s15_assembly_line (station, glass_walls) |
-| 들고 있을 수 있는 시간 제한, 이어 달리기 | s16_hot_cargo (cargo) |
-| 숨은 수치를 재서 조합 맞추기 | s17_scales (weighted_item, scale) |
-| 메시지 금지, 특정 에이전트만 조작 | s18_silent_signs (message_disabled, keypad `operators`, marker) |
-| 한 명만 들어갈 수 있는 구역 | s19_narrow_bridge (capacity_zone) |
-| 열쇠로 여는 상자, 의존 관계 | s20_key_chests (chest) |
-| 공용 비용과 개인 점수 (동전, 통행료) | s21_shared_purse (coin, receptacle `opens`) |
+| 유리벽 너머 원격 조작, 일부 에이전트만 도착하면 되는 목표 | s16_remote_maze (glass_walls, goal_zone `agents`) |
+| 함께 밀어야 하는 블록, 리셋 | s17_push_blocks (push_block, block_target, reset_lever) |
+| 가공/생산 라인, 유리 창구로 물건 주고받기 | s18_assembly_line (station, glass_walls) |
+| 들고 있을 수 있는 시간 제한, 이어 달리기 | s19_hot_cargo (cargo) |
+| 숨은 수치를 재서 조합 맞추기 | s20_scales (weighted_item, scale) |
+| 메시지 금지, 특정 에이전트만 조작 | s21_silent_signs (message_disabled, keypad `operators`, marker) |
+| 한 명만 들어갈 수 있는 구역 | s22_narrow_bridge (capacity_zone) |
+| 열쇠로 여는 상자, 의존 관계 | s23_key_chests (chest) |
+| 공용 비용과 개인 점수 (동전, 통행료) | s24_shared_purse (coin, receptacle `opens`) |
 
 ---
 
@@ -78,18 +81,18 @@
    - 왜 혼자서는 안 되는지
 2. **템플릿 복사**:
    ```powershell
-   Copy-Item scenarios\_template.py scenarios\s13_my_map.py
+   Copy-Item scenarios\_template.py scenarios\s25_my_map.py
    ```
-   파일 맨 위의 `NAME`을 파일 이름(`"s13_my_map"`)과 똑같이 바꾸고, `TITLE`과 `FAMILY`도 고칩니다.
+   파일 맨 위의 `NAME`을 파일 이름(`"s25_my_map"`)과 똑같이 바꾸고, `TITLE`과 `FAMILY`도 고칩니다.
 3. **`build()` 작성**: 다음 순서로 채웁니다(3~6장). `make_spec(...)`이 맵 데이터를 만들어 줍니다.
-   - 벽 → 물체 → 단서 → 안내문(briefings) → 클리어 조건(objectives) → 목표 문장(hints) → 규칙(rules)
+   - 벽 → 물체 → 단서 → 클리어 조건(objectives) → 목표 요약(hints, 기록용) → 규칙(rules). 단계형이면 `stage(...)`로 단계마다
 4. **검증 plan 작성**: `solution(env)`(정답)과 `mistake(env)`(실수한 뒤 복구)를 씁니다(8장). 다른 사람이 풀 수 있는 맵인지 확인하는 유일한 방법이니 꼭 둘 다 작성하세요.
-5. **등록**: `scenarios/__init__.py`의 `SCENARIO_NAMES`에 `"s13_my_map"`을 추가합니다.
+5. **등록**: `scenarios/__init__.py`의 `SCENARIO_NAMES`에 `"s25_my_map"`을 추가합니다.
 6. **검증**:
    ```powershell
-   python -m scenarios s13_my_map --check
+   python -m scenarios s25_my_map --check
    ```
-   `solution`과 `mistake`가 모두 `cleared at step N`이 나와야 합니다. 이 명령이 통과하면 `map_datas/s13_my_map.json`도 같이 만들어집니다.
+   `solution`과 `mistake`가 모두 `cleared at step N`이 나와야 합니다. 이 명령이 통과하면 `map_datas/s25_my_map.json`도 같이 만들어집니다.
 7. **눈으로 확인**: 에디터에서 열어 배치를 보고, `P`로 직접 조작해 봅니다(10장).
 8. **문서**: `SCENARIOS.md`에 표 한 줄과 설명 절을 추가합니다(11장 틀).
 9. **테스트**:
@@ -182,7 +185,7 @@
 | 저울 정확히 맞춤 | `{"type": "scale_balanced", "scale_id": "vault_scale"}` | scale (target 있음) |
 
 - `hints`에는 같은 목표를 **영어 문장**으로 씁니다. 목표 공개 실행(`--hide-goal`을 안 쓴 경우)에서 "Goal: …"로 에이전트에게 보입니다.
-- 목표를 숨긴 실행에서도 `briefings`와 맵 안 단서는 보입니다. 목표 숨김 실험에 쓸 맵이면 단서에 목표를 직접 쓰지 마세요.
+- 목표를 숨긴 실행에서도 맵 안 단서와 단계 안내는 보입니다. 목표 숨김 실험에 쓸 맵이면 단서에 목표를 직접 쓰지 마세요.
 
 ---
 
@@ -198,27 +201,36 @@
 | `glass_walls` | `[[100, 0, 10, 200]]` | 이동은 막고 시야는 통과하는 벽 (`walls`와 별도로 적음) |
 | `seed` | `11` | 손실/지연/아이템 생성 난수 시드 (같은 값이면 같은 결과) |
 
-규칙이 없으면 `rules={}`로 둡니다. 메시지 규칙을 쓰는 맵은 단서나 안내문에 규칙을 꼭 알려 주세요(s05, s06 참고).
+규칙이 없으면 `rules={}`로 둡니다. 메시지 규칙을 쓰는 맵은 단서에 규칙을 알려 주세요(s06 참고). 규칙을 일부러 숨기는 맵도 있습니다(s05).
 
 ---
 
-## 6. 에이전트가 읽는 글 쓰기 (단서, 안내문, 목표)
+## 6. 에이전트가 읽는 글 쓰기 (정보 전달 원칙, 2026-10-13 결정)
 
-에이전트에게 가는 글은 세 군데입니다. **모두 영어로** 씁니다.
+모든 맵에 같은 원칙을 씁니다. **모두 영어로** 씁니다.
 
-| 어디 | 언제 보이나 | 무엇을 쓰나 |
+| 어디 | 무엇을 쓰나 | 쓰지 않는 것 |
 |---|---|---|
-| `clue`의 `content` | 그 단서가 시야에 들어왔을 때 (hidden이면 15 이내) | 맵 안의 정보: 장치 설명, 다른 방 정보, 규칙. dict로 주제별로 나누면 좋음 |
-| `briefings` | 처음부터 (과제 설명 끝) | 내가 어디 있고 누가 어디 있는지, 읽을 단서 이름, `explain(...)`으로 새 물체 설명 |
-| `hints` | 목표 공개 실행에서만 | 클리어 조건 한 문장 |
+| 시스템 프롬프트 (`enviroment/policy.py`의 `_OBSERVATION_DOC`, 모든 맵 공통) | **모든 물체 종류의 역할** (문, 열쇠, 판, 패널, 회수함, 블록 등)과 `stage`, `reward` 관찰 필드 | 특정 맵 이야기 |
+| 과제 설명 (맵별) | **목표 문장만**: `objectives`가 `environment_prompt.objective_description`에서 "Goal: open keypad 'x'." 같은 문장으로 바뀜. 그 뒤에 공통 문장(`COMMON_RULES`) | 위치, 누가 어디 있는지, 역할 분담, 단서 읽기 지시, 물체 설명 (`briefings`는 주지 않는 것이 기본) |
+| 단계 안내 (`stage(title, briefing, ...)`의 briefing) | 그 단계의 **목표만** (예: "Open panel_2.", "Both of you stand inside yard_1 at the same time.") | 위치, 전략 |
+| 단서(`clue`), 화면(`display`), 이름표(`label`) | **퍼즐 자료**(코드, 숫자, 좌표 목록)와 **직접적이고 구체적인 힌트**(힌트 버전만. 예: "The plate in a room holds open the door of the OTHER room, not its own.", "If only one pad is entered, whoever stands on a pad is pushed back and both pads ignore entries for a few steps.", "A copy of the code. Copies may contain mistakes.") | **현재 상태**(지금 잠겨 있다 등), **위치/배치**("북동쪽 구석에", "방 B에"), **해결 전략**("팀원에게 알려라", "번갈아 밟아라", "이 쪽지는 상대를 위한 것") |
 
-- 공통 설명(시야, 이동, 메시지, 토큰 감점)은 `environment_prompt.py`가 자동으로 붙입니다. `make_spec`이 briefings 끝에 "실패 없음" 공통 문장도 붙입니다.
-- **새 물체를 쓰면 `explain("goal_zone", "switch_plate", ...)`을 briefing에 꼭 넣으세요.** 에이전트의 기본 설명에는 기존 물체만 있습니다.
+- 기준점 (2026-10-13 최종): **힌트 버전**의 단서는 이 맵 장치가 어떻게 작동하는지 **직접적이고 구체적으로** 알려 줍니다
+  (어느 판이 어느 문을 여는지, 실패 시 벌칙, 속도, 화면 값의 뜻, 정보가 틀릴 수 있다는 것, 이 쪽지가 어느 패널의 코드인지).
+  **힌트 없는 버전**은 그 문장을 모두 빼고 퍼즐 자료만 남깁니다. 두 버전 모두 "B에게 물어봐라", "번갈아 밟아라" 같은
+  해결 순서 지시는 쓰지 않습니다.
+- 퍼즐 자료는 단서에 그대로 둡니다(코드, 합계, 좌표, 목표 무게). 자료에는 이름만 붙입니다(`{"copy of the code": "5 7 8"}`).
+- **두 버전 (2026-10-13)**: 맵마다 `map_datas/<이름>.json`(단서에 규칙 힌트 있음)과 `map_datas/<이름>_nohint.json`(퍼즐 자료만)이 함께 나옵니다. `common.without_clue_hints`가 단서 content에서 `CLUE_DATA_KEYS`(code, copy of the code, sum of the digits, checkpoints, target weight of vault_scale) 밖의 키를 지우고, 남는 것이 없는 단서는 뺍니다. 그래서 **퍼즐 자료는 반드시 이 키 중 하나로**, 규칙 문장은 다른 키(`hint`, `plates`, `screen` 등)로 씁니다. 새 자료 키가 필요하면 `CLUE_DATA_KEYS`에 추가하세요. 문자열 content(variant_clue)는 자료로 보고 그대로 남습니다. `--check`는 두 버전을 모두 검증하고, 테스트(`ClueHintVersionTests`)가 기본 버전에 규칙 문장이 있는지, _nohint 버전에 자료 키만 있는지 확인합니다. 실행 때 `benchmark.py --no-clue-hints`로도 어떤 맵이든 힌트 없는 버전으로 돌릴 수 있습니다.
+- 이름표(`label`)에도 위치를 쓰지 않습니다(`"room A test scale"` 대신 `"test scale"`).
+- `hints`(MapSpec)는 사람이 읽는 목표 요약일 뿐 에이전트에게 가지 않습니다. 목표는 `objectives`에서 만들어집니다.
+- `explain()`과 `STAGE_RULES`는 예전 맵 호환용으로만 남아 있고, 새 맵에서는 쓰지 않습니다(같은 내용이 시스템 프롬프트에 있음).
 - 정보 비대칭을 만들려면 다음 중 하나를 씁니다.
   - 단서를 **다른 방**에 둡니다(벽이 시야를 가림).
   - `hidden=True`로 가까이 가야만 보이게 합니다.
   - `variant_clue`로 사람마다 다르게 보이게 합니다.
 - 단서 내용에 정답을 직접 쓰지 말고, **풀기 위해 협력이 필요한 조각**만 주세요.
+- 실제로 전달되는 글은 `python -m scenarios --texts`로 [AGENT_TEXTS.md](AGENT_TEXTS.md)에 만들어 확인합니다. 테스트(`test_task_descriptions_give_only_the_goal`)가 과제 설명에 위치어나 물체 설명이 들어가면 실패합니다.
 
 ---
 
@@ -237,7 +249,7 @@
    | 행동에 반응 | `press_button`, `pull_lever`, `pick_up`, `drop`, `apply_action` 오버라이드 |
 3. 일어난 일은 `self._log("이벤트_이름", [원인 agent_id들], 필드=값)`으로 기록합니다. 클리어 조건과 채점은 이 이벤트를 봅니다.
 4. 실패 상태를 만들지 마세요. 틀리면 리셋, 밀려남, 대기만 일어나야 합니다.
-5. `common.py`의 `OBJECT_HELP`에 영어 설명 한 줄을 추가합니다(`explain`에서 씀).
+5. `enviroment/policy.py`의 `_OBSERVATION_DOC` "Object roles"에 영어 역할 설명 한 줄을 추가합니다(모든 맵 공통). `tests/test_scenarios.py`의 `test_system_prompt_explains_every_object_type` 목록에도 type을 추가합니다.
 6. `tests/test_scenarios.py`에 동작 테스트를 추가합니다(`ScenarioRuleTests` 참고).
 7. `INTERFACE.md`의 "scenarios/engine.py" 절(물체/이벤트 목록)과 `SCENARIOS.md` 0장 표에 추가합니다.
 
@@ -273,7 +285,7 @@
 - [ ] 실패 상태가 없다. trap 아이템, 영구 봉인을 쓰지 않는다(`test_no_failure_state_is_ever_reached`).
 - [ ] 어떤 실수를 해도 갇히지 않는다. 닫힌 곳에 들어간 사람은 상대가 다시 열어 주면 나올 수 있다.
 - [ ] 혼자서는 풀 수 없다. 정보, 위치, 동시 행동 중 적어도 하나가 상대에게 달려 있다.
-- [ ] 단서와 안내문은 영어이고, 새 물체는 `explain(...)`으로 설명했다.
+- [ ] 과제 설명과 단계 안내는 목표만 말하고, 단서는 퍼즐 자료(자료 키)와 구체적인 힌트(다른 키)로 나뉜다 (6장). 새 물체 type은 시스템 프롬프트에 역할이 있다.
 
 **수치** (환경 기본값: 시야 200·90도, 상호작용 15, 한 번에 최대 20 이동, 압력판·패드 반경 10)
 - [ ] 판 위에서 그 문을 지나갈 수 없을 만큼 판이 문에서 멀다 (문 반경 + 15 이상).
@@ -291,9 +303,9 @@
 
 | 방법 | 명령 |
 |---|---|
-| 배치 보기 | `python -m mapgen.editor --load map_datas\s13_my_map.json` (또는 런처 맵 탭 → 선택 맵 편집·테스트) |
+| 배치 보기 | `python -m mapgen.editor --load map_datas\s25_my_map.json` (또는 런처 맵 탭 → 선택 맵 편집·테스트) |
 | 직접 풀어 보기 | 에디터에서 `P` → W 전진, A/D 회전, Space 상호작용, X 내려놓기, Tab 에이전트 바꾸기 |
-| 실행 파이프라인 확인 | `python benchmark.py --policy tooluse --map-file map_datas\s13_my_map.json --steps 30` (오류 없이 끝나는지) |
+| 실행 파이프라인 확인 | `python benchmark.py --policy tooluse --map-file map_datas\s25_my_map.json --steps 30` (오류 없이 끝나는지) |
 | LLM 실행 | 런처 실행 탭에서 LLM 코드 정책, 최대 step = `recommended_steps` 이상 (`key.txt` 필요) |
 
 에디터에서 저장해도 시나리오 맵의 목표 문장과 규칙은 유지됩니다. 다만 `python -m scenarios`를 다시 돌리면 `.py` 기준으로 덮어쓰므로, **고칠 때는 `.py`를 고치는 것이 기준**입니다.
@@ -318,13 +330,13 @@
 
 "한눈에 보기" 표에 한 줄을 추가합니다.
 ```markdown
-| s13_my_map | 이름 | 계열 | 2 | 클리어 조건 한 줄 | 권장 step | 정답 / 실수 후 |
+| s25_my_map | 이름 | 계열 | 2 | 클리어 조건 한 줄 | 권장 step | 정답 / 실수 후 |
 ```
 
 맨 아래에 절을 추가합니다.
 ```markdown
-## s13 이름 (계열)
-- **파일**: `s13_my_map.py` (가로×세로)[, 규칙 …]
+## s25 이름 (계열)
+- **파일**: `s25_my_map.py` (가로×세로)[, 규칙 …]
 - **목표**: 클리어 조건 → `이벤트 이름`
 - **의도**: 무엇을 측정하는지, 왜 혼자서는 안 되는지
 - **배치**: 방 구조, 장치 위치, 누가 어디서 시작하는지

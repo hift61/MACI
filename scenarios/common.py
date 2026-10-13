@@ -1,4 +1,6 @@
 """시나리오 파일들이 같이 쓰는 맵 조립 도구 (Environment에 의존하지 않음)."""
+import dataclasses
+
 from mapgen.spec import MapSpec
 
 # 모든 시나리오 과제 설명 뒤에 붙는 공통 안내
@@ -8,7 +10,8 @@ COMMON_RULES = (
 )
 
 
-# 관찰 type별 설명 (CodePolicy 시스템 프롬프트에는 기존 물체만 설명돼 있으므로 과제 설명에 덧붙임)
+# 관찰 type별 설명. 지금은 같은 내용이 시스템 프롬프트(policy.py _OBSERVATION_DOC "Object roles")에 공통으로
+# 들어가므로 맵 안내문에는 넣지 않음 (explain()은 예전 맵/외부 코드 호환용으로만 남김)
 OBJECT_HELP = {
     "goal_zone": "goal_zone: a rectangle centred on (x, y) with the given width/height.",
     "switch_plate": "switch_plate: while ANY agent stands within its radius, every door in its 'opens' list is "
@@ -96,18 +99,58 @@ def stage(title: str, briefing: str, objectives: list, objects: list, walls: lis
 
 
 STAGED_OBJECTIVES = [{"type": "all_stages_completed"}]
+# 단계 규칙은 시스템 프롬프트(observation "stage" 설명)로 옮김. 예전 맵/외부 코드 호환용으로만 남김
 STAGE_RULES = ("This map has several stages that must be cleared in order; observation 'stage' shows the current "
                "stage number, title and briefing. Clearing a stage removes its objects, puts both agents back at "
                "their start positions and loads the next stage. Your memory and conversation carry over.")
 
 
+# 정보 전달 원칙 (모든 맵 공통, MAP_HOWTO.md 6장)
+#   - 물체의 역할: 시스템 프롬프트(policy.py _OBSERVATION_DOC)에 공통으로 있음 -> 맵에서 다시 설명하지 않음
+#   - 과제 설명: 목표 문장(objectives -> environment_prompt.objective_description)과 COMMON_RULES만.
+#     위치, 역할 분담, 맵 배치, 전략은 쓰지 않음 (briefings 인자는 예전 맵 호환용, 주지 않는 것이 기본)
+#   - 단계 안내(stage briefing): 그 단계의 목표만
+#   - 단서(clue)/화면(display): 퍼즐 자료(CLUE_DATA_KEYS 키) + 장치 작동을 직접적, 구체적으로 알려 주는 힌트(다른 키).
+#     힌트 없는 버전(without_clue_hints)은 힌트 키를 지움. 현재 상태, 위치/배치, 해결 순서 지시는 어느 버전에도 쓰지 않음
+# 힌트 없는 버전(<이름>_nohint): 단서에서 장치 규칙 문장을 지우고 퍼즐 자료만 남김.
+# 단서 content(dict)의 키 중 아래 키만 퍼즐 자료로 보고 남김. 문자열 content(variant_clue 등)는 자료로 보고 그대로 둠.
+# 남는 내용이 없는 단서는 맵에서 뺌. 새 맵에서 자료 키를 새로 쓰면 여기에 추가할 것
+CLUE_DATA_KEYS = {"code", "copy of the code", "sum of the digits", "checkpoints", "target weight of vault_scale"}
+NOHINT_SUFFIX = "_nohint"
+
+
+def _strip_clue_hints(objects: list) -> list:
+    result = []
+    for o in objects:
+        content = o["params"].get("content")
+        if o["kind"] in ("clue", "variant_clue") and isinstance(content, dict):
+            data = {k: v for k, v in content.items() if k in CLUE_DATA_KEYS}
+            if not data:
+                continue
+            o = {**o, "params": {**o["params"], "content": data}}
+        result.append(o)
+    return result
+
+
+def without_clue_hints(spec: MapSpec) -> MapSpec:
+    """같은 맵의 힌트 없는 버전. 물체, 목표, 정답은 같고 단서의 규칙 문장만 없음"""
+    rules = dict(spec.rules or {})
+    if "stages" in rules:
+        rules["stages"] = [{**st, "objects": _strip_clue_hints(st["objects"])} for st in rules["stages"]]
+    name = (spec.scenario or "map") + NOHINT_SUFFIX
+    return dataclasses.replace(spec, objects=_strip_clue_hints(spec.objects), rules=rules, scenario=name,
+                               config={**spec.config, "clue_hints": False})
+
+
 def make_spec(name: str, width: int, height: int, walls: list, agents: list, objects: list,
-              objectives: list, hints: list, briefings: dict, rules: dict = None,
+              objectives: list, hints: list, briefings: dict = None, rules: dict = None,
               recommended_steps: int = 150, seed: int = 0) -> MapSpec:
+    briefings = briefings or {}
     return MapSpec(
         seed=seed, width=width, height=height, walls=walls, agents=agents, objects=objects,
         objectives=objectives, puzzles=[name], hints=hints,
         config={"recommended_steps": recommended_steps, "source": f"scenarios/{name}.py"},
         scenario=name, rules=dict(rules or {}),
-        briefings={aid: text + "\n" + COMMON_RULES for aid, text in briefings.items()},
+        briefings={a["id"]: (briefings[a["id"]] + "\n" if briefings.get(a["id"]) else "") + COMMON_RULES
+                   for a in agents},
     )

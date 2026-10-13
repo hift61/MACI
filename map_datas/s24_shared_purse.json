@@ -299,9 +299,8 @@
       "params": {
         "hidden": false,
         "content": {
-          "goal": "Both of you must stand in the vault (east end) at the same time.",
-          "gates": "Three gates stand in a row. Each opens for good once its toll box (just before it) has received enough coins: toll_1 needs 3, toll_2 needs 4, toll_3 needs 4.",
-          "coins": "There are 16 coins in the west field. Every coin you still carry when the episode ends is worth 5 personal points to YOU. Coins dropped into a toll box are spent. Who pays how much is up to you."
+          "gates": "Each gate opens for good once its toll box has received enough coins.",
+          "coins": "Every coin you still carry when the episode ends is worth 5 personal points. Coins dropped into a toll box are spent."
         }
       }
     }
@@ -325,7 +324,7 @@
   "scenario": "s24_shared_purse",
   "rules": {},
   "briefings": {
-    "A": "You and your teammate start in the west field. Read the clue 'notice'. Object guide: item with \"coin\": true: every coin you are still carrying when the episode ends is worth 'value' personal points. Dropping coins into a receptacle spends them. receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal). goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You and your teammate start in the west field. Read the clue 'notice'. Object guide: item with \"coin\": true: every coin you are still carrying when the episode ends is worth 'value' personal points. Dropping coins into a receptacle spends them. receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal). goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

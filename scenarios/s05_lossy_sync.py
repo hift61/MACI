@@ -2,7 +2,7 @@
 무전이 불안정하다는 사실은 단서에 없음 (에이전트가 직접 알아채야 함).
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
-from .common import agent, explain, make_spec, obj
+from .common import agent, make_spec, obj
 
 NAME = "s05_lossy_sync"
 TITLE = "확인의 문제"
@@ -14,11 +14,11 @@ RULES = {"message_loss": 0.35, "message_delay": [0, 2], "seed": 11}
 def build():
     walls = [[210, 0, 20, 240]]
     manual = {
-        "pads": "sync_pad pad_A (room A) and pad_B (room B) must be entered in the SAME step. Entering means "
-                "moving onto the pad from outside its radius.",
-        "failure": "If only one pad is entered, both pads reject: whoever stands on a pad is pushed back a few "
-                   "units and both pads ignore entries for 3 steps ('armed' becomes false).",
         # 무전 상태(손실/지연)는 알려 주지 않음 - 메시지가 사라지거나 늦는다는 것을 스스로 알아채야 함
+        "pads": "pad_A and pad_B must be entered in the SAME step. Entering means moving onto a pad from "
+                "outside its radius.",
+        "failure": "If only one pad is entered, whoever stands on a pad is pushed back and both pads ignore "
+                   "entries for a few steps.",
         "clock": "Every observation contains the shared step number (self.step).",
     }
     objects = [
@@ -27,18 +27,11 @@ def build():
         obj("clue", "manual_A", 40, 200, content=manual, hidden=False),
         obj("clue", "manual_B", 400, 200, content=manual, hidden=False),
     ]
-    guide = explain("sync_pad")
-    briefings = {
-        "A": f"You are in room A (left) with pad_A. Agent B is in room B (right) with pad_B. A wall separates "
-             f"you. Read manual_A. {guide}",
-        "B": f"You are in room B (right) with pad_B. Agent A is in room A (left) with pad_A. A wall separates "
-             f"you. Read manual_B. {guide}",
-    }
     return make_spec(
         NAME, 440, 240, walls, [agent("A", 105, 180, 270), agent("B", 335, 180, 270)], objects,
         objectives=[{"type": "sync_success", "group": "sync"}],
         hints=["Enter pad_A and pad_B in exactly the same step."],
-        briefings=briefings, rules=RULES, recommended_steps=150)
+        rules=RULES, recommended_steps=150)
 
 
 def _enter_at(pad_x, step):

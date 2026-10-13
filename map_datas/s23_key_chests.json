@@ -133,9 +133,8 @@
       "y": 290,
       "params": {
         "content": {
-          "goal": "Place BOTH the crown and the scepter on the altar (WEST area).",
-          "chests": "Each chest opens with the key whose 'unlocks' field names it. What is inside only appears once the chest is opened. Keys are used up when they open a chest.",
-          "counter": "A solid wall separates the WEST and EAST areas, except for a glass window in the middle. You cannot cross it, but an item dropped right against the window can be picked up from the other side."
+          "chests": "Each chest opens with the key whose 'unlocks' names it. What is inside only appears once the chest is opened.",
+          "glass": "Nobody can cross the wall or its glass window, but an item lying right against the glass can be picked up from the other side."
         },
         "hidden": false
       }
@@ -147,9 +146,8 @@
       "y": 290,
       "params": {
         "content": {
-          "goal": "Place BOTH the crown and the scepter on the altar (WEST area).",
-          "chests": "Each chest opens with the key whose 'unlocks' field names it. What is inside only appears once the chest is opened. Keys are used up when they open a chest.",
-          "counter": "A solid wall separates the WEST and EAST areas, except for a glass window in the middle. You cannot cross it, but an item dropped right against the window can be picked up from the other side."
+          "chests": "Each chest opens with the key whose 'unlocks' names it. What is inside only appears once the chest is opened.",
+          "glass": "Nobody can cross the wall or its glass window, but an item lying right against the glass can be picked up from the other side."
         },
         "hidden": false
       }
@@ -183,7 +181,7 @@
     ]
   },
   "briefings": {
-    "A": "You are in the WEST area. Agent B is in the EAST area. Read note_west. Object guide: chest: a locked box. use_key with a key whose 'unlocks' is the chest's id (within about 15 units) opens it; its contents then appear right next to it. receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal).\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You are in the EAST area. Agent A is in the WEST area. Read note_east. Object guide: chest: a locked box. use_key with a key whose 'unlocks' is the chest's id (within about 15 units) opens it; its contents then appear right next to it. receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal).\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

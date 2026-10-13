@@ -45,7 +45,7 @@
     "stages": [
       {
         "title": "resting core",
-        "briefing": "Pick up core_1 together and deliver it to dock_1. Read notice_1.",
+        "briefing": "Deliver core_1 to dock_1.",
         "objectives": [
           {
             "type": "delivery_complete",
@@ -85,9 +85,7 @@
             "params": {
               "hidden": false,
               "content": {
-                "core": "The power core core_1 (a coop item) is resting north-east of the central pillar.",
-                "catch": "It can only be picked up while BOTH of you are within about 15 units of it at the same moment, and its carrier cannot move unless the other agent stays within about 15 units.",
-                "deliver": "Once picked up, carry it together to dock_1 (south-east) and drop it there."
+                "core": "The power core is too heavy for one agent."
               }
             }
           }
@@ -95,7 +93,7 @@
       },
       {
         "title": "slow core",
-        "briefing": "Catch core_2 together and deliver it to dock_2. Read notice_2.",
+        "briefing": "Deliver core_2 to dock_2.",
         "objectives": [
           {
             "type": "delivery_complete",
@@ -160,9 +158,8 @@
             "params": {
               "hidden": false,
               "content": {
-                "core": "The power core core_2 (a coop item) keeps moving on its own around the central pillar. Its path is not shown; you can only watch where it is while it is in your view.",
-                "catch": "It can only be picked up while BOTH of you are within about 15 units of it at the same moment, and its carrier cannot move unless the other agent stays within about 15 units. It moves about 6 units per step.",
-                "deliver": "Once picked up, carry it together to dock_2 (south-east) and drop it there. If you drop it anywhere else it starts running around again."
+                "core": "The power core moves on its own along a hidden path, about 6 units per step.",
+                "deliver": "Dropped anywhere except dock_2, the core starts moving on its own again."
               }
             }
           }
@@ -170,7 +167,7 @@
       },
       {
         "title": "fast core",
-        "briefing": "Catch core_3 together and deliver it to dock_3. Read notice_3.",
+        "briefing": "Deliver core_3 to dock_3.",
         "objectives": [
           {
             "type": "delivery_complete",
@@ -235,9 +232,8 @@
             "params": {
               "hidden": false,
               "content": {
-                "core": "The power core core_3 (a coop item) keeps moving on its own around the central pillar. Its path is not shown; you can only watch where it is while it is in your view.",
-                "catch": "It can only be picked up while BOTH of you are within about 15 units of it at the same moment, and its carrier cannot move unless the other agent stays within about 15 units. It moves about 12 units per step - faster than you can turn and follow.",
-                "deliver": "Once picked up, carry it together to dock_3 (south-east) and drop it there. If you drop it anywhere else it starts running around again."
+                "core": "The power core moves on its own along a hidden path, about 12 units per step.",
+                "deliver": "Dropped anywhere except dock_3, the core starts moving on its own again."
               }
             }
           }
@@ -246,7 +242,7 @@
     ]
   },
   "briefings": {
-    "A": "You and your teammate start on opposite sides of a pillar. This map has several stages that must be cleared in order; observation 'stage' shows the current stage number, title and briefing. Clearing a stage removes its objects, puts both agents back at their start positions and loads the next stage. Your memory and conversation carry over. Object guide: receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal).\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You and your teammate start on opposite sides of a pillar. This map has several stages that must be cleared in order; observation 'stage' shows the current stage number, title and briefing. Clearing a stage removes its objects, puts both agents back at their start positions and loads the next stage. Your memory and conversation carry over. Object guide: receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal).\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

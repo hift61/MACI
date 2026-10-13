@@ -4,7 +4,7 @@
   3단계 어려운 교착: 방 안 벽 때문에 판까지 돌아가야 하고, 해제 레버의 위치는 알려 주지 않음 (반대편 끝에 있음)
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
-from .common import STAGE_RULES, STAGED_OBJECTIVES, agent, explain, hwall, make_spec, obj, stage
+from .common import STAGED_OBJECTIVES, agent, hwall, make_spec, obj, stage
 
 NAME = "s01_deadlock"
 TITLE = "교착 상태"
@@ -25,24 +25,17 @@ def _stage1():
         obj("switch_plate", "plate_A1", 30, 30, opens=["door_B1"]),
         _yard(1),
         obj("clue", "clue_A1", 150, 30, hidden=False, content={
-            "plate_A1": "Standing on plate_A1 (this room) holds open door_B1 - the door of room B.",
-            "your_door": "Your own doorway at the bottom of room A has no door; you can walk out any time."}),
+            "hint": "A plate can hold open a door that cannot be seen from the plate."}),
         obj("clue", "clue_B1", 290, 30, hidden=False, content={
-            "door_B1": "Your door door_B1 opens only while someone stands on plate_A1 in room A."}),
+            "hint": "This door opens only while a plate somewhere else is occupied."}),
     ]
-    return stage("one-way door", "Only room B is locked this time. Both of you must stand in the courtyard "
-                 "(yard_1) below the rooms at the same time.", [{"type": "team_assembled", "zone_id": "yard_1"}],
-                 objects)
+    return stage("one-way door", "Both of you stand inside yard_1 at the same time.",
+                 [{"type": "team_assembled", "zone_id": "yard_1"}], objects)
 
 
 def _clue2(me, other):
-    return {
-        f"plate_{me}2": f"Standing on plate_{me}2 (this room) holds open door_{other}2 - the door of room {other}, "
-                        f"NOT your own door.",
-        f"door_{me}2": f"Your door door_{me}2 opens only while someone stands on plate_{other}2 in room {other}, "
-                       f"or forever once lever release_{me}2 in the courtyard is pulled.",
-        "courtyard": "release_A2 and release_B2 are levers in the courtyard just below the two rooms.",
-    }
+    return {"plates": "The plate in a room holds open the door of the OTHER room, not its own.",
+            "levers": "A latch lever can open a door for good."}
 
 
 def _stage2():
@@ -57,17 +50,13 @@ def _stage2():
         obj("clue", "clue_A2", 150, 30, content=_clue2("A", "B"), hidden=False),
         obj("clue", "clue_B2", 290, 30, content=_clue2("B", "A"), hidden=False),
     ]
-    return stage("symmetric deadlock", "Both rooms are locked now. Both of you must stand in the courtyard "
-                 "(yard_2) at the same time.", [{"type": "team_assembled", "zone_id": "yard_2"}], objects)
+    return stage("symmetric deadlock", "Both of you stand inside yard_2 at the same time.",
+                 [{"type": "team_assembled", "zone_id": "yard_2"}], objects)
 
 
 def _clue3(me, other):
-    return {
-        f"plate_{me}3": f"Standing on plate_{me}3 (this room, behind the partition) holds open door_{other}3 - the "
-                        f"door of room {other}, NOT your own door.",
-        f"door_{me}3": f"Your door door_{me}3 opens only while someone stands on plate_{other}3 in room {other}, "
-                       f"or forever once its release lever somewhere outside the rooms is pulled.",
-    }
+    return {"plates": "The plate in a room holds open the door of the OTHER room, not its own.",
+            "levers": "Each locked door also has a latch lever that opens it for good."}
 
 
 def _stage3():
@@ -82,24 +71,16 @@ def _stage3():
         obj("clue", "clue_A3", 50, 150, content=_clue3("A", "B"), hidden=False),
         obj("clue", "clue_B3", 390, 150, content=_clue3("B", "A"), hidden=False),
     ]
-    return stage("hard deadlock", "Both rooms are locked again and each room is split by a partition. Both of you "
-                 "must stand in the courtyard (yard_3) at the same time.",
+    return stage("hard deadlock", "Both of you stand inside yard_3 at the same time.",
                  [{"type": "team_assembled", "zone_id": "yard_3"}], objects, walls=BASE_WALLS + INNER_WALLS)
 
 
 def build():
-    guide = explain("switch_plate", "latch_lever", "goal_zone")
-    briefings = {
-        "A": f"You start in room A (top-left). Agent B starts in room B (top-right). Read the clue in your room "
-             f"each stage. {STAGE_RULES} {guide}",
-        "B": f"You start in room B (top-right). Agent A starts in room A (top-left). Read the clue in your room "
-             f"each stage. {STAGE_RULES} {guide}",
-    }
     return make_spec(
         NAME, 440, 300, BASE_WALLS, [agent("A", 100, 120, 270), agent("B", 340, 120, 270)], [],
         objectives=STAGED_OBJECTIVES,
         hints=["Clear all three stages; each stage ends when both agents stand in its courtyard goal_zone."],
-        briefings=briefings, rules={"stages": [_stage1(), _stage2(), _stage3()]}, recommended_steps=300)
+        rules={"stages": [_stage1(), _stage2(), _stage3()]}, recommended_steps=300)
 
 
 def _stage1_plan():

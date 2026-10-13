@@ -90,7 +90,7 @@
         ],
         "target": 3,
         "radius": 20.0,
-        "label": "east dock (blue boxes)"
+        "label": "dock for blue boxes"
       }
     },
     {
@@ -104,7 +104,7 @@
         ],
         "target": 3,
         "radius": 20.0,
-        "label": "west dock (red boxes)"
+        "label": "dock for red boxes"
       }
     },
     {
@@ -115,8 +115,7 @@
       "params": {
         "hidden": false,
         "content": {
-          "goal": "Blue boxes appear on the WEST bank and must go to east_dock; red boxes appear on the EAST bank and must go to west_dock. 3 of each.",
-          "bridge": "The rope bridge holds only ONE person. If two people are on it at the end of a step, it swings and both are thrown back to where they stepped on.",
+          "bridge": "The rope bridge holds only one person. If two are on it at the end of a step, both are thrown back to where they stepped on.",
           "boxes": "Only one box of each colour lies around at a time; a new one appears a while after it is taken."
         }
       }
@@ -129,8 +128,7 @@
       "params": {
         "hidden": false,
         "content": {
-          "goal": "Blue boxes appear on the WEST bank and must go to east_dock; red boxes appear on the EAST bank and must go to west_dock. 3 of each.",
-          "bridge": "The rope bridge holds only ONE person. If two people are on it at the end of a step, it swings and both are thrown back to where they stepped on.",
+          "bridge": "The rope bridge holds only one person. If two are on it at the end of a step, both are thrown back to where they stepped on.",
           "boxes": "Only one box of each colour lies around at a time; a new one appears a while after it is taken."
         }
       }
@@ -159,7 +157,7 @@
   "scenario": "s22_narrow_bridge",
   "rules": {},
   "briefings": {
-    "A": "You start on the WEST bank. Agent B starts on the EAST bank. A river separates you; the only way across is the rope bridge in the middle. Read notice_west. Object guide: capacity_zone: a rectangle centred on (x, y) that holds at most 'capacity' agents. If more agents are inside at the end of a step, everyone inside is put back where they were before entering. receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal).\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You start on the EAST bank. Agent A starts on the WEST bank. A river separates you; the only way across is the rope bridge in the middle. Read notice_east. Object guide: capacity_zone: a rectangle centred on (x, y) that holds at most 'capacity' agents. If more agents are inside at the end of a step, everyone inside is put back where they were before entering. receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal).\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }
