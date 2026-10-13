@@ -1,0 +1,330 @@
+{
+  "seed": 0,
+  "width": 480,
+  "height": 320,
+  "walls": [
+    [
+      320,
+      0,
+      10,
+      150.0
+    ],
+    [
+      320,
+      170.0,
+      10,
+      150.0
+    ],
+    [
+      370,
+      0,
+      10,
+      150.0
+    ],
+    [
+      370,
+      170.0,
+      10,
+      150.0
+    ],
+    [
+      420,
+      0,
+      10,
+      150.0
+    ],
+    [
+      420,
+      170.0,
+      10,
+      150.0
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 140,
+      "y": 160,
+      "facing": 0
+    },
+    {
+      "id": "B",
+      "x": 180,
+      "y": 160,
+      "facing": 0
+    }
+  ],
+  "objects": [
+    {
+      "kind": "door",
+      "id": "gate_1",
+      "x": 325,
+      "y": 160,
+      "params": {
+        "locked": true,
+        "radius": 12.0
+      }
+    },
+    {
+      "kind": "door",
+      "id": "gate_2",
+      "x": 375,
+      "y": 160,
+      "params": {
+        "locked": true,
+        "radius": 12.0
+      }
+    },
+    {
+      "kind": "door",
+      "id": "gate_3",
+      "x": 425,
+      "y": 160,
+      "params": {
+        "locked": true,
+        "radius": 12.0
+      }
+    },
+    {
+      "kind": "receptacle",
+      "id": "toll_1",
+      "x": 300,
+      "y": 220,
+      "params": {
+        "accepts": [
+          "coin"
+        ],
+        "target": 3,
+        "radius": 15.0,
+        "label": "toll box for gate_1 (3 coins)",
+        "opens": [
+          "gate_1"
+        ]
+      }
+    },
+    {
+      "kind": "receptacle",
+      "id": "toll_2",
+      "x": 350,
+      "y": 220,
+      "params": {
+        "accepts": [
+          "coin"
+        ],
+        "target": 4,
+        "radius": 15.0,
+        "label": "toll box for gate_2 (4 coins)",
+        "opens": [
+          "gate_2"
+        ]
+      }
+    },
+    {
+      "kind": "receptacle",
+      "id": "toll_3",
+      "x": 400,
+      "y": 220,
+      "params": {
+        "accepts": [
+          "coin"
+        ],
+        "target": 4,
+        "radius": 15.0,
+        "label": "toll box for gate_3 (4 coins)",
+        "opens": [
+          "gate_3"
+        ]
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_1",
+      "x": 40,
+      "y": 40,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_2",
+      "x": 40,
+      "y": 120,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_3",
+      "x": 40,
+      "y": 200,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_4",
+      "x": 40,
+      "y": 280,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_5",
+      "x": 100,
+      "y": 40,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_6",
+      "x": 100,
+      "y": 120,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_7",
+      "x": 100,
+      "y": 200,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_8",
+      "x": 100,
+      "y": 280,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_9",
+      "x": 160,
+      "y": 40,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_10",
+      "x": 160,
+      "y": 120,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_11",
+      "x": 160,
+      "y": 200,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_12",
+      "x": 160,
+      "y": 280,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_13",
+      "x": 220,
+      "y": 40,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_14",
+      "x": 220,
+      "y": 120,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_15",
+      "x": 220,
+      "y": 200,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "coin",
+      "id": "coin_16",
+      "x": 220,
+      "y": 280,
+      "params": {
+        "value": 5.0
+      }
+    },
+    {
+      "kind": "goal_zone",
+      "id": "vault",
+      "x": 455,
+      "y": 160,
+      "params": {
+        "width": 50,
+        "height": 320,
+        "label": "vault"
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "notice",
+      "x": 270,
+      "y": 300,
+      "params": {
+        "hidden": false,
+        "content": {
+          "gates": "Each gate opens for good once its toll box has received enough coins.",
+          "coins": "Every coin you still carry when the episode ends is worth 5 personal points. Coins dropped into a toll box are spent."
+        }
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "team_assembled",
+      "zone_id": "vault"
+    }
+  ],
+  "puzzles": [
+    "s24_shared_purse"
+  ],
+  "hints": [
+    "Both agents must stand in the goal_zone 'vault' at the same time."
+  ],
+  "config": {
+    "recommended_steps": 200,
+    "source": "scenarios/s24_shared_purse.py"
+  },
+  "scenario": "s24_shared_purse",
+  "rules": {},
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

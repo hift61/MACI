@@ -1,0 +1,130 @@
+{
+  "seed": 0,
+  "width": 460,
+  "height": 320,
+  "walls": [
+    [
+      0,
+      150,
+      220.0,
+      10
+    ],
+    [
+      240.0,
+      150,
+      220.0,
+      10
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 200,
+      "y": 250,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 260,
+      "y": 250,
+      "facing": 270
+    }
+  ],
+  "objects": [
+    {
+      "kind": "door",
+      "id": "garden_gate",
+      "x": 230,
+      "y": 155,
+      "params": {
+        "locked": true,
+        "radius": 12.0
+      }
+    },
+    {
+      "kind": "switch_plate",
+      "id": "gate_plate",
+      "x": 50,
+      "y": 290,
+      "params": {
+        "opens": [
+          "garden_gate"
+        ]
+      }
+    },
+    {
+      "kind": "spawner",
+      "id": "part_spawner",
+      "x": 0,
+      "y": 0,
+      "params": {
+        "area": [
+          30,
+          30,
+          430,
+          120
+        ],
+        "every": 5,
+        "max_alive": 3,
+        "prefix": "part",
+        "label": "machine part"
+      }
+    },
+    {
+      "kind": "spawner",
+      "id": "gem_spawner",
+      "x": 0,
+      "y": 0,
+      "params": {
+        "area": [
+          30,
+          30,
+          430,
+          120
+        ],
+        "every": 7,
+        "max_alive": 2,
+        "prefix": "gem",
+        "points": 10.0,
+        "label": "gem"
+      }
+    },
+    {
+      "kind": "receptacle",
+      "id": "bin",
+      "x": 410,
+      "y": 290,
+      "params": {
+        "accepts": [
+          "part"
+        ],
+        "target": 5,
+        "radius": 20.0,
+        "label": "parts bin"
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "delivery_complete",
+      "receptacle_id": "bin"
+    }
+  ],
+  "puzzles": [
+    "s08_boring_role"
+  ],
+  "hints": [
+    "Deliver 5 machine parts (part_*) to the receptacle 'bin'."
+  ],
+  "config": {
+    "recommended_steps": 200,
+    "source": "scenarios/s08_boring_role.py",
+    "clue_hints": false
+  },
+  "scenario": "s08_boring_role_nohint",
+  "rules": {},
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

@@ -1,0 +1,222 @@
+{
+  "seed": 0,
+  "width": 460,
+  "height": 320,
+  "walls": [],
+  "agents": [
+    {
+      "id": "A",
+      "x": 60,
+      "y": 160,
+      "facing": 0
+    },
+    {
+      "id": "B",
+      "x": 400,
+      "y": 60,
+      "facing": 180
+    }
+  ],
+  "objects": [],
+  "objectives": [
+    {
+      "type": "all_stages_completed"
+    }
+  ],
+  "puzzles": [
+    "s14_silent_porters"
+  ],
+  "hints": [
+    "Deliver the crate of every stage to its dock."
+  ],
+  "config": {
+    "recommended_steps": 570,
+    "source": "scenarios/s14_silent_porters.py",
+    "clue_hints": false
+  },
+  "scenario": "s14_silent_porters_nohint",
+  "rules": {
+    "stages": [
+      {
+        "title": "stage 1",
+        "briefing": "Deliver crate_1 to dock_1.",
+        "objectives": [
+          {
+            "type": "delivery_complete",
+            "receptacle_id": "dock_1"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "item",
+            "id": "crate_1",
+            "x": 230,
+            "y": 160,
+            "params": {
+              "category": "coop",
+              "required_agents": 2
+            }
+          },
+          {
+            "kind": "receptacle",
+            "id": "dock_1",
+            "x": 410,
+            "y": 290,
+            "params": {
+              "accepts": [
+                "crate_1"
+              ],
+              "target": 1,
+              "radius": 20.0
+            }
+          }
+        ],
+        "walls": []
+      },
+      {
+        "title": "stage 2",
+        "briefing": "Deliver crate_2 to dock_2.",
+        "objectives": [
+          {
+            "type": "delivery_complete",
+            "receptacle_id": "dock_2"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "item",
+            "id": "crate_2",
+            "x": 100,
+            "y": 80,
+            "params": {
+              "category": "coop",
+              "required_agents": 2
+            }
+          },
+          {
+            "kind": "receptacle",
+            "id": "dock_2",
+            "x": 360,
+            "y": 80,
+            "params": {
+              "accepts": [
+                "crate_2"
+              ],
+              "target": 1,
+              "radius": 20.0
+            }
+          }
+        ],
+        "walls": [
+          [
+            220,
+            0,
+            20,
+            230
+          ]
+        ],
+        "agents": {
+          "A": [
+            60,
+            160,
+            0
+          ],
+          "B": [
+            170,
+            290,
+            270
+          ]
+        }
+      },
+      {
+        "title": "stage 3",
+        "briefing": "Deliver crate_3 to dock_3.",
+        "objectives": [
+          {
+            "type": "delivery_complete",
+            "receptacle_id": "dock_3"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "mover",
+            "id": "crate_3",
+            "x": 60,
+            "y": 60,
+            "params": {
+              "waypoints": [
+                [
+                  60,
+                  60
+                ],
+                [
+                  160,
+                  60
+                ],
+                [
+                  160,
+                  200
+                ],
+                [
+                  60,
+                  200
+                ]
+              ],
+              "speed": 4.0,
+              "object_type": "item",
+              "loop": true,
+              "extra": {
+                "category": "coop",
+                "required_agents": 2,
+                "_hide_path": true
+              }
+            }
+          },
+          {
+            "kind": "periodic_door",
+            "id": "gate_3",
+            "x": 305,
+            "y": 160,
+            "params": {
+              "radius": 12.0,
+              "period": 16,
+              "open_steps": 8,
+              "phase": 0
+            }
+          },
+          {
+            "kind": "receptacle",
+            "id": "dock_3",
+            "x": 390,
+            "y": 160,
+            "params": {
+              "accepts": [
+                "crate_3"
+              ],
+              "target": 1,
+              "radius": 20.0
+            }
+          }
+        ],
+        "walls": [
+          [
+            300,
+            0,
+            10,
+            148.0
+          ],
+          [
+            300,
+            172.0,
+            10,
+            148.0
+          ]
+        ]
+      }
+    ]
+  },
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

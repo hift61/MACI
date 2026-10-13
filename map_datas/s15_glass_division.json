@@ -106,6 +106,30 @@
               "radius": 12.0,
               "hidden": false
             }
+          },
+          {
+            "kind": "clue",
+            "id": "hint_1a",
+            "x": 90,
+            "y": 300,
+            "params": {
+              "hidden": false,
+              "content": {
+                "hint": "Visiting a checkpoint raises the score."
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "hint_1b",
+            "x": 410,
+            "y": 100,
+            "params": {
+              "hidden": false,
+              "content": {
+                "hint": "Visiting a checkpoint raises the score."
+              }
+            }
           }
         ],
         "walls": []
@@ -202,13 +226,37 @@
           },
           {
             "kind": "clue",
+            "id": "hint_2a",
+            "x": 90,
+            "y": 300,
+            "params": {
+              "hidden": false,
+              "content": {
+                "hint": "Checkpoints here only show up when you are close to them."
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "hint_2b",
+            "x": 410,
+            "y": 100,
+            "params": {
+              "hidden": false,
+              "content": {
+                "hint": "Checkpoints here only show up when you are close to them."
+              }
+            }
+          },
+          {
+            "kind": "clue",
             "id": "board_2a",
             "x": 120,
             "y": 250,
             "params": {
               "hidden": false,
               "content": {
-                "points": [
+                "checkpoints": [
                   [
                     300,
                     60
@@ -221,7 +269,8 @@
                     350,
                     360
                   ]
-                ]
+                ],
+                "note": "Checkpoint locations."
               }
             }
           },
@@ -233,7 +282,7 @@
             "params": {
               "hidden": false,
               "content": {
-                "points": [
+                "checkpoints": [
                   [
                     60,
                     60
@@ -246,7 +295,8 @@
                     120,
                     360
                   ]
-                ]
+                ],
+                "note": "Checkpoint locations."
               }
             }
           }
@@ -345,13 +395,37 @@
           },
           {
             "kind": "clue",
+            "id": "hint_3a",
+            "x": 90,
+            "y": 300,
+            "params": {
+              "hidden": false,
+              "content": {
+                "hint": "Checkpoints only show up when you are close. A plate can hold a door open."
+              }
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "hint_3b",
+            "x": 410,
+            "y": 100,
+            "params": {
+              "hidden": false,
+              "content": {
+                "hint": "Checkpoints only show up when you are close. A plate can hold a door open."
+              }
+            }
+          },
+          {
+            "kind": "clue",
             "id": "board_3a",
             "x": 120,
             "y": 250,
             "params": {
               "hidden": false,
               "content": {
-                "points": [
+                "checkpoints": [
                   [
                     300,
                     250
@@ -364,7 +438,8 @@
                     450,
                     370
                   ]
-                ]
+                ],
+                "note": "Checkpoint locations."
               }
             }
           },
@@ -376,7 +451,7 @@
             "params": {
               "hidden": false,
               "content": {
-                "points": [
+                "checkpoints": [
                   [
                     80,
                     120
@@ -389,7 +464,8 @@
                     150,
                     40
                   ]
-                ]
+                ],
+                "note": "Checkpoint locations."
               }
             }
           },
@@ -439,7 +515,7 @@
     ]
   },
   "briefings": {
-    "A": "You start in the bottom-left. Agent B starts in the top-right.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You start in the top-right. Agent A starts in the bottom-left.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

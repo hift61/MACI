@@ -38,7 +38,7 @@
     "stages": [
       {
         "title": "2 doors",
-        "briefing": "Get both agents through all 2 doors into exit_1 (beyond d1_2). Read manual_1.",
+        "briefing": "Both of you stand inside exit_1 at the same time.",
         "objectives": [
           {
             "type": "team_assembled",
@@ -129,8 +129,8 @@
             "params": {
               "hidden": false,
               "content": {
-                "doors": "Doors d1_1..d1_2 stand in a row from left to right. Each door d1_i is held open by EITHER of two switch plates: b1_i on the near side (before the door) or f1_i on the far side.",
-                "catch": "Every plate is far from its door, so nobody can stand on a plate and walk through its door at the same time. Near-side plates are in the top corners, far-side plates in the bottom corners. The exit hall lies beyond d1_2."
+                "doors": "Each door here can be held open by either of two plates, one on each side of it.",
+                "catch": "No plate is close enough to its door to stand on it and walk through at the same time."
               }
             }
           }
@@ -164,7 +164,7 @@
       },
       {
         "title": "5 doors",
-        "briefing": "Get both agents through all 5 doors into exit_2 (beyond d2_5). Read manual_2.",
+        "briefing": "Both of you stand inside exit_2 at the same time.",
         "objectives": [
           {
             "type": "team_assembled",
@@ -351,8 +351,8 @@
             "params": {
               "hidden": false,
               "content": {
-                "doors": "Doors d2_1..d2_5 stand in a row from left to right. Each door d2_i is held open by EITHER of two switch plates: b2_i on the near side (before the door) or f2_i on the far side.",
-                "catch": "Every plate is far from its door, so nobody can stand on a plate and walk through its door at the same time. Near-side plates are in the top corners, far-side plates in the bottom corners. The exit hall lies beyond d2_5."
+                "doors": "Each door here can be held open by either of two plates, one on each side of it.",
+                "catch": "No plate is close enough to its door to stand on it and walk through at the same time."
               }
             }
           }
@@ -422,7 +422,7 @@
       },
       {
         "title": "7 doors",
-        "briefing": "Get both agents through all 7 doors into exit_3 (beyond d3_7). Read manual_3.",
+        "briefing": "Both of you stand inside exit_3 at the same time.",
         "objectives": [
           {
             "type": "team_assembled",
@@ -673,8 +673,8 @@
             "params": {
               "hidden": false,
               "content": {
-                "doors": "Doors d3_1..d3_7 stand in a row from left to right. Each door d3_i is held open by EITHER of two switch plates: b3_i on the near side (before the door) or f3_i on the far side.",
-                "catch": "Every plate is far from its door, so nobody can stand on a plate and walk through its door at the same time. Each plate sits in a top or bottom corner of its section; which corner differs from door to door. The exit hall lies beyond d3_7."
+                "doors": "Each door here can be held open by either of two plates, one on each side of it.",
+                "catch": "No plate is close enough to its door to stand on it and walk through at the same time."
               }
             }
           }
@@ -769,7 +769,7 @@
     ]
   },
   "briefings": {
-    "A": "You and your teammate start together in the leftmost section. Read the clue 'manual' of each stage. You cannot see your teammate, and from a plate you usually cannot see its door. This map has several stages that must be cleared in order; observation 'stage' shows the current stage number, title and briefing. Clearing a stage removes its objects, puts both agents back at their start positions and loads the next stage. Your memory and conversation carry over. Object guide: switch_plate: while ANY agent stands within its radius, every door in its 'opens' list is unlocked; when nobody stands on any plate for a door, that door locks again. goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You and your teammate start together in the leftmost section. Read the clue 'manual' of each stage. You cannot see your teammate, and from a plate you usually cannot see its door. This map has several stages that must be cleared in order; observation 'stage' shows the current stage number, title and briefing. Clearing a stage removes its objects, puts both agents back at their start positions and loads the next stage. Your memory and conversation carry over. Object guide: switch_plate: while ANY agent stands within its radius, every door in its 'opens' list is unlocked; when nobody stands on any plate for a door, that door locks again. goal_zone: a rectangle centred on (x, y) with the given width/height.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

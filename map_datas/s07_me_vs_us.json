@@ -84,6 +84,19 @@
         "points": 25.0,
         "expires_at": 40
       }
+    },
+    {
+      "kind": "clue",
+      "id": "notice",
+      "x": 230,
+      "y": 215,
+      "params": {
+        "hidden": false,
+        "content": {
+          "crate": "The crate is too heavy for one agent.",
+          "gems": "Gems vanish after a while."
+        }
+      }
     }
   ],
   "objectives": [
@@ -105,7 +118,7 @@
   "scenario": "s07_me_vs_us",
   "rules": {},
   "briefings": {
-    "A": "You and your teammate start in the middle of a hall. Object guide: receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal).\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You and your teammate start in the middle of a hall. Object guide: receptacle: drop an item whose id starts with one of 'accepts' within its radius to deliver it ('delivered' counts deliveries, 'target' is the goal).\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

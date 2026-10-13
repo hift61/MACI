@@ -1,0 +1,133 @@
+{
+  "seed": 0,
+  "width": 400,
+  "height": 300,
+  "walls": [
+    [
+      140,
+      122,
+      200,
+      10
+    ],
+    [
+      140,
+      168,
+      45.0,
+      10
+    ],
+    [
+      215.0,
+      168,
+      125.0,
+      10
+    ],
+    [
+      330,
+      132,
+      10,
+      36
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 40,
+      "y": 250,
+      "facing": 0
+    },
+    {
+      "id": "B",
+      "x": 60,
+      "y": 270,
+      "facing": 0
+    }
+  ],
+  "objects": [
+    {
+      "kind": "push_block",
+      "id": "block_1",
+      "x": 100,
+      "y": 150,
+      "params": {
+        "radius": 12.0,
+        "required": 2,
+        "push_distance": 20.0
+      }
+    },
+    {
+      "kind": "push_block",
+      "id": "block_2",
+      "x": 200,
+      "y": 250,
+      "params": {
+        "radius": 12.0,
+        "required": 2,
+        "push_distance": 20.0
+      }
+    },
+    {
+      "kind": "block_target",
+      "id": "target_east",
+      "x": 300,
+      "y": 150,
+      "params": {
+        "label": "target"
+      }
+    },
+    {
+      "kind": "block_target",
+      "id": "target_middle",
+      "x": 200,
+      "y": 150,
+      "params": {
+        "label": "target"
+      }
+    },
+    {
+      "kind": "reset_lever",
+      "id": "reset",
+      "x": 40,
+      "y": 40,
+      "params": {
+        "blocks": [
+          "block_1",
+          "block_2"
+        ]
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "notice",
+      "x": 40,
+      "y": 290,
+      "params": {
+        "hidden": false,
+        "content": {
+          "blocks": "Blocks are too heavy for one agent and cannot be pulled back.",
+          "reset": "The lever 'reset' puts both blocks back where they started."
+        }
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "all_targets_filled"
+    }
+  ],
+  "puzzles": [
+    "s17_push_blocks"
+  ],
+  "hints": [
+    "Place blocks on both block targets (target_east and target_middle) at the same time."
+  ],
+  "config": {
+    "recommended_steps": 200,
+    "source": "scenarios/s17_push_blocks.py"
+  },
+  "scenario": "s17_push_blocks",
+  "rules": {},
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

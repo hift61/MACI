@@ -91,7 +91,7 @@ def read_secret(filename: str = "key.txt") -> str:
     return value
 
 
-def build_episode(reveal_goal: bool = True):
+def build_episode(reveal_goal: bool = True, clue_hints: bool = True):
     """A door that only unlocks while an agent stands on each of two
     separated pressure plates AT THE SAME TIME (see enviroment.py's
     add_pressure_plate AND-condition note) - neither agent can solve this
@@ -103,6 +103,12 @@ def build_episode(reveal_goal: bool = True):
     env.add_door("gate", x=250, y=250, locked=True, radius=10.0)
     env.add_pressure_plate("plate_a", x=40, y=40, linked_door_id="gate", radius=12.0)
     env.add_pressure_plate("plate_b", x=460, y=460, linked_door_id="gate", radius=12.0)
+    # 장치 수준 힌트 (위치, 전략은 쓰지 않음 - scenarios/common.py 정보 전달 원칙과 같음)
+    # clue_hints=False면 힌트 단서를 두지 않음 (힌트 없는 버전, scenarios/common.py without_clue_hints와 같음)
+    if clue_hints:
+        hint = {"hint": "The gate opens only while every plate linked to it is occupied at the same time."}
+        env.add_clue("hint_a", x=70, y=440, content=hint, hidden=False)
+        env.add_clue("hint_b", x=430, y=60, content=hint, hidden=False)
 
     env.add_agent("A", x=40, y=460)
     env.add_agent("B", x=460, y=40)
@@ -148,7 +154,8 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                 reward_visible: bool = False, context_max_tokens: int = 64_000,
                 solo_agent: str | None = None, controller: str = "decentralized",
                 score_config: ScoreConfig | None = None, policy_factory=None, env_change_cap: int = 0,
-                disclose_costs: bool = False) -> None:
+                disclose_costs: bool = False,
+                clue_hints: bool = True) -> None:
     # policy_factory(agent_id, task_description) -> Policy: 정책을 밖에서 만들어 넣을 때 (예: play.py의 사람 플레이어).
     # 이때 policy_kind는 로그의 model 칸에 남길 이름으로만 쓰임
     if steps < 1:
@@ -179,11 +186,15 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
     elif environment_kind != "map":
         raise ValueError(f"unknown environment: {environment_kind}")
     elif map_spec is not None:
+        clue_hints = clue_hints and (map_spec.config or {}).get("clue_hints", True)  # _nohint 맵 파일이면 False로 기록
+        if not clue_hints:  # 힌트 없는 버전: 단서의 규칙 문장을 지우고 퍼즐 자료만 남김
+            from scenarios.common import without_clue_hints
+            map_spec = without_clue_hints(map_spec)
         env, task_descriptions, objectives = build_environment(map_spec, reveal_goal=reveal_goal)
         # 시나리오 맵이 점수를 관찰 피드백으로 주도록 정했으면 (rules.show_reward) 그대로 따름
         reward_visible = reward_visible or bool((getattr(map_spec, "rules", None) or {}).get("show_reward"))
     else:
-        env, task_descriptions = build_episode(reveal_goal=reveal_goal)
+        env, task_descriptions = build_episode(reveal_goal=reveal_goal, clue_hints=clue_hints)
         objectives = GATE_OBJECTIVES
 
     if solo_agent is not None and solo_agent not in env.agents:
@@ -303,6 +314,7 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
     scene_path = os.path.splitext(log_path)[0] + ".scene.json"
     with open(scene_path, "w", encoding="utf-8") as scene:
         json.dump({"environment": environment_kind, "world": snapshot(), "reveal_goal": reveal_goal,
+                   "clue_hints": clue_hints,
                    "reward_visible": reward_visible,
                    "controller": controller,
                    "score": score_episode(env, max_steps=steps, objectives=objectives, config=score_config),
@@ -331,6 +343,7 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                 "map_seed": sequence_seed if environment_kind in ("sequence_rooms", "blind_code", "curriculum") else (map_spec.seed if map_spec is not None else None),
                 "environment": environment_kind,
                 "reveal_goal": reveal_goal,
+                "clue_hints": clue_hints,
                 "reward_visible": reward_visible,
                 "solo_agent": solo_agent,
                 "controller": controller,
@@ -445,6 +458,8 @@ def main():
     parser.add_argument("--max-resets", type=int, default=None, help="허용 리셋 횟수 (생략하면 제한 없음)")
     parser.add_argument('--debug', action='store_true', help='실시간 상세 로그 출력 및 .debug.jsonl 저장')
     parser.add_argument('--hide-goal', action='store_true', help='에이전트 초기 설명에서 목표 숨기기 (최소 규칙 유지)')
+    parser.add_argument('--no-clue-hints', action='store_true',
+                        help='단서에서 장치 규칙 문장을 빼고 퍼즐 자료만 남김 (기본 맵과 지도 파일 맵에 적용)')
     parser.add_argument('--show-reward', action='store_true', help='Include cumulative numeric scores in agent observations')
     parser.add_argument('--solo-agent', choices=('A', 'B'), help='Run only this agent; all other agents take noop actions')
     parser.add_argument('--context-max-tokens', type=int, default=64_000,
@@ -499,7 +514,8 @@ def main():
                 reveal_goal=not args.hide_goal, reward_visible=args.show_reward,
                 context_max_tokens=args.context_max_tokens, solo_agent=args.solo_agent,
                 controller=args.controller, score_config=score_config, env_change_cap=args.env_change_cap,
-                disclose_costs=args.disclose_costs)
+                disclose_costs=args.disclose_costs,
+                clue_hints=not args.no_clue_hints)
     print(f"\nWrote manifest: {out_path}")
     print(f"Score it with: python maci_judge.py {out_path}")
 

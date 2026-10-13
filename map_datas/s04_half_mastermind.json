@@ -45,7 +45,7 @@
     "stages": [
       {
         "title": "3 of 4 colours",
-        "briefing": "Solve color_panel_1 in room A: a code of 3 different colours out of 4. Room A reads panel_manual_1, room B reads screen_manual_1.",
+        "briefing": "Open color_panel_1.",
         "objectives": [
           {
             "type": "keypad_solved",
@@ -115,7 +115,7 @@
             "x": 335,
             "y": 40,
             "params": {
-              "label": "result of the code panel in room A",
+              "label": "code result screen",
               "content": {
                 "attempt": 0,
                 "exact": null,
@@ -131,9 +131,8 @@
             "params": {
               "hidden": false,
               "content": {
-                "code": "color_panel_1 takes a code of 3 colours chosen from red, green, blue, yellow. No colour appears twice in the code.",
-                "checking": "After every 3th press the panel checks the code and clears itself. The result appears ONLY on result_screen_1 in room B: 'exact' = right colour in the right slot, 'misplaced' = right colour in the wrong slot.",
-                "retries": "Wrong codes cost nothing but time. You may try as often as you need."
+                "panel": "color_panel_1 opens when its colour buttons are pressed in the right order: 3 different colours out of red, green, blue, yellow, none repeated.",
+                "checking": "After every 3 presses the code is checked and the panel clears itself. The result is shown on the screen that belongs to the panel."
               }
             }
           },
@@ -145,8 +144,7 @@
             "params": {
               "hidden": false,
               "content": {
-                "screen": "result_screen_1 shows only the result of the latest code entered on the panel in room A: attempt number, 'exact' and 'misplaced'. It never shows which colours were entered.",
-                "panel": "The code uses 3 different colours out of red, green, blue, yellow."
+                "screen": "This screen shows the result of the latest full code: 'exact' = right colour in the right slot, 'misplaced' = right colour in the wrong slot. It never shows which colours were entered."
               }
             }
           }
@@ -154,7 +152,7 @@
       },
       {
         "title": "4 of 5 colours",
-        "briefing": "Solve color_panel_2 in room A: a code of 4 different colours out of 5. Room A reads panel_manual_2, room B reads screen_manual_2.",
+        "briefing": "Open color_panel_2.",
         "objectives": [
           {
             "type": "keypad_solved",
@@ -235,7 +233,7 @@
             "x": 335,
             "y": 40,
             "params": {
-              "label": "result of the code panel in room A",
+              "label": "code result screen",
               "content": {
                 "attempt": 0,
                 "exact": null,
@@ -251,9 +249,8 @@
             "params": {
               "hidden": false,
               "content": {
-                "code": "color_panel_2 takes a code of 4 colours chosen from red, green, blue, yellow, purple. No colour appears twice in the code.",
-                "checking": "After every 4th press the panel checks the code and clears itself. The result appears ONLY on result_screen_2 in room B: 'exact' = right colour in the right slot, 'misplaced' = right colour in the wrong slot.",
-                "retries": "Wrong codes cost nothing but time. You may try as often as you need."
+                "panel": "color_panel_2 opens when its colour buttons are pressed in the right order: 4 different colours out of red, green, blue, yellow, purple, none repeated.",
+                "checking": "After every 4 presses the code is checked and the panel clears itself. The result is shown on the screen that belongs to the panel."
               }
             }
           },
@@ -265,8 +262,7 @@
             "params": {
               "hidden": false,
               "content": {
-                "screen": "result_screen_2 shows only the result of the latest code entered on the panel in room A: attempt number, 'exact' and 'misplaced'. It never shows which colours were entered.",
-                "panel": "The code uses 4 different colours out of red, green, blue, yellow, purple."
+                "screen": "This screen shows the result of the latest full code: 'exact' = right colour in the right slot, 'misplaced' = right colour in the wrong slot. It never shows which colours were entered."
               }
             }
           }
@@ -274,7 +270,7 @@
       },
       {
         "title": "5 of 6 colours",
-        "briefing": "Solve color_panel_3 in room A: a code of 5 different colours out of 6. Room A reads panel_manual_3, room B reads screen_manual_3.",
+        "briefing": "Open color_panel_3.",
         "objectives": [
           {
             "type": "keypad_solved",
@@ -366,7 +362,7 @@
             "x": 335,
             "y": 40,
             "params": {
-              "label": "result of the code panel in room A",
+              "label": "code result screen",
               "content": {
                 "attempt": 0,
                 "exact": null,
@@ -382,9 +378,8 @@
             "params": {
               "hidden": false,
               "content": {
-                "code": "color_panel_3 takes a code of 5 colours chosen from red, green, blue, yellow, purple, orange. No colour appears twice in the code.",
-                "checking": "After every 5th press the panel checks the code and clears itself. The result appears ONLY on result_screen_3 in room B: 'exact' = right colour in the right slot, 'misplaced' = right colour in the wrong slot.",
-                "retries": "Wrong codes cost nothing but time. You may try as often as you need."
+                "panel": "color_panel_3 opens when its colour buttons are pressed in the right order: 5 different colours out of red, green, blue, yellow, purple, orange, none repeated.",
+                "checking": "After every 5 presses the code is checked and the panel clears itself. The result is shown on the screen that belongs to the panel."
               }
             }
           },
@@ -396,8 +391,7 @@
             "params": {
               "hidden": false,
               "content": {
-                "screen": "result_screen_3 shows only the result of the latest code entered on the panel in room A: attempt number, 'exact' and 'misplaced'. It never shows which colours were entered.",
-                "panel": "The code uses 5 different colours out of red, green, blue, yellow, purple, orange."
+                "screen": "This screen shows the result of the latest full code: 'exact' = right colour in the right slot, 'misplaced' = right colour in the wrong slot. It never shows which colours were entered."
               }
             }
           }
@@ -406,7 +400,7 @@
     ]
   },
   "briefings": {
-    "A": "You are in room A (left) with the colour code panel and its colour buttons. Agent B is in room B (right) and is the only one who can see the result screen. A wall separates you. This map has several stages that must be cleared in order; observation 'stage' shows the current stage number, title and briefing. Clearing a stage removes its objects, puts both agents back at their start positions and loads the next stage. Your memory and conversation carry over. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries. display: a screen whose 'content' is updated by the machine it belongs to.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You are in room B (right) with the result screen. Agent A is in room A (left) with the code panel. A wall separates you. You cannot press anything useful yourself. This map has several stages that must be cleared in order; observation 'stage' shows the current stage number, title and briefing. Clearing a stage removes its objects, puts both agents back at their start positions and loads the next stage. Your memory and conversation carry over. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries. display: a screen whose 'content' is updated by the machine it belongs to.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

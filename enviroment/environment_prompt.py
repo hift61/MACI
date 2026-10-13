@@ -10,14 +10,31 @@ import json
 PROMPT_CONTRACT = "v2"
 
 
+# objective(EventLog 조건 dict) 한 개를 목표 문장으로. 모르는 종류는 JSON 그대로
+_GOAL_SENTENCES = {
+    'door_unlocked': lambda o: f"unlock door '{o['door_id']}'",
+    'item_picked_up': lambda o: f"pick up '{o['object_id']}'",
+    'team_assembled': lambda o: f"be inside goal_zone '{o['zone_id']}' at the same time "
+                                f"(everyone named in its 'agents' field, or all agents)",
+    'keypad_solved': lambda o: f"open keypad '{o['panel_id']}'",
+    'sync_success': lambda o: f"succeed with the sync pads of group '{o['group']}'",
+    'delivery_complete': lambda o: f"deliver items to receptacle '{o['receptacle_id']}' until it reaches its target",
+    'all_checkpoints_visited': lambda o: "visit every checkpoint",
+    'all_targets_filled': lambda o: "get a block onto every block_target at the same time",
+    'scale_balanced': lambda o: f"make scale '{o['scale_id']}' read 'balanced'",
+    'all_stages_completed': lambda o: "clear every stage in order (the current stage's goal is observation 'stage')",
+}
+
+
 def objective_description(objectives):
     goals = []
     for objective in objectives:
-        if objective.get('type') == 'door_unlocked':
-            goals.append(f"unlock door '{objective['door_id']}'")
-        else:
+        sentence = _GOAL_SENTENCES.get(objective.get('type'))
+        try:
+            goals.append(sentence(objective) if sentence else json.dumps(objective, ensure_ascii=False))
+        except KeyError:
             goals.append(json.dumps(objective, ensure_ascii=False))
-    return ' Goal: achieve all of the following: ' + '; '.join(goals) + '.' if goals else ''
+    return ' Goal: ' + '; '.join(goals) + '.' if goals else ''
 
 
 def environment_description(agent_id, agent_ids, width, height):

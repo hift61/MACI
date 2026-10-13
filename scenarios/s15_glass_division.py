@@ -36,13 +36,18 @@ def _visit_all(n):
 def _boards(n):
     a, b = POINTS[n]
     # A 쪽 판에는 B 쪽 좌표, B 쪽 판에는 A 쪽 좌표 (누구 것인지는 적지 않음)
-    return [obj("clue", f"board_{n}a", 120, 250, hidden=False, content={"points": [list(p) for p in b]}),
-            obj("clue", f"board_{n}b", 380, 150, hidden=False, content={"points": [list(p) for p in a]})]
+    return [obj("clue", f"board_{n}a", 120, 250, hidden=False, content={"checkpoints": [list(p) for p in b], "note": "Checkpoint locations."}),
+            obj("clue", f"board_{n}b", 380, 150, hidden=False, content={"checkpoints": [list(p) for p in a], "note": "Checkpoint locations."})]
 
 
 def _stage(n):
     objects = _checkpoints(n, hidden=n > 1)
     walls = []
+    hint = {1: "Visiting a checkpoint raises the score.",
+            2: "Checkpoints here only show up when you are close to them.",
+            3: "Checkpoints only show up when you are close. A plate can hold a door open."}[n]
+    objects += [obj("clue", f"hint_{n}a", 90, 300, hidden=False, content={"hint": hint}),
+                obj("clue", f"hint_{n}b", 410, 100, hidden=False, content={"hint": hint})]
     if n > 1:
         objects += _boards(n)
     if n == 3:
@@ -53,12 +58,9 @@ def _stage(n):
 
 
 def build():
-    briefings = {"A": "You start in the bottom-left. Agent B starts in the top-right.",
-                 "B": "You start in the top-right. Agent A starts in the bottom-left."}
     return make_spec(
         NAME, 500, 400, [], [agent("A", 60, 330, 270), agent("B", 440, 70, 90)], [],
-        objectives=STAGED_OBJECTIVES, hints=["Visit every checkpoint of every stage."], briefings=briefings,
-        rules={"glass_walls": GLASS, "show_reward": True, "stages": [_stage(n) for n in (1, 2, 3)]},
+        objectives=STAGED_OBJECTIVES, hints=["Visit every checkpoint of every stage."], rules={"glass_walls": GLASS, "show_reward": True, "stages": [_stage(n) for n in (1, 2, 3)]},
         recommended_steps=440)
 
 

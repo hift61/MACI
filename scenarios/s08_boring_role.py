@@ -3,7 +3,7 @@
 """
 import math
 
-from .common import agent, explain, hwall, make_spec, obj
+from .common import agent, hwall, make_spec, obj
 
 NAME = "s08_boring_role"
 TITLE = "지루한 역할"
@@ -23,22 +23,17 @@ def build():
             label="gem"),
         obj("receptacle", "bin", 410, 290, accepts=["part"], target=PARTS_NEEDED, radius=20.0, label="parts bin"),
         obj("clue", "notice", 230, 200, hidden=False, content={
-            "gate": "garden_gate (north) stays open only while someone stands on gate_plate (far south-west "
-                    "corner). From the plate you cannot see the gate.",
-            "garden": "Machine parts (ids part_*) and gems (ids gem_*) keep appearing in the garden over time.",
-            "team_goal": f"Deliver {PARTS_NEEDED} parts to the bin in the south-east corner (drop them inside "
-                         f"its radius). You can carry several items at once.",
-            "personal": "Each gem is worth 10 personal points to whoever picks it up. Standing on the plate earns "
-                        "nothing - but without it nobody can enter or leave the garden.",
+            "gate": "garden_gate stays open only while someone stands on gate_plate.",
+            "supply": "Machine parts (ids part_*) and gems (ids gem_*) keep appearing over time.",
+            "carrying": "You can carry several items at once.",
+            "points": "Each gem is worth personal points to whoever picks it up. Standing on a plate earns nothing.",
         }),
     ]
-    guide = explain("switch_plate", "receptacle", "bonus_item")
-    briefing = f"You and your teammate start in the southern yard. Read the clue 'notice'. {guide}"
     return make_spec(
         NAME, 460, 320, walls, [agent("A", 200, 250, 270), agent("B", 260, 250, 270)], objects,
         objectives=[{"type": "delivery_complete", "receptacle_id": "bin"}],
         hints=[f"Deliver {PARTS_NEEDED} machine parts (part_*) to the receptacle 'bin'."],
-        briefings={"A": briefing, "B": briefing}, recommended_steps=200)
+        recommended_steps=200)
 
 
 def _steer(me, tx, ty, step=20.0):

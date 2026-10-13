@@ -1,0 +1,1231 @@
+{
+  "seed": 0,
+  "width": 440,
+  "height": 260,
+  "walls": [
+    [
+      210,
+      0,
+      20,
+      260
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 105,
+      "y": 220,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 335,
+      "y": 220,
+      "facing": 270
+    }
+  ],
+  "objects": [],
+  "objectives": [
+    {
+      "type": "all_stages_completed"
+    }
+  ],
+  "puzzles": [
+    "s06_short_radio"
+  ],
+  "hints": [
+    "Clear all three stages; each stage ends when both rooms' panels of that stage are solved."
+  ],
+  "config": {
+    "recommended_steps": 300,
+    "source": "scenarios/s06_short_radio.py",
+    "clue_hints": false
+  },
+  "scenario": "s06_short_radio_nohint",
+  "rules": {
+    "message_max_chars": 10,
+    "message_interval": 5,
+    "stages": [
+      {
+        "title": "2-button codes",
+        "briefing": "Open panel_A1 and panel_B1.",
+        "objectives": [
+          {
+            "type": "keypad_solved",
+            "panel_id": "panel_A1"
+          },
+          {
+            "type": "keypad_solved",
+            "panel_id": "panel_B1"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "keypad",
+            "id": "panel_A1",
+            "x": 105,
+            "y": 200,
+            "params": {
+              "code": [
+                "r3c2",
+                "r1c4"
+              ],
+              "mode": "sequence",
+              "label": "4x4 panel"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r1c1",
+            "x": 40,
+            "y": 40,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r1c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r1c2",
+            "x": 75,
+            "y": 40,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r1c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r1c3",
+            "x": 110,
+            "y": 40,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r1c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r1c4",
+            "x": 145,
+            "y": 40,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r1c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r2c1",
+            "x": 40,
+            "y": 75,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r2c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r2c2",
+            "x": 75,
+            "y": 75,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r2c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r2c3",
+            "x": 110,
+            "y": 75,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r2c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r2c4",
+            "x": 145,
+            "y": 75,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r2c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r3c1",
+            "x": 40,
+            "y": 110,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r3c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r3c2",
+            "x": 75,
+            "y": 110,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r3c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r3c3",
+            "x": 110,
+            "y": 110,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r3c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r3c4",
+            "x": 145,
+            "y": 110,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r3c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r4c1",
+            "x": 40,
+            "y": 145,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r4c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r4c2",
+            "x": 75,
+            "y": 145,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r4c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r4c3",
+            "x": 110,
+            "y": 145,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r4c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A1_r4c4",
+            "x": 145,
+            "y": 145,
+            "params": {
+              "panel": "panel_A1",
+              "label": "r4c4"
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_A1",
+            "x": 170,
+            "y": 235,
+            "params": {
+              "hidden": false,
+              "content": {
+                "code": "Press these 2 buttons of panel_B1 in order: the second row from the top, the first column from the left; then the bottom row, the third column from the left."
+              }
+            }
+          },
+          {
+            "kind": "keypad",
+            "id": "panel_B1",
+            "x": 335,
+            "y": 200,
+            "params": {
+              "code": [
+                "r2c1",
+                "r4c3"
+              ],
+              "mode": "sequence",
+              "label": "4x4 panel"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r1c1",
+            "x": 270,
+            "y": 40,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r1c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r1c2",
+            "x": 305,
+            "y": 40,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r1c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r1c3",
+            "x": 340,
+            "y": 40,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r1c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r1c4",
+            "x": 375,
+            "y": 40,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r1c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r2c1",
+            "x": 270,
+            "y": 75,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r2c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r2c2",
+            "x": 305,
+            "y": 75,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r2c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r2c3",
+            "x": 340,
+            "y": 75,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r2c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r2c4",
+            "x": 375,
+            "y": 75,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r2c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r3c1",
+            "x": 270,
+            "y": 110,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r3c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r3c2",
+            "x": 305,
+            "y": 110,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r3c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r3c3",
+            "x": 340,
+            "y": 110,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r3c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r3c4",
+            "x": 375,
+            "y": 110,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r3c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r4c1",
+            "x": 270,
+            "y": 145,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r4c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r4c2",
+            "x": 305,
+            "y": 145,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r4c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r4c3",
+            "x": 340,
+            "y": 145,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r4c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B1_r4c4",
+            "x": 375,
+            "y": 145,
+            "params": {
+              "panel": "panel_B1",
+              "label": "r4c4"
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_B1",
+            "x": 260,
+            "y": 235,
+            "params": {
+              "hidden": false,
+              "content": {
+                "code": "Press these 2 buttons of panel_A1 in order: the third row from the top, the second column from the left; then the top row, the last column on the right."
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "4-button codes",
+        "briefing": "Open panel_A2 and panel_B2.",
+        "objectives": [
+          {
+            "type": "keypad_solved",
+            "panel_id": "panel_A2"
+          },
+          {
+            "type": "keypad_solved",
+            "panel_id": "panel_B2"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "keypad",
+            "id": "panel_A2",
+            "x": 105,
+            "y": 200,
+            "params": {
+              "code": [
+                "r1c2",
+                "r4c4",
+                "r2c1",
+                "r3c3"
+              ],
+              "mode": "sequence",
+              "label": "4x4 panel"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r1c1",
+            "x": 40,
+            "y": 40,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r1c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r1c2",
+            "x": 75,
+            "y": 40,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r1c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r1c3",
+            "x": 110,
+            "y": 40,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r1c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r1c4",
+            "x": 145,
+            "y": 40,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r1c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r2c1",
+            "x": 40,
+            "y": 75,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r2c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r2c2",
+            "x": 75,
+            "y": 75,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r2c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r2c3",
+            "x": 110,
+            "y": 75,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r2c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r2c4",
+            "x": 145,
+            "y": 75,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r2c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r3c1",
+            "x": 40,
+            "y": 110,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r3c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r3c2",
+            "x": 75,
+            "y": 110,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r3c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r3c3",
+            "x": 110,
+            "y": 110,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r3c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r3c4",
+            "x": 145,
+            "y": 110,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r3c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r4c1",
+            "x": 40,
+            "y": 145,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r4c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r4c2",
+            "x": 75,
+            "y": 145,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r4c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r4c3",
+            "x": 110,
+            "y": 145,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r4c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A2_r4c4",
+            "x": 145,
+            "y": 145,
+            "params": {
+              "panel": "panel_A2",
+              "label": "r4c4"
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_A2",
+            "x": 170,
+            "y": 235,
+            "params": {
+              "hidden": false,
+              "content": {
+                "code": "Press these 4 buttons of panel_B2 in order: the bottom row, the first column from the left; then the second row from the top, the second column from the left; then the third row from the top, the last column on the right; then the top row, the third column from the left."
+              }
+            }
+          },
+          {
+            "kind": "keypad",
+            "id": "panel_B2",
+            "x": 335,
+            "y": 200,
+            "params": {
+              "code": [
+                "r4c1",
+                "r2c2",
+                "r3c4",
+                "r1c3"
+              ],
+              "mode": "sequence",
+              "label": "4x4 panel"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r1c1",
+            "x": 270,
+            "y": 40,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r1c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r1c2",
+            "x": 305,
+            "y": 40,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r1c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r1c3",
+            "x": 340,
+            "y": 40,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r1c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r1c4",
+            "x": 375,
+            "y": 40,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r1c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r2c1",
+            "x": 270,
+            "y": 75,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r2c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r2c2",
+            "x": 305,
+            "y": 75,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r2c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r2c3",
+            "x": 340,
+            "y": 75,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r2c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r2c4",
+            "x": 375,
+            "y": 75,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r2c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r3c1",
+            "x": 270,
+            "y": 110,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r3c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r3c2",
+            "x": 305,
+            "y": 110,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r3c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r3c3",
+            "x": 340,
+            "y": 110,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r3c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r3c4",
+            "x": 375,
+            "y": 110,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r3c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r4c1",
+            "x": 270,
+            "y": 145,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r4c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r4c2",
+            "x": 305,
+            "y": 145,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r4c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r4c3",
+            "x": 340,
+            "y": 145,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r4c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B2_r4c4",
+            "x": 375,
+            "y": 145,
+            "params": {
+              "panel": "panel_B2",
+              "label": "r4c4"
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_B2",
+            "x": 260,
+            "y": 235,
+            "params": {
+              "hidden": false,
+              "content": {
+                "code": "Press these 4 buttons of panel_A2 in order: the top row, the second column from the left; then the bottom row, the last column on the right; then the second row from the top, the first column from the left; then the third row from the top, the third column from the left."
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "6-button codes",
+        "briefing": "Open panel_A3 and panel_B3.",
+        "objectives": [
+          {
+            "type": "keypad_solved",
+            "panel_id": "panel_A3"
+          },
+          {
+            "type": "keypad_solved",
+            "panel_id": "panel_B3"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "keypad",
+            "id": "panel_A3",
+            "x": 105,
+            "y": 200,
+            "params": {
+              "code": [
+                "r2c3",
+                "r4c1",
+                "r1c4",
+                "r3c2",
+                "r2c2",
+                "r4c4"
+              ],
+              "mode": "sequence",
+              "label": "4x4 panel"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r1c1",
+            "x": 40,
+            "y": 40,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r1c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r1c2",
+            "x": 75,
+            "y": 40,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r1c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r1c3",
+            "x": 110,
+            "y": 40,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r1c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r1c4",
+            "x": 145,
+            "y": 40,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r1c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r2c1",
+            "x": 40,
+            "y": 75,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r2c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r2c2",
+            "x": 75,
+            "y": 75,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r2c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r2c3",
+            "x": 110,
+            "y": 75,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r2c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r2c4",
+            "x": 145,
+            "y": 75,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r2c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r3c1",
+            "x": 40,
+            "y": 110,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r3c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r3c2",
+            "x": 75,
+            "y": 110,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r3c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r3c3",
+            "x": 110,
+            "y": 110,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r3c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r3c4",
+            "x": 145,
+            "y": 110,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r3c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r4c1",
+            "x": 40,
+            "y": 145,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r4c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r4c2",
+            "x": 75,
+            "y": 145,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r4c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r4c3",
+            "x": 110,
+            "y": 145,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r4c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "A3_r4c4",
+            "x": 145,
+            "y": 145,
+            "params": {
+              "panel": "panel_A3",
+              "label": "r4c4"
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_A3",
+            "x": 170,
+            "y": 235,
+            "params": {
+              "hidden": false,
+              "content": {
+                "code": "Press these 6 buttons of panel_B3 in order: the top row, the first column from the left; then the third row from the top, the third column from the left; then the second row from the top, the last column on the right; then the bottom row, the second column from the left; then the top row, the third column from the left; then the third row from the top, the first column from the left."
+              }
+            }
+          },
+          {
+            "kind": "keypad",
+            "id": "panel_B3",
+            "x": 335,
+            "y": 200,
+            "params": {
+              "code": [
+                "r1c1",
+                "r3c3",
+                "r2c4",
+                "r4c2",
+                "r1c3",
+                "r3c1"
+              ],
+              "mode": "sequence",
+              "label": "4x4 panel"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r1c1",
+            "x": 270,
+            "y": 40,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r1c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r1c2",
+            "x": 305,
+            "y": 40,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r1c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r1c3",
+            "x": 340,
+            "y": 40,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r1c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r1c4",
+            "x": 375,
+            "y": 40,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r1c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r2c1",
+            "x": 270,
+            "y": 75,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r2c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r2c2",
+            "x": 305,
+            "y": 75,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r2c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r2c3",
+            "x": 340,
+            "y": 75,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r2c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r2c4",
+            "x": 375,
+            "y": 75,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r2c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r3c1",
+            "x": 270,
+            "y": 110,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r3c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r3c2",
+            "x": 305,
+            "y": 110,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r3c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r3c3",
+            "x": 340,
+            "y": 110,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r3c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r3c4",
+            "x": 375,
+            "y": 110,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r3c4"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r4c1",
+            "x": 270,
+            "y": 145,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r4c1"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r4c2",
+            "x": 305,
+            "y": 145,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r4c2"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r4c3",
+            "x": 340,
+            "y": 145,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r4c3"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "B3_r4c4",
+            "x": 375,
+            "y": 145,
+            "params": {
+              "panel": "panel_B3",
+              "label": "r4c4"
+            }
+          },
+          {
+            "kind": "clue",
+            "id": "clue_B3",
+            "x": 260,
+            "y": 235,
+            "params": {
+              "hidden": false,
+              "content": {
+                "code": "Press these 6 buttons of panel_A3 in order: the second row from the top, the third column from the left; then the bottom row, the first column from the left; then the top row, the last column on the right; then the third row from the top, the second column from the left; then the second row from the top, the second column from the left; then the bottom row, the last column on the right."
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

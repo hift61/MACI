@@ -47,7 +47,7 @@
     "stages": [
       {
         "title": "2-button codes",
-        "briefing": "Solve panel_A1 (room A) and panel_B1 (room B), 2 buttons each. Read clue_A1 / clue_B1: each holds the OTHER room's code.",
+        "briefing": "Open panel_A1 and panel_B1.",
         "objectives": [
           {
             "type": "keypad_solved",
@@ -70,7 +70,7 @@
                 "r1c4"
               ],
               "mode": "sequence",
-              "label": "4x4 panel of room A"
+              "label": "4x4 panel"
             }
           },
           {
@@ -241,10 +241,10 @@
             "params": {
               "hidden": false,
               "content": {
-                "about": "This note describes the code of panel_B1 in ROOM B (not the panel in your room).",
+                "about": "This code opens panel_B1.",
                 "code": "Press these 2 buttons of panel_B1 in order: the second row from the top, the first column from the left; then the bottom row, the third column from the left.",
-                "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top row, c1 = left column). A wrong press clears the panel; start again.",
-                "radio": "Radio limits: at most 10 characters per message and at most one message every 5 steps. Longer or more frequent messages are refused."
+                "panel": "Panel buttons are labelled r<row>c<column> (r1 = top row, c1 = left column).",
+                "radio": "Messages here are limited to 10 characters and one message every 5 steps."
               }
             }
           },
@@ -259,7 +259,7 @@
                 "r4c3"
               ],
               "mode": "sequence",
-              "label": "4x4 panel of room B"
+              "label": "4x4 panel"
             }
           },
           {
@@ -430,10 +430,10 @@
             "params": {
               "hidden": false,
               "content": {
-                "about": "This note describes the code of panel_A1 in ROOM A (not the panel in your room).",
+                "about": "This code opens panel_A1.",
                 "code": "Press these 2 buttons of panel_A1 in order: the third row from the top, the second column from the left; then the top row, the last column on the right.",
-                "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top row, c1 = left column). A wrong press clears the panel; start again.",
-                "radio": "Radio limits: at most 10 characters per message and at most one message every 5 steps. Longer or more frequent messages are refused."
+                "panel": "Panel buttons are labelled r<row>c<column> (r1 = top row, c1 = left column).",
+                "radio": "Messages here are limited to 10 characters and one message every 5 steps."
               }
             }
           }
@@ -441,7 +441,7 @@
       },
       {
         "title": "4-button codes",
-        "briefing": "Solve panel_A2 (room A) and panel_B2 (room B), 4 buttons each. Read clue_A2 / clue_B2: each holds the OTHER room's code.",
+        "briefing": "Open panel_A2 and panel_B2.",
         "objectives": [
           {
             "type": "keypad_solved",
@@ -466,7 +466,7 @@
                 "r3c3"
               ],
               "mode": "sequence",
-              "label": "4x4 panel of room A"
+              "label": "4x4 panel"
             }
           },
           {
@@ -637,10 +637,10 @@
             "params": {
               "hidden": false,
               "content": {
-                "about": "This note describes the code of panel_B2 in ROOM B (not the panel in your room).",
+                "about": "This code opens panel_B2.",
                 "code": "Press these 4 buttons of panel_B2 in order: the bottom row, the first column from the left; then the second row from the top, the second column from the left; then the third row from the top, the last column on the right; then the top row, the third column from the left.",
-                "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top row, c1 = left column). A wrong press clears the panel; start again.",
-                "radio": "Radio limits: at most 10 characters per message and at most one message every 5 steps. Longer or more frequent messages are refused."
+                "panel": "Panel buttons are labelled r<row>c<column> (r1 = top row, c1 = left column).",
+                "radio": "Messages here are limited to 10 characters and one message every 5 steps."
               }
             }
           },
@@ -657,7 +657,7 @@
                 "r1c3"
               ],
               "mode": "sequence",
-              "label": "4x4 panel of room B"
+              "label": "4x4 panel"
             }
           },
           {
@@ -828,10 +828,10 @@
             "params": {
               "hidden": false,
               "content": {
-                "about": "This note describes the code of panel_A2 in ROOM A (not the panel in your room).",
+                "about": "This code opens panel_A2.",
                 "code": "Press these 4 buttons of panel_A2 in order: the top row, the second column from the left; then the bottom row, the last column on the right; then the second row from the top, the first column from the left; then the third row from the top, the third column from the left.",
-                "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top row, c1 = left column). A wrong press clears the panel; start again.",
-                "radio": "Radio limits: at most 10 characters per message and at most one message every 5 steps. Longer or more frequent messages are refused."
+                "panel": "Panel buttons are labelled r<row>c<column> (r1 = top row, c1 = left column).",
+                "radio": "Messages here are limited to 10 characters and one message every 5 steps."
               }
             }
           }
@@ -839,7 +839,7 @@
       },
       {
         "title": "6-button codes",
-        "briefing": "Solve panel_A3 (room A) and panel_B3 (room B), 6 buttons each. Read clue_A3 / clue_B3: each holds the OTHER room's code.",
+        "briefing": "Open panel_A3 and panel_B3.",
         "objectives": [
           {
             "type": "keypad_solved",
@@ -866,7 +866,7 @@
                 "r4c4"
               ],
               "mode": "sequence",
-              "label": "4x4 panel of room A"
+              "label": "4x4 panel"
             }
           },
           {
@@ -1037,10 +1037,10 @@
             "params": {
               "hidden": false,
               "content": {
-                "about": "This note describes the code of panel_B3 in ROOM B (not the panel in your room).",
+                "about": "This code opens panel_B3.",
                 "code": "Press these 6 buttons of panel_B3 in order: the top row, the first column from the left; then the third row from the top, the third column from the left; then the second row from the top, the last column on the right; then the bottom row, the second column from the left; then the top row, the third column from the left; then the third row from the top, the first column from the left.",
-                "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top row, c1 = left column). A wrong press clears the panel; start again.",
-                "radio": "Radio limits: at most 10 characters per message and at most one message every 5 steps. Longer or more frequent messages are refused."
+                "panel": "Panel buttons are labelled r<row>c<column> (r1 = top row, c1 = left column).",
+                "radio": "Messages here are limited to 10 characters and one message every 5 steps."
               }
             }
           },
@@ -1059,7 +1059,7 @@
                 "r3c1"
               ],
               "mode": "sequence",
-              "label": "4x4 panel of room B"
+              "label": "4x4 panel"
             }
           },
           {
@@ -1230,10 +1230,10 @@
             "params": {
               "hidden": false,
               "content": {
-                "about": "This note describes the code of panel_A3 in ROOM A (not the panel in your room).",
+                "about": "This code opens panel_A3.",
                 "code": "Press these 6 buttons of panel_A3 in order: the second row from the top, the third column from the left; then the bottom row, the first column from the left; then the top row, the last column on the right; then the third row from the top, the second column from the left; then the second row from the top, the second column from the left; then the bottom row, the last column on the right.",
-                "panel": "Each panel is a 4x4 grid of buttons labelled r<row>c<column> (r1 = top row, c1 = left column). A wrong press clears the panel; start again.",
-                "radio": "Radio limits: at most 10 characters per message and at most one message every 5 steps. Longer or more frequent messages are refused."
+                "panel": "Panel buttons are labelled r<row>c<column> (r1 = top row, c1 = left column).",
+                "radio": "Messages here are limited to 10 characters and one message every 5 steps."
               }
             }
           }
@@ -1242,7 +1242,7 @@
     ]
   },
   "briefings": {
-    "A": "You are in room A (left) with your room's panel. Agent B is in the other room. A wall separates you. Each stage's clue in your room holds the OTHER room's code, while your own code is written in your teammate's room. This map has several stages that must be cleared in order; observation 'stage' shows the current stage number, title and briefing. Clearing a stage removes its objects, puts both agents back at their start positions and loads the next stage. Your memory and conversation carry over. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You are in room B (right) with your room's panel. Agent A is in the other room. A wall separates you. Each stage's clue in your room holds the OTHER room's code, while your own code is written in your teammate's room. This map has several stages that must be cleared in order; observation 'stage' shows the current stage number, title and briefing. Clearing a stage removes its objects, puts both agents back at their start positions and loads the next stage. Your memory and conversation carry over. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

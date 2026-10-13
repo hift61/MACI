@@ -2,7 +2,7 @@
 어려운 버전: 주기 9와 7, 문은 1 step만 열림, 두 판을 정확히 같은 step에 밟아야 함 (공통 시점 18, 81, 144, ...).
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
-from .common import agent, explain, hwall, make_spec, obj
+from .common import agent, hwall, make_spec, obj
 
 NAME = "s10_moving_world"
 TITLE = "움직이는 세계"
@@ -23,13 +23,11 @@ def is_open(gate, step):
 def build():
     walls = [[210, 0, 20, 260]] + hwall(100, 0, 210, gaps=[(105, 12)]) + hwall(100, 230, 440, gaps=[(335, 12)])
     manual = {
-        "gate": "The gate in front of you opens and closes by itself on a fixed repeating schedule. The other "
-                "room's gate follows a DIFFERENT schedule that only your teammate can watch.",
-        "pads": "Behind each gate is a sync_pad (pad_A, pad_B). Both pads must be entered in exactly the same "
-                "step. A lone entry pushes that agent back out in front of the gate and disables both pads "
-                "for 3 steps.",
-        "tip": "A gate stays open for a single step only, so be right in front of your gate when it opens. Every "
-               "observation contains the shared step number (self.step).",
+        "gates": "Each gate opens and closes by itself on its own fixed repeating schedule, and stays open for a "
+                 "single step at a time.",
+        "pads": "pad_A and pad_B must be entered in exactly the same step. A lone entry pushes that agent back "
+                "and disables both pads for a few steps.",
+        "clock": "Every observation contains the shared step number (self.step).",
     }
     objects = []
     for room, x in ROOM_X.items():
@@ -38,17 +36,11 @@ def build():
             obj("sync_pad", f"pad_{room}", x, 70, group="crossing", tolerance=0, return_x=x, return_y=135, cooldown=3),
             obj("clue", f"manual_{room}", x - 65 if room == "A" else x + 65, 220, content=manual, hidden=False),
         ]
-    guide = explain("sync_pad")
-    briefings = {
-        room: f"You are in room {room} ({'left' if room == 'A' else 'right'}), south of gate_{room}. Agent "
-              f"{'B' if room == 'A' else 'A'} is in the other room behind a wall. Read manual_{room}. {guide}"
-        for room in ROOM_X
-    }
     return make_spec(
         NAME, 440, 260, walls, [agent("A", 105, 200, 270), agent("B", 335, 200, 270)], objects,
         objectives=[{"type": "sync_success", "group": "crossing"}],
         hints=["Enter pad_A and pad_B (behind the two timed gates) in exactly the same step."],
-        briefings=briefings, recommended_steps=200)
+        recommended_steps=200)
 
 
 # 문 바로 앞(문 중심에서 7)에서 열리는 step T에 20 전진(문 통과), T+1에 20 전진 -> T+1에 판 진입

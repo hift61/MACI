@@ -1,0 +1,147 @@
+{
+  "seed": 0,
+  "width": 500,
+  "height": 400,
+  "walls": [
+    [
+      160,
+      80,
+      10,
+      240
+    ],
+    [
+      330,
+      80,
+      10,
+      240
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 240,
+      "y": 200,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 260,
+      "y": 200,
+      "facing": 270
+    }
+  ],
+  "objects": [
+    {
+      "kind": "checkpoint",
+      "id": "C1",
+      "x": 40,
+      "y": 40,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C1"
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "id": "C2",
+      "x": 250,
+      "y": 125,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C2"
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "id": "C3",
+      "x": 460,
+      "y": 50,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C3"
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "id": "C4",
+      "x": 60,
+      "y": 200,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C4"
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "id": "C5",
+      "x": 440,
+      "y": 210,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C5"
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "id": "C6",
+      "x": 50,
+      "y": 360,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C6"
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "id": "C7",
+      "x": 260,
+      "y": 370,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C7"
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "id": "C8",
+      "x": 450,
+      "y": 360,
+      "params": {
+        "radius": 12.0,
+        "hidden": true,
+        "label": "C8"
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "all_checkpoints_visited"
+    }
+  ],
+  "puzzles": [
+    "s09_shared_budget"
+  ],
+  "hints": [
+    "Visit all eight hidden checkpoints C1-C8 (each by at least one agent)."
+  ],
+  "config": {
+    "recommended_steps": 250,
+    "source": "scenarios/s09_shared_budget.py",
+    "clue_hints": false
+  },
+  "scenario": "s09_shared_budget_nohint",
+  "rules": {
+    "show_reward": true
+  },
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

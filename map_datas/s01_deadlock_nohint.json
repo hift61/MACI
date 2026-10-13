@@ -1,0 +1,339 @@
+{
+  "seed": 0,
+  "width": 440,
+  "height": 300,
+  "walls": [
+    [
+      200,
+      0,
+      40,
+      180
+    ],
+    [
+      0,
+      180,
+      90.0,
+      10
+    ],
+    [
+      110.0,
+      180,
+      90.0,
+      10
+    ],
+    [
+      240,
+      180,
+      90.0,
+      10
+    ],
+    [
+      350.0,
+      180,
+      90.0,
+      10
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 100,
+      "y": 120,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 340,
+      "y": 120,
+      "facing": 270
+    }
+  ],
+  "objects": [],
+  "objectives": [
+    {
+      "type": "all_stages_completed"
+    }
+  ],
+  "puzzles": [
+    "s01_deadlock"
+  ],
+  "hints": [
+    "Clear all three stages; each stage ends when both agents stand in its courtyard goal_zone."
+  ],
+  "config": {
+    "recommended_steps": 300,
+    "source": "scenarios/s01_deadlock.py",
+    "clue_hints": false
+  },
+  "scenario": "s01_deadlock_nohint",
+  "rules": {
+    "stages": [
+      {
+        "title": "one-way door",
+        "briefing": "Both of you stand inside yard_1 at the same time.",
+        "objectives": [
+          {
+            "type": "team_assembled",
+            "zone_id": "yard_1"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "door",
+            "id": "door_B1",
+            "x": 340,
+            "y": 185,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "plate_A1",
+            "x": 30,
+            "y": 30,
+            "params": {
+              "opens": [
+                "door_B1"
+              ]
+            }
+          },
+          {
+            "kind": "goal_zone",
+            "id": "yard_1",
+            "x": 220,
+            "y": 245,
+            "params": {
+              "width": 440,
+              "height": 110,
+              "label": "courtyard"
+            }
+          }
+        ]
+      },
+      {
+        "title": "symmetric deadlock",
+        "briefing": "Both of you stand inside yard_2 at the same time.",
+        "objectives": [
+          {
+            "type": "team_assembled",
+            "zone_id": "yard_2"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "door",
+            "id": "door_A2",
+            "x": 100,
+            "y": 185,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "door",
+            "id": "door_B2",
+            "x": 340,
+            "y": 185,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "plate_A2",
+            "x": 30,
+            "y": 30,
+            "params": {
+              "opens": [
+                "door_B2"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "plate_B2",
+            "x": 410,
+            "y": 30,
+            "params": {
+              "opens": [
+                "door_A2"
+              ]
+            }
+          },
+          {
+            "kind": "latch_lever",
+            "id": "release_A2",
+            "x": 200,
+            "y": 285,
+            "params": {
+              "doors": [
+                "door_A2"
+              ]
+            }
+          },
+          {
+            "kind": "latch_lever",
+            "id": "release_B2",
+            "x": 240,
+            "y": 285,
+            "params": {
+              "doors": [
+                "door_B2"
+              ]
+            }
+          },
+          {
+            "kind": "goal_zone",
+            "id": "yard_2",
+            "x": 220,
+            "y": 245,
+            "params": {
+              "width": 440,
+              "height": 110,
+              "label": "courtyard"
+            }
+          }
+        ]
+      },
+      {
+        "title": "hard deadlock",
+        "briefing": "Both of you stand inside yard_3 at the same time.",
+        "objectives": [
+          {
+            "type": "team_assembled",
+            "zone_id": "yard_3"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "door",
+            "id": "door_A3",
+            "x": 100,
+            "y": 185,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "door",
+            "id": "door_B3",
+            "x": 340,
+            "y": 185,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "plate_A3",
+            "x": 30,
+            "y": 30,
+            "params": {
+              "opens": [
+                "door_B3"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "plate_B3",
+            "x": 410,
+            "y": 30,
+            "params": {
+              "opens": [
+                "door_A3"
+              ]
+            }
+          },
+          {
+            "kind": "latch_lever",
+            "id": "release_A3",
+            "x": 420,
+            "y": 285,
+            "params": {
+              "doors": [
+                "door_A3"
+              ]
+            }
+          },
+          {
+            "kind": "latch_lever",
+            "id": "release_B3",
+            "x": 20,
+            "y": 285,
+            "params": {
+              "doors": [
+                "door_B3"
+              ]
+            }
+          },
+          {
+            "kind": "goal_zone",
+            "id": "yard_3",
+            "x": 220,
+            "y": 245,
+            "params": {
+              "width": 440,
+              "height": 110,
+              "label": "courtyard"
+            }
+          }
+        ],
+        "walls": [
+          [
+            200,
+            0,
+            40,
+            180
+          ],
+          [
+            0,
+            180,
+            90.0,
+            10
+          ],
+          [
+            110.0,
+            180,
+            90.0,
+            10
+          ],
+          [
+            240,
+            180,
+            90.0,
+            10
+          ],
+          [
+            350.0,
+            180,
+            90.0,
+            10
+          ],
+          [
+            0,
+            95,
+            150,
+            10
+          ],
+          [
+            290,
+            95,
+            150,
+            10
+          ]
+        ]
+      }
+    ]
+  },
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

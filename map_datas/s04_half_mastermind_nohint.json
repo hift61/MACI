@@ -1,0 +1,332 @@
+{
+  "seed": 0,
+  "width": 440,
+  "height": 260,
+  "walls": [
+    [
+      210,
+      0,
+      20,
+      260
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 105,
+      "y": 160,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 335,
+      "y": 160,
+      "facing": 270
+    }
+  ],
+  "objects": [],
+  "objectives": [
+    {
+      "type": "all_stages_completed"
+    }
+  ],
+  "puzzles": [
+    "s04_half_mastermind"
+  ],
+  "hints": [
+    "Clear all three stages; each stage ends when that stage's colour panel in room A is solved."
+  ],
+  "config": {
+    "recommended_steps": 400,
+    "source": "scenarios/s04_half_mastermind.py",
+    "clue_hints": false
+  },
+  "scenario": "s04_half_mastermind_nohint",
+  "rules": {
+    "stages": [
+      {
+        "title": "3 of 4 colours",
+        "briefing": "Open color_panel_1.",
+        "objectives": [
+          {
+            "type": "keypad_solved",
+            "panel_id": "color_panel_1"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "keypad",
+            "id": "color_panel_1",
+            "x": 105,
+            "y": 25,
+            "params": {
+              "code": [
+                "green",
+                "yellow",
+                "red"
+              ],
+              "mode": "mastermind",
+              "display_id": "result_screen_1",
+              "label": "3-colour code panel"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "btn1_red",
+            "x": 35,
+            "y": 70,
+            "params": {
+              "panel": "color_panel_1",
+              "label": "red"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "btn1_green",
+            "x": 65,
+            "y": 70,
+            "params": {
+              "panel": "color_panel_1",
+              "label": "green"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "btn1_blue",
+            "x": 95,
+            "y": 70,
+            "params": {
+              "panel": "color_panel_1",
+              "label": "blue"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "btn1_yellow",
+            "x": 125,
+            "y": 70,
+            "params": {
+              "panel": "color_panel_1",
+              "label": "yellow"
+            }
+          },
+          {
+            "kind": "display",
+            "id": "result_screen_1",
+            "x": 335,
+            "y": 40,
+            "params": {
+              "label": "code result screen",
+              "content": {
+                "attempt": 0,
+                "exact": null,
+                "misplaced": null
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "4 of 5 colours",
+        "briefing": "Open color_panel_2.",
+        "objectives": [
+          {
+            "type": "keypad_solved",
+            "panel_id": "color_panel_2"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "keypad",
+            "id": "color_panel_2",
+            "x": 105,
+            "y": 25,
+            "params": {
+              "code": [
+                "blue",
+                "red",
+                "purple",
+                "green"
+              ],
+              "mode": "mastermind",
+              "display_id": "result_screen_2",
+              "label": "4-colour code panel"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "btn2_red",
+            "x": 35,
+            "y": 70,
+            "params": {
+              "panel": "color_panel_2",
+              "label": "red"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "btn2_green",
+            "x": 65,
+            "y": 70,
+            "params": {
+              "panel": "color_panel_2",
+              "label": "green"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "btn2_blue",
+            "x": 95,
+            "y": 70,
+            "params": {
+              "panel": "color_panel_2",
+              "label": "blue"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "btn2_yellow",
+            "x": 125,
+            "y": 70,
+            "params": {
+              "panel": "color_panel_2",
+              "label": "yellow"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "btn2_purple",
+            "x": 155,
+            "y": 70,
+            "params": {
+              "panel": "color_panel_2",
+              "label": "purple"
+            }
+          },
+          {
+            "kind": "display",
+            "id": "result_screen_2",
+            "x": 335,
+            "y": 40,
+            "params": {
+              "label": "code result screen",
+              "content": {
+                "attempt": 0,
+                "exact": null,
+                "misplaced": null
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "5 of 6 colours",
+        "briefing": "Open color_panel_3.",
+        "objectives": [
+          {
+            "type": "keypad_solved",
+            "panel_id": "color_panel_3"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "keypad",
+            "id": "color_panel_3",
+            "x": 105,
+            "y": 25,
+            "params": {
+              "code": [
+                "orange",
+                "blue",
+                "yellow",
+                "red",
+                "purple"
+              ],
+              "mode": "mastermind",
+              "display_id": "result_screen_3",
+              "label": "5-colour code panel"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "btn3_red",
+            "x": 35,
+            "y": 70,
+            "params": {
+              "panel": "color_panel_3",
+              "label": "red"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "btn3_green",
+            "x": 65,
+            "y": 70,
+            "params": {
+              "panel": "color_panel_3",
+              "label": "green"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "btn3_blue",
+            "x": 95,
+            "y": 70,
+            "params": {
+              "panel": "color_panel_3",
+              "label": "blue"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "btn3_yellow",
+            "x": 125,
+            "y": 70,
+            "params": {
+              "panel": "color_panel_3",
+              "label": "yellow"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "btn3_purple",
+            "x": 155,
+            "y": 70,
+            "params": {
+              "panel": "color_panel_3",
+              "label": "purple"
+            }
+          },
+          {
+            "kind": "keypad_button",
+            "id": "btn3_orange",
+            "x": 185,
+            "y": 70,
+            "params": {
+              "panel": "color_panel_3",
+              "label": "orange"
+            }
+          },
+          {
+            "kind": "display",
+            "id": "result_screen_3",
+            "x": 335,
+            "y": 40,
+            "params": {
+              "label": "code result screen",
+              "content": {
+                "attempt": 0,
+                "exact": null,
+                "misplaced": null
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

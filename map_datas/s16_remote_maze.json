@@ -1,0 +1,230 @@
+{
+  "seed": 0,
+  "width": 420,
+  "height": 300,
+  "walls": [],
+  "agents": [
+    {
+      "id": "A",
+      "x": 28,
+      "y": 150,
+      "facing": 0
+    },
+    {
+      "id": "B",
+      "x": 380,
+      "y": 150,
+      "facing": 180,
+      "view_radius": 320
+    }
+  ],
+  "objects": [
+    {
+      "kind": "logic_door",
+      "id": "D1",
+      "x": 60,
+      "y": 150,
+      "params": {
+        "levers": [
+          "L1",
+          "L4"
+        ],
+        "parity": 1
+      }
+    },
+    {
+      "kind": "logic_door",
+      "id": "D2",
+      "x": 116,
+      "y": 150,
+      "params": {
+        "levers": [
+          "L1",
+          "L2"
+        ],
+        "parity": 1
+      }
+    },
+    {
+      "kind": "logic_door",
+      "id": "D3",
+      "x": 172,
+      "y": 150,
+      "params": {
+        "levers": [
+          "L2",
+          "L3",
+          "L4"
+        ],
+        "parity": 1
+      }
+    },
+    {
+      "kind": "logic_door",
+      "id": "D4",
+      "x": 228,
+      "y": 150,
+      "params": {
+        "levers": [
+          "L3"
+        ],
+        "parity": 0
+      }
+    },
+    {
+      "kind": "switch_lever",
+      "id": "L1",
+      "x": 330,
+      "y": 60,
+      "params": {
+        "cooldown": 0
+      }
+    },
+    {
+      "kind": "switch_lever",
+      "id": "L2",
+      "x": 330,
+      "y": 120,
+      "params": {
+        "cooldown": 0
+      }
+    },
+    {
+      "kind": "switch_lever",
+      "id": "L3",
+      "x": 330,
+      "y": 180,
+      "params": {
+        "cooldown": 0
+      }
+    },
+    {
+      "kind": "switch_lever",
+      "id": "L4",
+      "x": 330,
+      "y": 240,
+      "params": {
+        "cooldown": 0
+      }
+    },
+    {
+      "kind": "goal_zone",
+      "id": "goal",
+      "x": 256,
+      "y": 150,
+      "params": {
+        "width": 48,
+        "height": 300,
+        "label": "maze exit",
+        "agents": [
+          "A"
+        ]
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "maze_note",
+      "x": 28,
+      "y": 250,
+      "params": {
+        "hidden": false,
+        "content": {
+          "doors": "The doors D1-D4 are not opened from inside the maze.",
+          "glass": "Glass blocks movement but not sight."
+        }
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "control_note",
+      "x": 400,
+      "y": 280,
+      "params": {
+        "hidden": false,
+        "content": {
+          "levers": "Levers L1-L4 are secretly wired to the doors D1-D4. Pulling a lever flips every door it is wired to (open <-> closed).",
+          "warning": "Not every combination of open doors is possible."
+        }
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "team_assembled",
+      "zone_id": "goal"
+    }
+  ],
+  "puzzles": [
+    "s16_remote_maze"
+  ],
+  "hints": [
+    "Agent A must reach the goal_zone 'goal' (the easternmost maze cell)."
+  ],
+  "config": {
+    "recommended_steps": 150,
+    "source": "scenarios/s16_remote_maze.py"
+  },
+  "scenario": "s16_remote_maze",
+  "rules": {
+    "glass_walls": [
+      [
+        280,
+        0,
+        8,
+        300
+      ],
+      [
+        56,
+        0,
+        8,
+        140.0
+      ],
+      [
+        56,
+        160.0,
+        8,
+        140.0
+      ],
+      [
+        112,
+        0,
+        8,
+        140.0
+      ],
+      [
+        112,
+        160.0,
+        8,
+        140.0
+      ],
+      [
+        168,
+        0,
+        8,
+        140.0
+      ],
+      [
+        168,
+        160.0,
+        8,
+        140.0
+      ],
+      [
+        224,
+        0,
+        8,
+        140.0
+      ],
+      [
+        224,
+        160.0,
+        8,
+        140.0
+      ]
+    ]
+  },
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

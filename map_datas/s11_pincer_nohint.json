@@ -1,0 +1,211 @@
+{
+  "seed": 0,
+  "width": 460,
+  "height": 320,
+  "walls": [
+    [
+      180,
+      110,
+      100,
+      100
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 60,
+      "y": 160,
+      "facing": 0
+    },
+    {
+      "id": "B",
+      "x": 400,
+      "y": 160,
+      "facing": 180
+    }
+  ],
+  "objects": [],
+  "objectives": [
+    {
+      "type": "all_stages_completed"
+    }
+  ],
+  "puzzles": [
+    "s11_pincer"
+  ],
+  "hints": [
+    "Clear all three stages; each stage ends when that stage's core is delivered to its dock."
+  ],
+  "config": {
+    "recommended_steps": 400,
+    "source": "scenarios/s11_pincer.py",
+    "clue_hints": false
+  },
+  "scenario": "s11_pincer_nohint",
+  "rules": {
+    "stages": [
+      {
+        "title": "resting core",
+        "briefing": "Deliver core_1 to dock_1.",
+        "objectives": [
+          {
+            "type": "delivery_complete",
+            "receptacle_id": "dock_1"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "item",
+            "id": "core_1",
+            "x": 330,
+            "y": 60,
+            "params": {
+              "category": "coop",
+              "required_agents": 2
+            }
+          },
+          {
+            "kind": "receptacle",
+            "id": "dock_1",
+            "x": 420,
+            "y": 295,
+            "params": {
+              "accepts": [
+                "core_1"
+              ],
+              "target": 1,
+              "radius": 20.0,
+              "label": "core dock"
+            }
+          }
+        ]
+      },
+      {
+        "title": "slow core",
+        "briefing": "Deliver core_2 to dock_2.",
+        "objectives": [
+          {
+            "type": "delivery_complete",
+            "receptacle_id": "dock_2"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "mover",
+            "id": "core_2",
+            "x": 130,
+            "y": 60,
+            "params": {
+              "waypoints": [
+                [
+                  330,
+                  60
+                ],
+                [
+                  330,
+                  260
+                ],
+                [
+                  130,
+                  260
+                ],
+                [
+                  130,
+                  60
+                ]
+              ],
+              "speed": 6.0,
+              "object_type": "item",
+              "loop": true,
+              "extra": {
+                "category": "coop",
+                "required_agents": 2,
+                "label": "power core",
+                "_hide_path": true
+              }
+            }
+          },
+          {
+            "kind": "receptacle",
+            "id": "dock_2",
+            "x": 420,
+            "y": 295,
+            "params": {
+              "accepts": [
+                "core_2"
+              ],
+              "target": 1,
+              "radius": 20.0,
+              "label": "core dock"
+            }
+          }
+        ]
+      },
+      {
+        "title": "fast core",
+        "briefing": "Deliver core_3 to dock_3.",
+        "objectives": [
+          {
+            "type": "delivery_complete",
+            "receptacle_id": "dock_3"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "mover",
+            "id": "core_3",
+            "x": 130,
+            "y": 60,
+            "params": {
+              "waypoints": [
+                [
+                  330,
+                  60
+                ],
+                [
+                  330,
+                  260
+                ],
+                [
+                  130,
+                  260
+                ],
+                [
+                  130,
+                  60
+                ]
+              ],
+              "speed": 12.0,
+              "object_type": "item",
+              "loop": true,
+              "extra": {
+                "category": "coop",
+                "required_agents": 2,
+                "label": "power core",
+                "_hide_path": true
+              }
+            }
+          },
+          {
+            "kind": "receptacle",
+            "id": "dock_3",
+            "x": 420,
+            "y": 295,
+            "params": {
+              "accepts": [
+                "core_3"
+              ],
+              "target": 1,
+              "radius": 20.0,
+              "label": "core dock"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

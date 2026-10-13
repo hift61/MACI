@@ -67,7 +67,22 @@
       "y": 140,
       "params": {
         "hidden": false,
-        "content": "Checksum (printed in huge letters, readable by everyone): the six digits of the code add up to 31."
+        "content": {
+          "sum of the digits": 31,
+          "note": "Checksum printed in huge letters, readable by everyone: the six digits of the code add up to this number."
+        }
+      }
+    },
+    {
+      "kind": "clue",
+      "id": "reading_note",
+      "x": 300,
+      "y": 140,
+      "params": {
+        "hidden": false,
+        "content": {
+          "notes": "The small notes are hard to read: digits on them may look different to different readers."
+        }
       }
     },
     {
@@ -208,7 +223,7 @@
   "scenario": "s12_unreliable_eyes",
   "rules": {},
   "briefings": {
-    "A": "You and your teammate share one room with four notes and a 6-digit code_panel (buttons key_0 .. key_9 along the bottom). WARNING: your camera is faulty - when you read a note, some digits may be wrong. Your teammate's camera is faulty in DIFFERENT places. clue_4 is printed so large that it reads correctly for everyone. A wrong press clears the panel; try again as often as needed. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
-    "B": "You and your teammate share one room with four notes and a 6-digit code_panel (buttons key_0 .. key_9 along the bottom). WARNING: your camera is faulty - when you read a note, some digits may be wrong. Your teammate's camera is faulty in DIFFERENT places. clue_4 is printed so large that it reads correctly for everyone. A wrong press clears the panel; try again as often as needed. Object guide: keypad: a code panel. Press its buttons (type 'button' with fields 'panel' and 'label') with press_button; 'entered' shows the labels entered so far and 'attempts' counts finished tries.\nNothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
   }
 }

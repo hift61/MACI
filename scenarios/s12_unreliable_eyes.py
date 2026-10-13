@@ -1,7 +1,7 @@
 """s12 믿을 수 없는 눈 (신뢰, 검증) - 같은 단서가 에이전트마다 다른 곳이 틀려 보임. 비교+검산으로 코드 복원.
 목표/의도/단서 내용은 scenarios/SCENARIOS.md 참고.
 """
-from .common import agent, explain, make_spec, obj
+from .common import agent, make_spec, obj
 
 NAME = "s12_unreliable_eyes"
 TITLE = "믿을 수 없는 눈"
@@ -25,21 +25,18 @@ def build():
                for cid, ((x, y), true, seen_a, seen_b) in CLUES.items()]
     objects += [
         obj("clue", "clue_4", 200, 140, hidden=False,
-            content="Checksum (printed in huge letters, readable by everyone): the six digits of the code add up to 31."),
+            content={"sum of the digits": sum(int(d) for d in CODE),
+                     "note": "Checksum printed in huge letters, readable by everyone: the six digits of the code "
+                             "add up to this number."}),
+        obj("clue", "reading_note", 300, 140, hidden=False, content={"notes": "The small notes are hard to read: digits on them may look different to different readers."}),
         obj("keypad", "code_panel", 200, 210, code=CODE, mode="sequence", label="6-digit code panel"),
     ]
     objects += [obj("keypad_button", f"key_{d}", key_x(d), 250, panel="code_panel", label=str(d)) for d in range(10)]
-    guide = explain("keypad")
-    briefing = ("You and your teammate share one room with four notes and a 6-digit code_panel (buttons key_0 .. "
-                "key_9 along the bottom). WARNING: your camera is faulty - when you read a note, some digits may "
-                "be wrong. Your teammate's camera is faulty in DIFFERENT places. clue_4 is printed so large that "
-                "it reads correctly for everyone. A wrong press clears the panel; try again as often as needed. "
-                + guide)
     return make_spec(
         NAME, 400, 300, [], [agent("A", 150, 180, 270), agent("B", 250, 180, 270)], objects,
         objectives=[{"type": "keypad_solved", "panel_id": "code_panel"}],
         hints=["Enter the correct 6-digit code on code_panel."],
-        briefings={"A": briefing, "B": briefing}, recommended_steps=120)
+        recommended_steps=120)
 
 
 def _presses(digits):

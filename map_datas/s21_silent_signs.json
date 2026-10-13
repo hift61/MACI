@@ -1,0 +1,272 @@
+{
+  "seed": 0,
+  "width": 400,
+  "height": 320,
+  "walls": [],
+  "agents": [
+    {
+      "id": "A",
+      "x": 100,
+      "y": 100,
+      "facing": 270
+    },
+    {
+      "id": "B",
+      "x": 300,
+      "y": 220,
+      "facing": 270
+    }
+  ],
+  "objects": [
+    {
+      "kind": "variant_clue",
+      "id": "secret_code",
+      "x": 60,
+      "y": 60,
+      "params": {
+        "hidden": false,
+        "content": "(The ink is too faint for you to read.)",
+        "variants": {
+          "A": "Code for color_panel, in this order: green, blue, red, yellow."
+        }
+      }
+    },
+    {
+      "kind": "keypad",
+      "id": "color_panel",
+      "x": 310,
+      "y": 265,
+      "params": {
+        "code": [
+          "green",
+          "blue",
+          "red",
+          "yellow"
+        ],
+        "mode": "sequence",
+        "operators": [
+          "B"
+        ],
+        "label": "4-colour panel"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "btn_red",
+      "x": 260,
+      "y": 290,
+      "params": {
+        "panel": "color_panel",
+        "label": "red"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "btn_green",
+      "x": 285,
+      "y": 290,
+      "params": {
+        "panel": "color_panel",
+        "label": "green"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "btn_blue",
+      "x": 310,
+      "y": 290,
+      "params": {
+        "panel": "color_panel",
+        "label": "blue"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "btn_yellow",
+      "x": 335,
+      "y": 290,
+      "params": {
+        "panel": "color_panel",
+        "label": "yellow"
+      }
+    },
+    {
+      "kind": "keypad_button",
+      "id": "btn_purple",
+      "x": 360,
+      "y": 290,
+      "params": {
+        "panel": "color_panel",
+        "label": "purple"
+      }
+    },
+    {
+      "kind": "marker",
+      "id": "mat_red",
+      "x": 120,
+      "y": 160,
+      "params": {
+        "label": "red mat"
+      }
+    },
+    {
+      "kind": "marker",
+      "id": "mat_green",
+      "x": 160,
+      "y": 160,
+      "params": {
+        "label": "green mat"
+      }
+    },
+    {
+      "kind": "marker",
+      "id": "mat_blue",
+      "x": 200,
+      "y": 160,
+      "params": {
+        "label": "blue mat"
+      }
+    },
+    {
+      "kind": "marker",
+      "id": "mat_yellow",
+      "x": 240,
+      "y": 160,
+      "params": {
+        "label": "yellow mat"
+      }
+    },
+    {
+      "kind": "marker",
+      "id": "mat_purple",
+      "x": 280,
+      "y": 160,
+      "params": {
+        "label": "purple mat"
+      }
+    },
+    {
+      "kind": "item",
+      "id": "stone_1",
+      "x": 40,
+      "y": 120,
+      "params": {}
+    },
+    {
+      "kind": "item",
+      "id": "stone_2",
+      "x": 60,
+      "y": 200,
+      "params": {}
+    },
+    {
+      "kind": "item",
+      "id": "stone_3",
+      "x": 90,
+      "y": 260,
+      "params": {}
+    },
+    {
+      "kind": "item",
+      "id": "stone_4",
+      "x": 200,
+      "y": 40,
+      "params": {}
+    },
+    {
+      "kind": "item",
+      "id": "stone_5",
+      "x": 300,
+      "y": 60,
+      "params": {}
+    },
+    {
+      "kind": "item",
+      "id": "stone_6",
+      "x": 360,
+      "y": 120,
+      "params": {}
+    },
+    {
+      "kind": "item",
+      "id": "stone_7",
+      "x": 380,
+      "y": 220,
+      "params": {}
+    },
+    {
+      "kind": "item",
+      "id": "stone_8",
+      "x": 30,
+      "y": 290,
+      "params": {}
+    },
+    {
+      "kind": "item",
+      "id": "stone_9",
+      "x": 150,
+      "y": 60,
+      "params": {}
+    },
+    {
+      "kind": "item",
+      "id": "stone_10",
+      "x": 250,
+      "y": 100,
+      "params": {}
+    },
+    {
+      "kind": "item",
+      "id": "stone_11",
+      "x": 150,
+      "y": 230,
+      "params": {}
+    },
+    {
+      "kind": "item",
+      "id": "stone_12",
+      "x": 340,
+      "y": 30,
+      "params": {}
+    },
+    {
+      "kind": "clue",
+      "id": "rules",
+      "x": 200,
+      "y": 220,
+      "params": {
+        "hidden": false,
+        "content": {
+          "silence": "Messages are refused here.",
+          "secret_code": "Only agent A can read the faint note secret_code.",
+          "panel": "color_panel opens when 4 colours (out of red, green, blue, yellow, purple; none repeated) are pressed in the right order.",
+          "yard": "Anything dropped stays where it was dropped, and everyone can see it."
+        }
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "keypad_solved",
+      "panel_id": "color_panel"
+    }
+  ],
+  "puzzles": [
+    "s21_silent_signs"
+  ],
+  "hints": [
+    "Unlock color_panel (only agent B can press it; only agent A can read the code)."
+  ],
+  "config": {
+    "recommended_steps": 200,
+    "source": "scenarios/s21_silent_signs.py"
+  },
+  "scenario": "s21_silent_signs",
+  "rules": {
+    "message_disabled": true
+  },
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

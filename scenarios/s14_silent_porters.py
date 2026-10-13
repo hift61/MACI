@@ -26,7 +26,15 @@ def _dock(n, x, y):
 STAGE_STARTS = {2: {"A": [60, 160, 0], "B": [170, 290, 270]}}  # 2단계는 둘 다 상자 쪽에서 시작 (운반에 집중)
 
 
+HINTS = {  # 단계 -> 시작 지점 근처 쪽지 (장치 수준 힌트만)
+    1: "A crate is too heavy for one agent. Each dock accepts its own crate.",
+    2: "A crate is too heavy for one agent. Each dock accepts its own crate.",
+    3: "This crate moves on its own along a hidden path. The gate here opens and closes on its own schedule.",
+}
+
+
 def _stage(n, objects):
+    objects = objects + [obj("clue", f"hint_{n}", 85, 195, hidden=False, content={"hint": HINTS[n]})]
     return stage(f"stage {n}", f"Deliver crate_{n} to dock_{n}.",
                  [{"type": "delivery_complete", "receptacle_id": f"dock_{n}"}], objects, walls=STAGE_WALLS[n],
                  agents=STAGE_STARTS.get(n))
@@ -41,11 +49,10 @@ def build():
                    obj("periodic_door", "gate_3", 305, 160, radius=12.0, **DOOR_3),
                    _dock(3, 390, 160)]),
     ]
-    briefings = {"A": "You start on the left side of a hall.", "B": "You start in the top-right corner of a hall."}
     return make_spec(
         NAME, 460, 320, [], [agent("A", 60, 160, 0), agent("B", 400, 60, 180)], [],
         objectives=STAGED_OBJECTIVES, hints=["Deliver the crate of every stage to its dock."],
-        briefings=briefings, rules={"stages": stages}, recommended_steps=570)
+        rules={"stages": stages}, recommended_steps=570)
 
 
 def _both_near(item_id, radius=14.0):

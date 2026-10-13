@@ -1,0 +1,162 @@
+{
+  "seed": 0,
+  "width": 460,
+  "height": 300,
+  "walls": [
+    [
+      225,
+      0,
+      10,
+      120
+    ],
+    [
+      225,
+      180,
+      10,
+      120
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "x": 120,
+      "y": 150,
+      "facing": 0
+    },
+    {
+      "id": "B",
+      "x": 340,
+      "y": 150,
+      "facing": 180
+    }
+  ],
+  "objects": [
+    {
+      "kind": "chest",
+      "id": "chest_a1",
+      "x": 100,
+      "y": 240,
+      "params": {
+        "contents": [
+          {
+            "kind": "key",
+            "id": "key_b2",
+            "unlocks": "chest_b2"
+          }
+        ],
+        "label": "locked chest"
+      }
+    },
+    {
+      "kind": "chest",
+      "id": "chest_a2",
+      "x": 180,
+      "y": 60,
+      "params": {
+        "contents": [
+          {
+            "kind": "item",
+            "id": "scepter"
+          }
+        ],
+        "label": "locked chest"
+      }
+    },
+    {
+      "kind": "chest",
+      "id": "chest_b1",
+      "x": 300,
+      "y": 240,
+      "params": {
+        "contents": [
+          {
+            "kind": "key",
+            "id": "key_a2",
+            "unlocks": "chest_a2"
+          }
+        ],
+        "label": "locked chest"
+      }
+    },
+    {
+      "kind": "chest",
+      "id": "chest_b2",
+      "x": 400,
+      "y": 240,
+      "params": {
+        "contents": [
+          {
+            "kind": "item",
+            "id": "crown"
+          }
+        ],
+        "label": "locked chest"
+      }
+    },
+    {
+      "kind": "key",
+      "id": "key_b1",
+      "x": 60,
+      "y": 60,
+      "params": {
+        "unlocks": "chest_b1"
+      }
+    },
+    {
+      "kind": "key",
+      "id": "key_a1",
+      "x": 400,
+      "y": 60,
+      "params": {
+        "unlocks": "chest_a1"
+      }
+    },
+    {
+      "kind": "receptacle",
+      "id": "altar",
+      "x": 60,
+      "y": 150,
+      "params": {
+        "accepts": [
+          "crown",
+          "scepter"
+        ],
+        "target": 2,
+        "radius": 20.0,
+        "label": "altar"
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "type": "delivery_complete",
+      "receptacle_id": "altar"
+    }
+  ],
+  "puzzles": [
+    "s23_key_chests"
+  ],
+  "hints": [
+    "Deliver the crown and the scepter to the receptacle 'altar'."
+  ],
+  "config": {
+    "recommended_steps": 200,
+    "source": "scenarios/s23_key_chests.py",
+    "clue_hints": false
+  },
+  "scenario": "s23_key_chests_nohint",
+  "rules": {
+    "glass_walls": [
+      [
+        225,
+        120,
+        10,
+        60
+      ]
+    ]
+  },
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}

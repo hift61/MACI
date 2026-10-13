@@ -11,9 +11,11 @@ plan 항목
   ("at_step", n)          관찰의 step이 n이 될 때까지 noop
   ("until", fn)           fn(env)가 True가 될 때까지 noop
   ("barrier", name)       모든 에이전트가 같은 barrier에 도착한 다음 step에 함께 출발 (2인 운반용)
+  ("lock", name) / ("unlock", name)  한 번에 한 에이전트만 지나가는 구간 (다른 사람이 잡고 있으면 대기)
   ("call", fn)            fn(env, agent_id, observation)이 action을 주면 실행, None이면 다음 항목
   ("stage", n)            단계형 맵에서 n단계가 시작될 때까지 대기. n단계가 시작되면 그 앞에 남은 항목은 건너뜀
                           (단계가 바뀌면 에이전트가 시작 위치로 돌아가므로, 지난 단계의 남은 이동을 버림)
+                          (fetch(...), drop_prefix(...)가 이 형식의 fn을 만들어 줌)
 """
 import math
 import threading
@@ -26,6 +28,7 @@ class Oracle:
     def __init__(self, agent_ids):
         self.agent_ids = list(agent_ids)
         self.barriers: dict[str, dict[str, int]] = {}
+        self.locks: dict[str, str] = {}  # 구간 이름 -> 잡고 있는 agent_id
         self.lock = threading.Lock()
 
 
@@ -87,11 +90,66 @@ class ScriptPolicy:
                 arrived.setdefault(self.agent_id, me["step"])
                 ready = all(a in arrived and arrived[a] < me["step"] for a in self.oracle.agent_ids)
             return None if ready else {"type": "noop"}
+        if kind == "lock":
+            with self.oracle.lock:
+                holder = self.oracle.locks.setdefault(item[1], self.agent_id)
+            return None if holder == self.agent_id else {"type": "noop"}
+        if kind == "unlock":
+            with self.oracle.lock:
+                if self.oracle.locks.get(item[1]) == self.agent_id:
+                    del self.oracle.locks[item[1]]
+            return None
         if kind == "call":
             return item[1](self.env, self.agent_id, obs)
         if kind == "stage":
             return {"type": "noop"}
         raise ValueError(f"unknown plan item: {item!r}")
+
+
+def steer(me, tx, ty, step=20.0) -> dict:
+    dx, dy = tx - me["x"], ty - me["y"]
+    angle = (math.degrees(math.atan2(dy, dx)) - me["facing"] + 180) % 360 - 180
+    if abs(angle) > 1e-6:
+        return {"type": "turn", "angle": angle}
+    return {"type": "move_forward", "distance": min(step, math.hypot(dx, dy))}
+
+
+# call용: id가 prefix로 시작하는 물건을 count개 들 때까지 가장 가까운 것부터 주움.
+# region (x0, y0, x1, y1)을 주면 그 안에 놓인 것만 노림. 노릴 것이 없으면 기다림
+def fetch(prefix, count=1, region=None, where=None):
+    def run(env, agent_id, obs):
+        me = obs["self"]
+        if sum(o["object_id"].startswith(prefix) for o in me["inventory"]) >= count:
+            return None
+        targets = [o for o in env.objects.values() if o["object_id"].startswith(prefix) and o["type"] in ("item", "key")
+                   and (region is None or (region[0] <= o["x"] <= region[2] and region[1] <= o["y"] <= region[3]))
+                   and (where is None or where(o))]
+        if not targets:
+            return {"type": "noop"}
+        target = min(targets, key=lambda o: math.hypot(o["x"] - me["x"], o["y"] - me["y"]))
+        if math.hypot(target["x"] - me["x"], target["y"] - me["y"]) <= 14.5:
+            return {"type": "pick_up", "object_id": target["object_id"]}
+        return steer(me, target["x"], target["y"])
+    return run
+
+
+# call용: 들고 있는 물건 중 id가 prefix로 시작하는 것을 count개(None이면 전부) 내려놓음
+def drop_prefix(prefix, count=None):
+    state = {"dropped": 0}
+
+    def run(env, agent_id, obs):
+        held = [o for o in obs["self"]["inventory"] if o["object_id"].startswith(prefix)]
+        if not held or (count is not None and state["dropped"] >= count):
+            return None
+        state["dropped"] += 1
+        return {"type": "drop", "object_id": held[0]["object_id"]}
+    return run
+
+
+# until용: id가 prefix로 시작하는 물건이 region 안 바닥에 있으면 True
+def lying(prefix, region):
+    return lambda env: any(o["object_id"].startswith(prefix) and region[0] <= o["x"] <= region[2]
+                           and region[1] <= o["y"] <= region[3] for o in env.objects.values())
 
 
 # 2인 운반: 두 에이전트가 같은 위치에서 똑같은 회전/전진을 같은 step에 하도록 펼친 plan
@@ -122,8 +180,10 @@ def unlocked(door_id):
 
 
 # module: 시나리오 모듈, mode: "solution" 또는 "mistake". 반환: (클리어 step 또는 None, env)
-def run(module, mode: str = "solution", max_steps: int = 1000):
-    env, _, objectives = build_environment(module.build())
+def run(module, mode: str = "solution", max_steps: int = 1000, clue_hints: bool = True):
+    from scenarios.common import without_clue_hints
+    spec = module.build()
+    env, _, objectives = build_environment(spec if clue_hints else without_clue_hints(spec))
     plans = getattr(module, mode)(env)
     oracle = Oracle(env.agents)
     for agent_id, plan in plans.items():

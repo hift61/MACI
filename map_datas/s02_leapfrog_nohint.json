@@ -1,0 +1,737 @@
+{
+  "seed": 0,
+  "width": 700,
+  "height": 200,
+  "walls": [],
+  "agents": [
+    {
+      "id": "A",
+      "x": 30,
+      "y": 80,
+      "facing": 0
+    },
+    {
+      "id": "B",
+      "x": 30,
+      "y": 120,
+      "facing": 0
+    }
+  ],
+  "objects": [],
+  "objectives": [
+    {
+      "type": "all_stages_completed"
+    }
+  ],
+  "puzzles": [
+    "s02_leapfrog"
+  ],
+  "hints": [
+    "Clear all three stages; each stage ends when both agents stand in its exit hall goal_zone."
+  ],
+  "config": {
+    "recommended_steps": 450,
+    "source": "scenarios/s02_leapfrog.py",
+    "clue_hints": false
+  },
+  "scenario": "s02_leapfrog_nohint",
+  "rules": {
+    "stages": [
+      {
+        "title": "2 doors",
+        "briefing": "Both of you stand inside exit_1 at the same time.",
+        "objectives": [
+          {
+            "type": "team_assembled",
+            "zone_id": "exit_1"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "door",
+            "id": "d1_1",
+            "x": 95,
+            "y": 100,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "b1_1",
+            "x": 60,
+            "y": 25,
+            "params": {
+              "opens": [
+                "d1_1"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "f1_1",
+            "x": 130,
+            "y": 175,
+            "params": {
+              "opens": [
+                "d1_1"
+              ]
+            }
+          },
+          {
+            "kind": "door",
+            "id": "d1_2",
+            "x": 175,
+            "y": 100,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "b1_2",
+            "x": 140,
+            "y": 25,
+            "params": {
+              "opens": [
+                "d1_2"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "f1_2",
+            "x": 210,
+            "y": 175,
+            "params": {
+              "opens": [
+                "d1_2"
+              ]
+            }
+          },
+          {
+            "kind": "goal_zone",
+            "id": "exit_1",
+            "x": 440.0,
+            "y": 100,
+            "params": {
+              "width": 520,
+              "height": 200,
+              "label": "exit hall"
+            }
+          }
+        ],
+        "walls": [
+          [
+            90,
+            0,
+            10,
+            90.0
+          ],
+          [
+            90,
+            110.0,
+            10,
+            90.0
+          ],
+          [
+            170,
+            0,
+            10,
+            90.0
+          ],
+          [
+            170,
+            110.0,
+            10,
+            90.0
+          ]
+        ]
+      },
+      {
+        "title": "5 doors",
+        "briefing": "Both of you stand inside exit_2 at the same time.",
+        "objectives": [
+          {
+            "type": "team_assembled",
+            "zone_id": "exit_2"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "door",
+            "id": "d2_1",
+            "x": 95,
+            "y": 100,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "b2_1",
+            "x": 60,
+            "y": 25,
+            "params": {
+              "opens": [
+                "d2_1"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "f2_1",
+            "x": 130,
+            "y": 175,
+            "params": {
+              "opens": [
+                "d2_1"
+              ]
+            }
+          },
+          {
+            "kind": "door",
+            "id": "d2_2",
+            "x": 175,
+            "y": 100,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "b2_2",
+            "x": 140,
+            "y": 25,
+            "params": {
+              "opens": [
+                "d2_2"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "f2_2",
+            "x": 210,
+            "y": 175,
+            "params": {
+              "opens": [
+                "d2_2"
+              ]
+            }
+          },
+          {
+            "kind": "door",
+            "id": "d2_3",
+            "x": 255,
+            "y": 100,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "b2_3",
+            "x": 220,
+            "y": 25,
+            "params": {
+              "opens": [
+                "d2_3"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "f2_3",
+            "x": 290,
+            "y": 175,
+            "params": {
+              "opens": [
+                "d2_3"
+              ]
+            }
+          },
+          {
+            "kind": "door",
+            "id": "d2_4",
+            "x": 335,
+            "y": 100,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "b2_4",
+            "x": 300,
+            "y": 25,
+            "params": {
+              "opens": [
+                "d2_4"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "f2_4",
+            "x": 370,
+            "y": 175,
+            "params": {
+              "opens": [
+                "d2_4"
+              ]
+            }
+          },
+          {
+            "kind": "door",
+            "id": "d2_5",
+            "x": 415,
+            "y": 100,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "b2_5",
+            "x": 380,
+            "y": 25,
+            "params": {
+              "opens": [
+                "d2_5"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "f2_5",
+            "x": 450,
+            "y": 175,
+            "params": {
+              "opens": [
+                "d2_5"
+              ]
+            }
+          },
+          {
+            "kind": "goal_zone",
+            "id": "exit_2",
+            "x": 560.0,
+            "y": 100,
+            "params": {
+              "width": 280,
+              "height": 200,
+              "label": "exit hall"
+            }
+          }
+        ],
+        "walls": [
+          [
+            90,
+            0,
+            10,
+            90.0
+          ],
+          [
+            90,
+            110.0,
+            10,
+            90.0
+          ],
+          [
+            170,
+            0,
+            10,
+            90.0
+          ],
+          [
+            170,
+            110.0,
+            10,
+            90.0
+          ],
+          [
+            250,
+            0,
+            10,
+            90.0
+          ],
+          [
+            250,
+            110.0,
+            10,
+            90.0
+          ],
+          [
+            330,
+            0,
+            10,
+            90.0
+          ],
+          [
+            330,
+            110.0,
+            10,
+            90.0
+          ],
+          [
+            410,
+            0,
+            10,
+            90.0
+          ],
+          [
+            410,
+            110.0,
+            10,
+            90.0
+          ]
+        ]
+      },
+      {
+        "title": "7 doors",
+        "briefing": "Both of you stand inside exit_3 at the same time.",
+        "objectives": [
+          {
+            "type": "team_assembled",
+            "zone_id": "exit_3"
+          }
+        ],
+        "objects": [
+          {
+            "kind": "door",
+            "id": "d3_1",
+            "x": 95,
+            "y": 100,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "b3_1",
+            "x": 60,
+            "y": 25,
+            "params": {
+              "opens": [
+                "d3_1"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "f3_1",
+            "x": 130,
+            "y": 175,
+            "params": {
+              "opens": [
+                "d3_1"
+              ]
+            }
+          },
+          {
+            "kind": "door",
+            "id": "d3_2",
+            "x": 175,
+            "y": 100,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "b3_2",
+            "x": 140,
+            "y": 175,
+            "params": {
+              "opens": [
+                "d3_2"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "f3_2",
+            "x": 210,
+            "y": 25,
+            "params": {
+              "opens": [
+                "d3_2"
+              ]
+            }
+          },
+          {
+            "kind": "door",
+            "id": "d3_3",
+            "x": 255,
+            "y": 100,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "b3_3",
+            "x": 220,
+            "y": 25,
+            "params": {
+              "opens": [
+                "d3_3"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "f3_3",
+            "x": 290,
+            "y": 175,
+            "params": {
+              "opens": [
+                "d3_3"
+              ]
+            }
+          },
+          {
+            "kind": "door",
+            "id": "d3_4",
+            "x": 335,
+            "y": 100,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "b3_4",
+            "x": 300,
+            "y": 25,
+            "params": {
+              "opens": [
+                "d3_4"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "f3_4",
+            "x": 370,
+            "y": 175,
+            "params": {
+              "opens": [
+                "d3_4"
+              ]
+            }
+          },
+          {
+            "kind": "door",
+            "id": "d3_5",
+            "x": 415,
+            "y": 100,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "b3_5",
+            "x": 380,
+            "y": 175,
+            "params": {
+              "opens": [
+                "d3_5"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "f3_5",
+            "x": 450,
+            "y": 25,
+            "params": {
+              "opens": [
+                "d3_5"
+              ]
+            }
+          },
+          {
+            "kind": "door",
+            "id": "d3_6",
+            "x": 495,
+            "y": 100,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "b3_6",
+            "x": 460,
+            "y": 175,
+            "params": {
+              "opens": [
+                "d3_6"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "f3_6",
+            "x": 530,
+            "y": 25,
+            "params": {
+              "opens": [
+                "d3_6"
+              ]
+            }
+          },
+          {
+            "kind": "door",
+            "id": "d3_7",
+            "x": 575,
+            "y": 100,
+            "params": {
+              "locked": true,
+              "radius": 12.0
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "b3_7",
+            "x": 540,
+            "y": 25,
+            "params": {
+              "opens": [
+                "d3_7"
+              ]
+            }
+          },
+          {
+            "kind": "switch_plate",
+            "id": "f3_7",
+            "x": 610,
+            "y": 175,
+            "params": {
+              "opens": [
+                "d3_7"
+              ]
+            }
+          },
+          {
+            "kind": "goal_zone",
+            "id": "exit_3",
+            "x": 640.0,
+            "y": 100,
+            "params": {
+              "width": 120,
+              "height": 200,
+              "label": "exit hall"
+            }
+          }
+        ],
+        "walls": [
+          [
+            90,
+            0,
+            10,
+            90.0
+          ],
+          [
+            90,
+            110.0,
+            10,
+            90.0
+          ],
+          [
+            170,
+            0,
+            10,
+            90.0
+          ],
+          [
+            170,
+            110.0,
+            10,
+            90.0
+          ],
+          [
+            250,
+            0,
+            10,
+            90.0
+          ],
+          [
+            250,
+            110.0,
+            10,
+            90.0
+          ],
+          [
+            330,
+            0,
+            10,
+            90.0
+          ],
+          [
+            330,
+            110.0,
+            10,
+            90.0
+          ],
+          [
+            410,
+            0,
+            10,
+            90.0
+          ],
+          [
+            410,
+            110.0,
+            10,
+            90.0
+          ],
+          [
+            490,
+            0,
+            10,
+            90.0
+          ],
+          [
+            490,
+            110.0,
+            10,
+            90.0
+          ],
+          [
+            570,
+            0,
+            10,
+            90.0
+          ],
+          [
+            570,
+            110.0,
+            10,
+            90.0
+          ]
+        ]
+      }
+    ]
+  },
+  "briefings": {
+    "A": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you.",
+    "B": "Nothing in this map can make the task permanently impossible: mistakes only cost time (panels clear, pads push you back, doors close again). Other agents are invisible to you."
+  }
+}
