@@ -32,7 +32,7 @@ class BlindCodeTests(unittest.TestCase):
         for aid in first.agents:
             self.assertEqual(first.get_observation(aid), second.get_observation(aid))
             self.assertIn('no clue blocks or display/update blocks', tasks[aid])
-            self.assertIn('Excessive output token consumption reduces your score', tasks[aid])
+            self.assertNotIn('output token', tasks[aid])  # 정보 계약 v2: 비용 규칙은 기본으로 숨김
 
     def test_secret_changes_do_not_change_partial_observations(self):
         first, _, _ = build_blind_code()

@@ -27,7 +27,9 @@ def build():
         NAME, 500, 400, walls, [agent("A", 240, 200, 270), agent("B", 260, 200, 270)], objects,
         objectives=[{"type": "all_checkpoints_visited"}],
         hints=["Visit all eight hidden checkpoints C1-C8 (each by at least one agent)."],
-        briefings={"A": briefing, "B": briefing}, rules={"show_reward": True}, recommended_steps=250)
+        briefings={"A": briefing, "B": briefing}, recommended_steps=250,
+        # 정보 계약 v2: 좌표 없이는 step 예산 안에 찾을 수 없으므로 시작 옆 한 곳만 알려 줌
+        rules={"show_reward": True, "essential_info": {aid: f"{KNOWN} is at about ({x}, {y})." for aid in ("A", "B")}})
 
 
 def _route(points):

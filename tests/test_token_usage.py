@@ -51,6 +51,5 @@ class TokenUsageTests(unittest.TestCase):
         for text in tasks.values():
             self.assertIn('no clue blocks or display/update blocks', text)
             self.assertIn('No hints, prefix correctness', text)
-            self.assertIn('50000 free', text)
-            self.assertIn('Input and repeated context tokens are not penalized', text)
+            self.assertNotIn('50000', text)  # 정보 계약 v2: 비용 규칙은 --disclose-costs일 때만
             self.assertNotIn('Goal:', text)

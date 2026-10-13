@@ -159,7 +159,9 @@ class RecoveryLimitTests(unittest.TestCase):
                 load('s09_shared_budget').build().to_dict()), policy_kind='noop')
             record = json.loads(path.read_text(encoding='utf-8').splitlines()[0])
         self.assertTrue(record['reward_visible'])
-        self.assertIn('Observation reward contains', record['task']['A'])
+        self.assertIn('observation.reward holds', record['task']['A'])
+        self.assertEqual((record['prompt_contract'], record['disclose_costs']), ('v2', False))
+        self.assertNotIn('Costs:', record['task']['A'])
 
 
 class LongContextPenaltyTests(unittest.TestCase):
@@ -181,14 +183,20 @@ class LongContextPenaltyTests(unittest.TestCase):
 
     def test_context_status_shows_the_last_request_size_and_rule(self):
         from policy import CodePolicy
+        from context_memory import ContextConfig, ContextMemory
         policy = CodePolicy('test', 'task')
         tracker(policy.client).record(self.usage(700_000))
         history = [{'role': 'system', 'content': 'x'}]
         policy._prepare_context(history, 100)
         status = json.loads(history[-1]['content'].split('\n', 1)[1])
         self.assertEqual(status['last_request_prompt_tokens'], 700_000)
+        self.assertNotIn('context_penalty_rule', status)  # 비용 규칙은 기본으로 숨김
+        policy._context_memory = ContextMemory(ContextConfig(show_costs=True))
+        policy._prepare_context(history, 100)
+        status = json.loads(history[-1]['content'].split('\n', 1)[1])
         self.assertEqual(status['last_request_context_penalty'], 40.0)
         self.assertIn('exceeds 500000 tokens', status['context_penalty_rule'])
+        self.assertIn('Costs: output tokens beyond 50,000', benchmark.penalty_description(ScoreConfig()))
 
 
 class KeepCodeOnMessageTests(unittest.TestCase):

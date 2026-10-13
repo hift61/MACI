@@ -57,6 +57,7 @@ class ContextHistory(list):
 @dataclass
 class ContextConfig:
     max_tokens: int = 64_000  # Advisory pressure threshold, never an eviction rule.
+    show_costs: bool = False  # 긴 context 감점 규칙/금액을 상태 메시지에 보여 줄지 (정보 계약 v2 기본: 숨김)
 
 
 def groups(messages):
@@ -86,11 +87,12 @@ class ContextMemory:
                       control='model_discretion', automatic_compaction=False)
         status['pressure'] = status['request_token_upper_estimate'] > self.config.max_tokens
         status['last_request_prompt_tokens'] = self.last_prompt_tokens
-        if self.last_prompt_tokens is not None:
-            status['last_request_context_penalty'] = round(context_penalty(self.last_prompt_tokens), 2)
-        status['context_penalty_rule'] = (
-            f'each request whose prompt exceeds {CONTEXT_PENALTY_START} tokens costs '
-            f'(min(prompt, {CONTEXT_PENALTY_END}) - {CONTEXT_PENALTY_START})^2 / {CONTEXT_PENALTY_DIVISOR} points')
+        if self.config.show_costs:
+            if self.last_prompt_tokens is not None:
+                status['last_request_context_penalty'] = round(context_penalty(self.last_prompt_tokens), 2)
+            status['context_penalty_rule'] = (
+                f'each request whose prompt exceeds {CONTEXT_PENALTY_START} tokens costs '
+                f'(min(prompt, {CONTEXT_PENALTY_END}) - {CONTEXT_PENALTY_START})^2 / {CONTEXT_PENALTY_DIVISOR} points')
         history.append({'role': 'user', 'content': STATUS_PREFIX + serialize(status)})
 
     def compact(self, history, summary, keep_recent_messages, inbox_recent_messages=None):

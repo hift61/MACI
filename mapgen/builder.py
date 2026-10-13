@@ -13,6 +13,9 @@ if ENVIRONMENT_DIR not in sys.path:
 from enviroment import Environment  # noqa: E402
 from environment_prompt import environment_description, objective_description  # noqa: E402
 
+# 정보 계약 v2: 시나리오 맵은 briefings(역할/물체 설명, v1 기록용으로 JSON에만 남음)를 쓰지 않고, 시야 제약 때문에
+# 꼭 필요한 정보만 rules["essential_info"][agent_id]로 줌. 목표는 hints의 한 줄 문장
+
 
 class WallRect:
     def __init__(self, x: float, y: float, width: float, height: float) -> None:
@@ -55,11 +58,10 @@ def build_environment(spec: MapSpec, interact_radius: float = 15.0, reveal_goal:
 
 def task_descriptions(spec: MapSpec, reveal_goal: bool = True) -> dict[str, str]:
     agent_ids = [a["id"] for a in spec.agents]
-    descriptions = {aid: environment_description(aid, agent_ids, spec.width, spec.height)
-                         + (objective_description(spec.objectives) if reveal_goal else '')
-                    for aid in agent_ids}
-    # 시나리오 맵의 개인별 안내 (새 물체 설명, 맵 규칙)
-    for agent_id, briefing in (getattr(spec, "briefings", None) or {}).items():
-        if agent_id in descriptions and briefing:
-            descriptions[agent_id] += "\n" + briefing
-    return descriptions
+    scenario = bool(getattr(spec, "scenario", ""))
+    goal = (" Goal: " + " ".join(spec.hints) if scenario and spec.hints else objective_description(spec.objectives))
+    essential = (getattr(spec, "rules", None) or {}).get("essential_info", {})
+    return {aid: environment_description(aid, agent_ids, spec.width, spec.height)
+                 + (goal if reveal_goal else '')
+                 + (" " + essential[aid] if essential.get(aid) else '')
+            for aid in agent_ids}

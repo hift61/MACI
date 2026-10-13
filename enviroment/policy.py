@@ -461,7 +461,7 @@ _OBSERVATION_DOC = """{"self": {"x", "y", "facing", "heading": {"x", "y"}, "last
 - Interactions (pick_up, use_key, press_button, pull_lever) only work within about 15 units.
 - last_action_result: how your previous action was processed. status "ok", "invalid" (malformed or
   unknown action, or unknown receiver_id; it was replaced by noop) or "no_effect" (an interaction that
-  changed nothing), with a reason. Invalid actions and no-effect interactions reduce your score.
+  changed nothing), with a reason.
 - notices: your most recent notices (oldest first), e.g. {"step", "type": "sequence_reset", "reason",
   "caused_by_you"} when an input attempt is reset."""
 
@@ -511,7 +511,7 @@ Rules:
 - Write reusable logic for multiple steps using each call's observation and memory,
   not a one-step wrapper that asks the LLM again every turn.
 - Cached code runs without an API call. Choose recheck_after for your plan; new
-  incoming messages trigger immediate LLM review. Avoid unnecessary messages.
+  incoming messages trigger immediate LLM review.
 {_SANDBOX_RULES}
 - Only output one fenced ```python code block containing the decide() function, nothing else.
 

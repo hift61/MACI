@@ -81,10 +81,13 @@ class ScenarioFileTests(unittest.TestCase):
                                               agents=[{"id": "A", "x": 10, "y": 10, "facing": 0}]))
         self.assertIs(type(env), Environment)
 
-    def test_briefings_reach_the_task_description(self):
+    def test_task_text_follows_information_contract_v2(self):
         _, tasks, _ = build_environment(load("s01_deadlock").build())
-        self.assertIn("room A", tasks["A"])
-        self.assertIn("Nothing in this map can make the task permanently impossible", tasks["B"])
+        self.assertIn("Goal: Clear all three stages", tasks["A"])
+        for removed in ("room A", "Object guide", "permanently impossible", "several stages"):
+            self.assertNotIn(removed, tasks["A"])  # 역할/물체 설명/안심 문구/단계 설명은 주지 않음
+        _, tasks, _ = build_environment(load("s09_shared_budget").build())
+        self.assertIn("C2 is at about (250, 125).", tasks["B"])  # 시야로 알아낼 수 없는 필수 정보만
 
 
 class ScenarioSecretTests(unittest.TestCase):

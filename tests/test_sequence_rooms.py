@@ -94,8 +94,10 @@ class SequenceRoomsTests(unittest.TestCase):
             for aid, text in descriptions.items():
                 self.assertIn(f"You are agent {aid}", text)
                 self.assertIn("Other agents:", text)
-                self.assertIn("move_forward", text)
+                self.assertIn("view cone", text)
                 self.assertIn('Goal:', text)
+                for nudge in ("Communication is optional", "concise", "Excessive output token"):
+                    self.assertNotIn(nudge, text)  # 정보 계약 v2: 전략 힌트와 비용 규칙 없음
                 for hint in ("your_presses", "pressure plate", "clue_A",
                              "ALL of these goals"):
                     self.assertNotIn(hint, text)
