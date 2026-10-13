@@ -147,7 +147,9 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                 max_resets: int | None = None, debug: bool = False, reveal_goal: bool = True,
                 reward_visible: bool = False, context_max_tokens: int = 64_000,
                 solo_agent: str | None = None, controller: str = "decentralized",
-                score_config: ScoreConfig | None = None) -> None:
+                score_config: ScoreConfig | None = None, policy_factory=None) -> None:
+    # policy_factory(agent_id, task_description) -> Policy: 정책을 밖에서 만들어 넣을 때 (예: play.py의 사람 플레이어).
+    # 이때 policy_kind는 로그의 model 칸에 남길 이름으로만 쓰임
     if steps < 1:
         raise ValueError("steps must be at least 1")
     if controller not in CONTROLLER_CHOICES:
@@ -271,6 +273,7 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
             description += (' This is a single-active-agent control run. Other agents '
                             'always take noop actions and will not assist or reply.')
         policies[agent_id] = (NoopPolicy() if solo_agent is not None and agent_id != solo_agent else
+                              policy_factory(agent_id, description) if policy_factory is not None else
                               make_policy(policy_kind, model, description, base_url, api_key, extra_params,
                                           env.interact_radius))
         if hasattr(policies[agent_id], 'client'):

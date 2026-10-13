@@ -163,7 +163,7 @@ class Launcher:
                 if self.pending_path and self.pending_path.is_file():
                     if self.kind in ("맵 생성", "맵 편집"):
                         self.fields["map"] = str(self.pending_path.relative_to(ROOT))
-                    elif self.kind == "에피소드 실행":
+                    elif self.kind in ("에피소드 실행", "사람 플레이"):
                         self.fields["manifest"] = str(self.pending_path.relative_to(ROOT))
                         self.load_result()
                         if self.tab != '디버그':
@@ -225,6 +225,16 @@ class Launcher:
             if not self.fields["model"].strip() or not self.fields["url"].strip():
                 raise ValueError("모델과 API 주소를 입력하세요.")
             args += ["--model", self.fields["model"].strip(), "--base-url", self.fields["url"].strip()]
+        args += self.environment_args()
+        self.start(args, "에피소드 실행", output)
+        if self.debug:
+            self.switch('디버그')
+        if self.auto_view:
+            self.open_viewer(output, live=True)
+
+    # 선택한 환경/맵 설정을 benchmark.py, play.py 공통 명령행 인자로
+    def environment_args(self):
+        args = []
         if self.environment in ('blind_code', 'curriculum'):
             args += ['--environment', self.environment, '--sequence-seed', self.number('seed', 0)]
         elif self.environment == "sequence_rooms":
@@ -240,11 +250,17 @@ class Launcher:
             if not source.is_file():
                 raise ValueError("선택한 맵 파일이 없습니다.")
             args += ["--map-file", str(source)]
-        self.start(args, "에피소드 실행", output)
-        if self.debug:
-            self.switch('디버그')
-        if self.auto_view:
-            self.open_viewer(output, live=True)
+        return args
+
+    # 두 사람이 한 컴퓨터에서 번갈아 A/B를 조종 (play.py 창). 결과는 에피소드 실행과 같은 형식으로 저장
+    def play_episode(self):
+        output_dir = ROOT / "benchmark_runs"
+        output_dir.mkdir(exist_ok=True)
+        output = output_dir / ("human_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".jsonl")
+        args = ["play.py", "--steps", self.number("steps"), "--out", str(output)]
+        if not self.reveal_goal:
+            args.append('--hide-goal')
+        self.start(args + self.environment_args(), "사람 플레이", output)
 
     def open_viewer(self, path=None, live=False):
         source = Path(path) if path is not None else self.path("manifest")
@@ -505,7 +521,8 @@ class Launcher:
             self.button('조종: ' + ('단일 LLM (A·B 모두)' if self.controller == 'central' else '에이전트별 LLM'),
                         (790, 552, 362, 36), lambda: setattr(self, 'controller', 'decentralized' if self.controller == 'central' else 'central'),
                         self.controller == 'central')
-            self.text("결과 자동 저장 · 이동 창에서 재생 속도 / 일시정지 / 이전·다음 step 조절", 24, 566, self.small, DIM)
+            self.button('사람이 플레이 (2인)', (24, 552, 240, 36), self.play_episode)
+            self.text("결과 자동 저장 · 이동 창에서 재생 속도 / 일시정지 조절", 280, 562, self.small, DIM, 490)
         elif self.tab == "결과":
             self.field("manifest", "결과 JSONL 경로", 24, 122, 736)
             self.button("결과 불러오기", (780, 146, 177, 36), self.load_result)
