@@ -558,6 +558,24 @@ SUBMIT_POLICY_TOOL_SCHEMA = {
     },
 }
 
+# 메시지가 와서 LLM이 다시 판단할 때, 지금 코드가 오류 없이 돌고 있으면 그대로 둘 수 있게 하는 도구.
+# 코드 전체를 다시 쓰지 않아도 되므로 출력 토큰과 불필요한 코드 교체가 줄어듦
+KEEP_CODE_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "keep_current_code",
+        "description": (
+            "Keep your current decide() code unchanged because it already handles the situation (for example it "
+            "reads the inbox itself). Use submit_policy_code instead if the code must change."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"reason": {"type": "string", "description": "Short reason for keeping the code."}},
+            "required": [],
+        },
+    },
+}
+
 MANAGE_CONTEXT_TOOL_SCHEMA = {
     'type': 'function',
     'function': {
@@ -589,7 +607,8 @@ def _generate_code_with_submission_gate(
     history=None,
     prepare_context=None,
     manage_context=None,
-) -> str:
+    allow_keep=False,
+) -> str | None:
     """Drives the submit_policy_code tool-call loop: the model must call the
     tool to answer, and its code is compile+safety-checked before being
     accepted - a failure comes back as a tool result (not spent as a wasted
@@ -598,12 +617,15 @@ def _generate_code_with_submission_gate(
     caller's side). Falls back to the old plain one-shot text + code-fence
     extraction path (no tool calling at all) if the provider never returns a
     tool call, or outright rejects the tools/tool_choice parameters (some
-    OpenRouter free models don't support function-calling reliably)."""
+    OpenRouter free models don't support function-calling reliably).
+    With allow_keep, the model may call keep_current_code instead; then this
+    returns None and the caller keeps its current code."""
     messages = history if history is not None else []
     if not messages:
         messages.append({"role": "system", "content": system_prompt + ('\n\n' + MANAGEMENT_INSTRUCTIONS if manage_context else '')})
     messages.append({"role": "user", "content": user_content})
-    available_tools = [SUBMIT_POLICY_TOOL_SCHEMA] + ([MANAGE_CONTEXT_TOOL_SCHEMA] if manage_context else [])
+    available_tools = ([SUBMIT_POLICY_TOOL_SCHEMA] + ([KEEP_CODE_TOOL_SCHEMA] if allow_keep else [])
+                       + ([MANAGE_CONTEXT_TOOL_SCHEMA] if manage_context else []))
 
     try:
         for _round in range(MAX_TOOL_ROUNDS):
@@ -634,7 +656,8 @@ def _generate_code_with_submission_gate(
                 messages.append({"role": "assistant", "content": choice.message.content})
                 messages.append({"role": "user", "content": (
                     "That was plain text, which is ignored - you must call the "
-                    "submit_policy_code tool with your final code to answer."
+                    "submit_policy_code tool with your final code to answer"
+                    + (" (or keep_current_code to keep the current code)." if allow_keep else ".")
                 )})
                 continue
 
@@ -648,6 +671,7 @@ def _generate_code_with_submission_gate(
             })
 
             accepted_code = None
+            kept = False
             for tc in tool_calls:
                 try:
                     args = json.loads(tc.function.arguments or "{}")
@@ -658,6 +682,9 @@ def _generate_code_with_submission_gate(
                         result = manage_context(**args)
                     except (ValueError, TypeError) as exc:
                         result = {'applied': False, 'error': str(exc)}
+                elif tc.function.name == 'keep_current_code' and allow_keep:
+                    result = {"kept": True}
+                    kept = True
                 elif tc.function.name == 'submit_policy_code':
                     code = _extract_code(str(args.get("code", "")))
                     error = _safety_check_error(code, checks)
@@ -672,6 +699,8 @@ def _generate_code_with_submission_gate(
 
             if accepted_code is not None:
                 return accepted_code
+            if kept:
+                return None
         # Exhausted MAX_TOOL_ROUNDS without an accepted submission - fall through.
     except Exception:
         pass  # provider rejected tools/tool_choice outright - fall back below
@@ -693,7 +722,10 @@ def _generate_code_with_submission_gate(
             "the generated code is incomplete. Increase max_tokens or shorten "
             "the system/task prompt."
         )
-    code = _extract_code(response.choices[0].message.content)
+    text = response.choices[0].message.content or ''
+    if allow_keep and 'def decide' not in text and 'keep_current_code' in text.lower():
+        return None
+    code = _extract_code(text)
     error = _safety_check_error(code, checks)
     if error:
         messages.append({'role': 'user', 'content': 'Code validation failed: ' + error})
@@ -885,7 +917,7 @@ class CodePolicy(Policy):
             # No action is applied and no additional simulation step is consumed here.
             time.sleep(1.0)
 
-    def _generate_code(self, user_content: str = None) -> str:
+    def _generate_code(self, user_content: str = None, allow_keep: bool = False) -> str | None:
         return self._generate_tracked(
             self.client,
             self.model,
@@ -895,6 +927,7 @@ class CodePolicy(Policy):
             self.max_tokens,
             self.extra_params,
             checks=self.code_checks,
+            **({'allow_keep': True} if allow_keep else {}),
         )
 
     # 이번 관찰로 정지 횟수를 갱신하고, 재생성할 이유가 있으면 그 설명을 반환 (없으면 None)
@@ -931,17 +964,25 @@ class CodePolicy(Policy):
         )
 
     # 이유와 함께 코드를 새로 생성. max_replans를 다 썼으면 기존 코드를 유지하고 False
-    def _replan(self, observation: dict, reason: str, scheduled: bool = False, trigger: str = None) -> bool:
+    # allow_keep: 지금 코드가 오류 없이 돌고 있을 때 LLM이 keep_current_code로 그대로 둘 수 있게 함
+    def _replan(self, observation: dict, reason: str, scheduled: bool = False, trigger: str = None,
+                allow_keep: bool = False) -> bool:
         if not scheduled and sum(r.get("kind") not in ("execution_repair", "scheduled_review", "message_received") for r in self.replans) >= self.max_replans:
             return False
         step = observation["self"].get("step")
-        self.generated_code = self._generate_code(CODE_REPLAN_PROMPT.format(
+        code = self._generate_code(CODE_REPLAN_PROMPT.format(
             task=self.task_description,
             step=step,
             reason=reason,
             code=self.generated_code,
             observation=json.dumps(self._prompt_observation(observation), ensure_ascii=False),
-        ))
+        ), allow_keep=allow_keep)
+        if code is None and allow_keep:
+            self.last_replan = {"step": step, "reason": reason, "kind": trigger or "scheduled_review", "kept": True}
+            self.replans.append(self.last_replan)
+            self._debug('code_kept', step=step, trigger=trigger)
+            return True
+        self.generated_code = code
         self.last_replan = {"step": step, "reason": reason}
         if scheduled:
             self.last_replan['kind'] = trigger or 'scheduled_review'
@@ -963,8 +1004,12 @@ class CodePolicy(Policy):
                 action = self._wait_for_recovery(observation)
             elif messages:
                 self._message_interrupt(observation, messages)
-                self._replan(observation, 'New incoming messages require immediate LLM review before this turn\'s action. Read the inbox and current observation, then decide how to respond.',
-                             scheduled=True, trigger='message_received')
+                keep = self.generated_code is not None  # 이 분기는 실행 오류가 없을 때만 옴
+                self._replan(observation, 'New incoming messages require immediate LLM review before this turn\'s action. Read the inbox and current observation, then decide how to respond.'
+                             + (' Your current decide() code is still running without errors: if it already handles this, call '
+                                'keep_current_code to keep it unchanged; otherwise submit a revised decide() with submit_policy_code.'
+                                if keep else ''),
+                             scheduled=True, trigger='message_received', allow_keep=keep)
             elif self.generated_code is None:
                 self._next_review_step = None
                 self.generated_code = self._generate_code(

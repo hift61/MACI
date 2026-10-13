@@ -162,6 +162,46 @@ class RecoveryLimitTests(unittest.TestCase):
         self.assertIn('Observation reward contains', record['task']['A'])
 
 
+class KeepCodeOnMessageTests(unittest.TestCase):
+    CODE = 'def decide(o): return {"type": "noop", "recheck_after": 50}'
+    NEW_CODE = 'def decide(o): return {"type": "turn", "angle": 5, "recheck_after": 50}'
+
+    def observation(self, step, inbox):
+        return {'self': {'step': step, 'x': 0., 'y': 0., 'facing': 0.}, 'inbox': inbox, 'memory': {},
+                'known_objects': {}, 'visible_objects': [], 'walls': []}
+
+    def reply(self, name, arguments):
+        call = SimpleNamespace(id='c1', function=SimpleNamespace(name=name, arguments=json.dumps(arguments)))
+        message = SimpleNamespace(content=None, tool_calls=[call])
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason='tool_calls', message=message)], usage=None)
+
+    def run_message(self, response):
+        from unittest.mock import Mock
+        from policy import CodePolicy
+        policy = CodePolicy('test', 'task')
+        policy.client = Mock()
+        policy.client.chat.completions.create.return_value = response
+        with patch.object(policy, '_generate_code', return_value=self.CODE):
+            policy.decide(self.observation(1, []))
+        message = {'type': 'text', 'from': 'B', 'content': 'hi', 'step': 1}
+        action = policy.decide(self.observation(2, [message]))
+        tools = [t['function']['name'] for t in policy.client.chat.completions.create.call_args.kwargs['tools']]
+        return policy, action, tools
+
+    def test_model_may_keep_working_code_when_a_message_arrives(self):
+        policy, action, tools = self.run_message(self.reply('keep_current_code', {'reason': 'code reads the inbox'}))
+        self.assertIn('keep_current_code', tools)
+        self.assertEqual(policy.generated_code, self.CODE)
+        self.assertTrue(policy.last_replan['kept'])
+        self.assertEqual(action['type'], 'noop')
+
+    def test_model_may_still_rewrite_the_code(self):
+        policy, action, _ = self.run_message(self.reply('submit_policy_code', {'code': self.NEW_CODE}))
+        self.assertEqual(policy.generated_code, self.NEW_CODE)
+        self.assertNotIn('kept', policy.last_replan)
+        self.assertEqual(action['type'], 'turn')
+
+
 class SandboxAllowanceTests(unittest.TestCase):
     def test_common_builtins_and_safe_modules_work_and_are_documented(self):
         from policy import CODE_POLICY_SYSTEM_PROMPT
