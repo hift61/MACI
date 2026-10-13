@@ -11,7 +11,7 @@ from pathlib import Path
 
 from openai import OpenAI, RateLimitError
 
-from _policy_harness import _check_code_safety  # 생성 단계와 실행 단계가 같은 검사를 쓰도록
+from _policy_harness import _SAFE_BUILTIN_NAMES, SAFE_MODULES, _check_code_safety  # 생성 단계와 실행 단계가 같은 검사를 쓰도록
 from policy_sandbox import run_decide_code, compile_policy_code, CodeChecks
 from tools import TOOLS
 from token_usage import TokenUsage, tracker
@@ -458,6 +458,13 @@ _OBSERVATION_DOC = """{"self": {"x", "y", "facing", "heading": {"x", "y"}, "last
   "caused_by_you"} when an input attempt is reset."""
 
 
+# 샌드박스(_policy_harness.py)에서 실제로 허용하는 것을 그대로 안내 - 숨은 규칙에 걸려 실패하지 않도록
+_SANDBOX_RULES = (
+    f"- Python sandbox: you may import only {', '.join(sorted(SAFE_MODULES))} (`math` is also preloaded). "
+    "No exec/eval/open/compile/input, and no names or attributes starting with __.\n"
+    "- Available built-ins: " + ", ".join(n for n in _SAFE_BUILTIN_NAMES if n not in ("True", "False", "None"))
+    + ". Anything else (for example getattr, type, open, globals) is unavailable.")
+
 POLICY_LAYOUT = Path(__file__).with_name('policy_template.py').read_text(encoding='utf-8')
 # Strip the module description: models receive the actual executable function layout.
 POLICY_LAYOUT = POLICY_LAYOUT[POLICY_LAYOUT.index('def decide(observation):'):]
@@ -497,8 +504,7 @@ Rules:
   not a one-step wrapper that asks the LLM again every turn.
 - Cached code runs without an API call. Choose recheck_after for your plan; new
   incoming messages trigger immediate LLM review. Avoid unnecessary messages.
-- No import statements, no exec/eval/open, no names starting with __.
-- The `math` module is already available as `math` (no import needed).
+{_SANDBOX_RULES}
 - Only output one fenced ```python code block containing the decide() function, nothing else.
 
 {POLICY_LAYOUT_INSTRUCTIONS}"""
@@ -1170,8 +1176,7 @@ shapes (the "type" field is required):
 {_action_schema_docs()}
 
 Rules:
-- No import statements, no exec/eval/open, no names starting with __.
-- The `math` module is already available as `math` (no import needed).
+{_SANDBOX_RULES}
 - Only output one fenced ```python code block containing the decide() function, nothing else.
 
 {POLICY_LAYOUT_INSTRUCTIONS}"""

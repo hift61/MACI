@@ -6,8 +6,8 @@ otherwise. Reads a JSON payload {"code": ..., "observation": ...} from the
 path in argv[1] and prints a single JSON result line to stdout:
 {"action": dict|None, "error": str|None}.
 
-This restricts the *ordinary* way in - no import statements, no dunder-name
-references, no exec/eval/open/__import__/compile/input calls (checked twice:
+This restricts the *ordinary* way in - imports only of SAFE_MODULES, no
+dunder-name references, no exec/eval/open/__import__/compile/input calls (checked twice:
 statically via _check_code_safety, and again at runtime via a builtins
 allowlist that simply doesn't include them) - but plain Python has no true
 capability sandbox, so a sufficiently adversarial snippet could still try to
@@ -22,6 +22,10 @@ truly malicious model.
 """
 import ast
 import builtins
+import collections
+import functools
+import heapq
+import itertools
 import json
 import math
 import sys
@@ -32,19 +36,41 @@ _FORBIDDEN_CALL_NAMES = {"exec", "eval", "open", "__import__", "compile", "input
 # 자신의 전역(sys, builtins)까지 거슬러 올라가 샌드박스를 벗어날 수 있으므로 막음
 _FORBIDDEN_ATTR_PREFIXES = ("gi_", "cr_", "ag_", "f_", "tb_", "co_")
 
+# 생성 코드가 쓸 수 있는 내장 이름. getattr/setattr/type/vars/dir/globals처럼 문자열로 dunder 속성에
+# 닿거나 객체 내부를 들여다볼 수 있는 것은 넣지 않음. 이 목록은 프롬프트에도 그대로 안내됨
 _SAFE_BUILTIN_NAMES = (
-    "abs", "all", "any", "bool", "dict", "enumerate", "float", "int", "len",
-    "list", "max", "min", "range", "reversed", "round", "sorted", "str",
-    "sum", "tuple", "zip", "isinstance", "True", "False", "None",
+    "abs", "all", "any", "bool", "callable", "chr", "dict", "divmod", "enumerate", "filter", "float",
+    "format", "frozenset", "hash", "int", "isinstance", "iter", "len", "list", "map", "max", "min",
+    "next", "ord", "pow", "print", "range", "repr", "reversed", "round", "set", "slice", "sorted", "str",
+    "sum", "tuple", "zip", "True", "False", "None",
+    "Exception", "ArithmeticError", "AttributeError", "IndexError", "KeyError", "LookupError",
+    "StopIteration", "TypeError", "ValueError", "ZeroDivisionError",
 )
+# import해도 되는 표준 모듈 (부작용/외부 접근이 없는 계산용). math는 import 없이도 쓸 수 있음.
+# random은 실행마다 결과가 달라져 재현성을 해치므로 넣지 않음
+SAFE_MODULES = {"math": math, "itertools": itertools, "collections": collections, "heapq": heapq,
+                "functools": functools}
+
+
+def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if level == 0 and name in SAFE_MODULES:
+        return SAFE_MODULES[name]
+    raise ImportError(f"only these modules can be imported: {', '.join(sorted(SAFE_MODULES))}")
+
+
 SAFE_BUILTINS = {name: getattr(builtins, name) for name in _SAFE_BUILTIN_NAMES}
+SAFE_BUILTINS["__import__"] = _safe_import
 
 
 def _check_code_safety(code: str) -> None:
     tree = ast.parse(code)
     for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            raise ValueError("generated code may not use import statements")
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name not in SAFE_MODULES:
+                    raise ValueError(f"generated code may only import {', '.join(sorted(SAFE_MODULES))}")
+        if isinstance(node, ast.ImportFrom) and (node.level or node.module not in SAFE_MODULES):
+            raise ValueError(f"generated code may only import {', '.join(sorted(SAFE_MODULES))}")
         if isinstance(node, ast.Name) and node.id.startswith("__"):
             raise ValueError("generated code may not reference dunder names")
         # Blocks attribute-access escapes too (e.g. ({}).__class__.__bases__),

@@ -162,6 +162,29 @@ class RecoveryLimitTests(unittest.TestCase):
         self.assertIn('Observation reward contains', record['task']['A'])
 
 
+class SandboxAllowanceTests(unittest.TestCase):
+    def test_common_builtins_and_safe_modules_work_and_are_documented(self):
+        from policy import CODE_POLICY_SYSTEM_PROMPT
+        from policy_sandbox import run_decide_code
+        code = ('import collections\nfrom itertools import product\n'
+                'def decide(o):\n    print("debug")\n    seen = set(map(abs, [-1, 1, 2]))\n'
+                '    queue = collections.deque(product([1], [2]))\n'
+                '    return {"type": "noop", "n": len(seen) + len(queue) + divmod(7, 2)[0]}')
+        self.assertEqual(run_decide_code(code, {'self': {'step': 1}}), {'action': {'type': 'noop', 'n': 6}, 'error': None})
+        self.assertIn('Available built-ins: abs', CODE_POLICY_SYSTEM_PROMPT)
+        self.assertIn('set', CODE_POLICY_SYSTEM_PROMPT)
+        self.assertIn('import only collections, functools, heapq, itertools, math', CODE_POLICY_SYSTEM_PROMPT)
+
+    def test_escape_routes_stay_closed(self):
+        from policy_sandbox import run_decide_code
+        for code in ('import os\ndef decide(o): return {"type": "noop"}',
+                     'from . import x\ndef decide(o): return {"type": "noop"}',
+                     'def decide(o): return getattr(o, "x")',
+                     'def decide(o): return type(o)'):
+            with self.subTest(code=code):
+                self.assertIsNotNone(run_decide_code(code, {'self': {'step': 1}})['error'])
+
+
 class ExperimentTests(unittest.TestCase):
     def test_statistics(self):
         low, high = experiment.wilson_interval(8, 8)
