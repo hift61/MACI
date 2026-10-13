@@ -231,6 +231,51 @@ class KeepCodeOnMessageTests(unittest.TestCase):
         self.assertEqual(action['type'], 'turn')
 
 
+class EnvironmentChangeReviewTests(unittest.TestCase):
+    CODE = 'def decide(o): return {"type": "noop", "recheck_after": 50}'
+
+    def observation(self, step, known=None, notices=(), result=None, x=0.0):
+        return {'self': {'step': step, 'x': x, 'y': 0., 'facing': 0., 'inventory': []}, 'inbox': [], 'memory': {},
+                'known_objects': known or {}, 'visible_objects': [], 'walls': [], 'notices': list(notices),
+                'last_action_result': result}
+
+    def test_only_real_changes_trigger_reviews_up_to_the_cap(self):
+        from policy import CodePolicy
+        policy = CodePolicy('test', 'task', env_change_cap=2)
+        door = lambda locked, x=10: {'door': {'object_id': 'door', 'type': 'door', 'x': x, 'y': 5, 'locked': locked,
+                                              'last_seen_step': 1}}
+        prompts = []
+
+        def generate(prompt, allow_keep=False):
+            prompts.append((prompt, allow_keep))
+            return None if allow_keep else self.CODE
+        with patch.object(policy, '_generate_code', side_effect=generate):
+            policy.decide(self.observation(1, door(True)))                   # first code
+            policy.decide(self.observation(2, door(True, x=30), x=5.0))      # moved / coordinates only: no review
+            self.assertEqual(len(prompts), 1)
+            policy.decide(self.observation(3, door(False, x=30)))            # door opened
+            self.assertIn("door: locked True->False", prompts[-1][0])
+            self.assertTrue(prompts[-1][1])
+            self.assertTrue(policy.last_replan['kept'])
+            self.assertEqual(policy.last_replan['kind'], 'env_changed')
+            result = {'step': 3, 'action_type': 'pick_up', 'status': 'no_effect', 'reason': 'nothing'}
+            policy.decide(self.observation(4, door(False), result=result))   # no-effect action
+            self.assertIn('was no_effect', prompts[-1][0])
+            policy.decide(self.observation(5, door(True), notices=[{'type': 'sequence_reset'}]))
+            self.assertEqual(len(prompts), 3)                                 # cap of 2 reached
+        self.assertEqual(policy.env_reviews, 2)
+
+    def test_off_by_default_and_announced_when_enabled(self):
+        from policy import CodePolicy
+        self.assertEqual(CodePolicy('test', 'task').env_change_cap, 0)
+        with tempfile.TemporaryDirectory() as folder, contextlib.redirect_stdout(io.StringIO()):
+            path = Path(folder) / 'env.jsonl'
+            benchmark.run_episode('m', 'u', 'k', {}, 1, str(path), policy_kind='noop',
+                                  environment_kind='sequence_rooms', env_change_cap=4)
+            record = json.loads(path.read_text(encoding='utf-8').splitlines()[0])
+        self.assertIn('at most 4 times per episode', record['task']['A'])
+
+
 class SandboxAllowanceTests(unittest.TestCase):
     def test_common_builtins_and_safe_modules_work_and_are_documented(self):
         from policy import CODE_POLICY_SYSTEM_PROMPT

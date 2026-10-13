@@ -755,6 +755,44 @@ def _text_history(messages):
     return result
 
 
+# 주변 환경 변화 감지 (CodePolicy.env_change_cap > 0일 때). 위치/방향, 시야에 들어오고 나가는 것, 움직이는
+# 물체의 좌표는 매 step 바뀌므로 세지 않고 '새 정보'만 셈: 처음 보는 물체, 본 적 있는 물체의 상태 변화
+# (문/레버/패널/화면/방문 여부 등), 소지품, 새 알림(리셋/단계), 무효이거나 효과 없는 행동 결과
+_ENV_IGNORED_FIELDS = {"x", "y", "last_seen_step", "target_index", "waypoints", "speed", "loop"}
+
+
+def _env_signature(observation: dict) -> dict:
+    objects = {oid: {k: v for k, v in obj.items() if k not in _ENV_IGNORED_FIELDS}
+               for oid, obj in (observation.get("known_objects") or {}).items()}
+    me = observation.get("self", {})
+    return {"objects": objects,
+            "inventory": sorted(str(o.get("object_id")) for o in me.get("inventory", [])),
+            "notices": len(observation.get("notices") or []),
+            "notice_last": (observation.get("notices") or [None])[-1],
+            "stage": (observation.get("stage") or {}).get("stage")}
+
+
+def _env_changes(before: dict, after: dict, result: dict | None) -> list[str]:
+    changes = []
+    new = sorted(set(after["objects"]) - set(before["objects"]))
+    if new:
+        changes.append("newly seen: " + ", ".join(new[:8]))
+    for oid in sorted(set(after["objects"]) & set(before["objects"])):
+        old, cur = before["objects"][oid], after["objects"][oid]
+        diff = [f"{k} {old.get(k)!r}->{cur.get(k)!r}" for k in sorted(set(old) | set(cur)) if old.get(k) != cur.get(k)]
+        if diff:
+            changes.append(f"{oid}: " + "; ".join(diff)[:200])
+    if after["inventory"] != before["inventory"]:
+        changes.append(f"inventory {before['inventory']} -> {after['inventory']}")
+    if after["stage"] != before["stage"]:
+        changes.append(f"stage {before['stage']} -> {after['stage']}")
+    if after["notice_last"] != before["notice_last"] and after["notice_last"] is not None:
+        changes.append("notice: " + json.dumps(after["notice_last"], ensure_ascii=False))
+    if result and result.get("status") in ("invalid", "no_effect") and result.get("step") is not None:
+        changes.append(f"your last action {result.get('action_type')} was {result['status']}: {result.get('reason', '')}")
+    return changes
+
+
 # 캐시된 코드가 막혔을 때 LLM에게 다시 짜게 하는(재생성) 조건:
 #   즉시 (stuck) - decide() 실행 오류(예외/타임아웃/잘못된 action), 또는 move를 했는데 위치가
 #                  그대로(벽/잠긴 문/coop 운반에 막힘). 코드는 같은 관찰에 같은 행동을 내므로
@@ -794,7 +832,8 @@ class CodePolicy(Policy):
         sandbox_timeout: float = 5.0,
         stall_limit: int = 3,
         max_replans: int = 10,
-        max_recovery_attempts: int = 10
+        max_recovery_attempts: int = 10,
+        env_change_cap: int = 0
     ) -> None:
         self.client = OpenAI(base_url=base_url, api_key=api_key)
         self.model = model
@@ -810,6 +849,11 @@ class CodePolicy(Policy):
         # 한 번의 복구 대기에서 연속으로 실패해도 되는 재생성 횟수. 넘으면 PolicyGaveUp으로 회차를 끝냄
         # (예: 대화 이력이 모델 context 한도를 넘어 모든 요청이 거부되면 무한히 기다리게 되므로)
         self.max_recovery_attempts = max_recovery_attempts
+        # 주변 환경이 바뀌면(새 물체, 상태 변화, 알림, 무효/효과 없는 행동) LLM을 다시 부르는 최대 횟수 (0이면 끔)
+        self.env_change_cap = env_change_cap
+        self.env_reviews = 0
+        self._env_signature = None
+        self._env_result_step = None
         self.replans: list[dict] = []     # 재생성 기록 [{"step", "reason"}]
         self.last_replan = None           # 이번 decide() 호출에서 재생성했으면 그 기록 (manifest용)
         self._last_pos = None             # 직전 관찰의 위치
@@ -823,8 +867,23 @@ class CodePolicy(Policy):
         self._execution_error = None
         self.last_recovery = None
 
+    # 이번 관찰에서 새로 생긴 환경 변화 목록 (기준을 이번 관찰로 갱신). 처음 관찰은 기준만 잡음
+    def _observe_env(self, observation: dict) -> list[str]:
+        signature = _env_signature(observation)
+        result = observation.get("last_action_result")
+        if result and result.get("step") == self._env_result_step:
+            result = None  # 같은 행동 결과는 한 번만 셈
+        elif result:
+            self._env_result_step = result.get("step")
+        changes = [] if self._env_signature is None else _env_changes(self._env_signature, signature, result)
+        self._env_signature = signature
+        return changes
+
     # 다음 decide() 호출에서 정책 코드를 새로 생성하도록 캐시를 비움
     def reset(self) -> None:
+        self.env_reviews = 0
+        self._env_signature = None
+        self._env_result_step = None
         self._conversation_history = ContextHistory()
         self._context_memory = ContextMemory(self.context_memory.config)
         self._context_inbox_recent = None
@@ -975,7 +1034,7 @@ class CodePolicy(Policy):
     # allow_keep: 지금 코드가 오류 없이 돌고 있을 때 LLM이 keep_current_code로 그대로 둘 수 있게 함
     def _replan(self, observation: dict, reason: str, scheduled: bool = False, trigger: str = None,
                 allow_keep: bool = False) -> bool:
-        if not scheduled and sum(r.get("kind") not in ("execution_repair", "scheduled_review", "message_received") for r in self.replans) >= self.max_replans:
+        if not scheduled and sum(r.get("kind") not in ("execution_repair", "scheduled_review", "message_received", "env_changed") for r in self.replans) >= self.max_replans:
             return False
         step = observation["self"].get("step")
         code = self._generate_code(CODE_REPLAN_PROMPT.format(
@@ -1004,6 +1063,7 @@ class CodePolicy(Policy):
         self.last_recovery = None
         self.last_message_interrupt = None
         messages = self._new_messages(observation)
+        changes = self._observe_env(observation) if self.env_change_cap else []
         action = {"type": "noop"}
         try:
             if self._execution_error is not None:
@@ -1026,6 +1086,15 @@ class CodePolicy(Policy):
                 self._debug('review_started', step=observation['self']['step'])
                 self._replan(observation, 'The code-defined review interval has elapsed. Check the current execution state and observations, then keep or revise the policy.',
                              scheduled=True)
+            elif changes and self.env_reviews < self.env_change_cap:
+                self.env_reviews += 1
+                self._debug('env_change_review', step=observation['self']['step'], changes=changes,
+                            used=self.env_reviews, cap=self.env_change_cap)
+                self._replan(observation, 'Your surroundings changed: ' + ' | '.join(changes[:6])
+                             + f'. (Environment-change review {self.env_reviews} of at most {self.env_change_cap}.) '
+                             'If your current decide() code already handles this, call keep_current_code; otherwise '
+                             'submit a revised decide() with submit_policy_code.',
+                             scheduled=True, trigger='env_changed', allow_keep=True)
             else:
                 reason = self._stuck_reason(observation)
                 if reason is not None:

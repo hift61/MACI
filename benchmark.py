@@ -128,11 +128,11 @@ POLICY_CHOICES = ("code", "hybrid", "tooluse", "random", "noop")
 
 
 def make_policy(kind: str, model: str, description: str, base_url: str, api_key: str, extra_params: dict,
-                interact_radius: float):
+                interact_radius: float, env_change_cap: int = 0):
     if kind in ('code', 'hybrid'):
         # Keep old command lines usable, but every LLM run must submit reusable code.
         policy = CodePolicy(model=model, task_description=description, base_url=base_url,
-                            api_key=api_key, extra_params=extra_params)
+                            api_key=api_key, extra_params=extra_params, env_change_cap=env_change_cap)
         if is_local_endpoint(base_url):
             policy.client = policy.client.with_options(timeout=60, max_retries=0)
         return policy
@@ -151,7 +151,7 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                 max_resets: int | None = None, debug: bool = False, reveal_goal: bool = True,
                 reward_visible: bool = False, context_max_tokens: int = 64_000,
                 solo_agent: str | None = None, controller: str = "decentralized",
-                score_config: ScoreConfig | None = None, policy_factory=None) -> None:
+                score_config: ScoreConfig | None = None, policy_factory=None, env_change_cap: int = 0) -> None:
     # policy_factory(agent_id, task_description) -> Policy: 정책을 밖에서 만들어 넣을 때 (예: play.py의 사람 플레이어).
     # 이때 policy_kind는 로그의 model 칸에 남길 이름으로만 쓰임
     if steps < 1:
@@ -202,7 +202,12 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
         ' Observation reward contains your cumulative individual_score, team_score and total_score. '
         'Use changes in these scores as reward feedback.' if reward_visible else
         ' Numeric reward scores are not provided in your observations.')
+    env_change_description = (
+        f" Notable changes around you (newly seen objects, object state changes, inventory changes, notices, or an "
+        f"invalid/no-effect action result) also trigger an LLM review, at most {env_change_cap} times per episode; "
+        "you may keep your current code in such a review." if env_change_cap > 0 else "")
     task_descriptions = {aid: description + reward_description + penalty_description(score_config)
+                              + env_change_description
                          for aid, description in task_descriptions.items()}
 
     os.makedirs(os.path.dirname(os.path.abspath(log_path)), exist_ok=True)
@@ -279,7 +284,7 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
         policies[agent_id] = (NoopPolicy() if solo_agent is not None and agent_id != solo_agent else
                               policy_factory(agent_id, description) if policy_factory is not None else
                               make_policy(policy_kind, model, description, base_url, api_key, extra_params,
-                                          env.interact_radius))
+                                          env.interact_radius, env_change_cap))
         if hasattr(policies[agent_id], 'client'):
             policies[agent_id]._context_memory = ContextMemory(ContextConfig(max_tokens=context_max_tokens))
             policies[agent_id].context_memory.sink = lambda event, aid=agent_id: write_context(compression_path, aid, event)
@@ -446,6 +451,8 @@ def main():
                         help='Advisory context pressure threshold (UTF-8 byte estimate + output reserve); the model decides whether to compress (default: 64000)')
     parser.add_argument("--controller", choices=CONTROLLER_CHOICES, default="decentralized",
                         help="decentralized: one LLM per agent (messages); central: one LLM controls every agent")
+    parser.add_argument("--env-change-cap", type=int, default=0,
+                        help="re-invoke the LLM when the surroundings change, at most this many times per agent (0: off)")
     parser.add_argument("--score-config", default=None,
                         help="score weight JSON (default: scoring_weights.json if present, else built-in weights)")
     parser.add_argument("--policy", choices=POLICY_CHOICES, default="code",
@@ -453,6 +460,8 @@ def main():
     args = parser.parse_args()
     if args.steps < 1:
         parser.error("--steps must be at least 1")
+    if args.env_change_cap < 0:
+        parser.error("--env-change-cap must be nonnegative")
     if args.context_max_tokens < 1:
         parser.error('--context-max-tokens must be positive')
     if args.environment != "map" and (args.map_file or args.map_seed is not None):
@@ -487,7 +496,7 @@ def main():
                 args.environment, args.sequence_seed, args.pads_per_room, args.presses_per_room, args.max_resets, args.debug,
                 reveal_goal=not args.hide_goal, reward_visible=args.show_reward,
                 context_max_tokens=args.context_max_tokens, solo_agent=args.solo_agent,
-                controller=args.controller, score_config=score_config)
+                controller=args.controller, score_config=score_config, env_change_cap=args.env_change_cap)
     print(f"\nWrote manifest: {out_path}")
     print(f"Score it with: python maci_judge.py {out_path}")
 

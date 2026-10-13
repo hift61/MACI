@@ -234,6 +234,7 @@ def main():
     parser.add_argument("--api-key-file", default="key.txt")
     parser.add_argument("--reasoning-effort", default=None)
     parser.add_argument("--score-config", default=None)
+    parser.add_argument("--env-change-cap", type=int, default=0, help="주변 환경 변화로 LLM을 다시 부르는 최대 횟수 (0: 끔)")
     parser.add_argument("--summarize", action="store_true", help="실행하지 않고 끝난 결과만 집계")
     parser.add_argument("--dry-run", action="store_true", help="실행 계획만 출력")
     args = parser.parse_args()
@@ -264,7 +265,8 @@ def main():
     score_config = benchmark.load_score_config(args.score_config)
     protocol = {"environment": args.environment, "pads_per_room": args.pads_per_room,
                 "presses_per_room": args.presses_per_room, "steps": args.steps, "policy": args.policy,
-                "reasoning_effort": args.reasoning_effort, "score_config": score_config.to_dict()}
+                "reasoning_effort": args.reasoning_effort, "score_config": score_config.to_dict(),
+                "env_change_cap": args.env_change_cap}
     if args.policy != "code":
         models = [args.policy]
     plan = [(model, controller, seed, repeat) for model in models for seed in seeds
@@ -296,7 +298,7 @@ def main():
                 model, args.base_url, api_key, extra_params, args.steps, str(path),
                 policy_kind=args.policy, environment_kind=args.environment, sequence_seed=seed,
                 pads_per_room=args.pads_per_room, presses_per_room=args.presses_per_room,
-                controller=controller, score_config=score_config)
+                controller=controller, score_config=score_config, env_change_cap=args.env_change_cap)
         except Exception:
             # 한 실행의 실패(API 오류 등)로 실험 전체를 멈추지 않음. 다시 실행하면 이 실행부터 재시도
             path.with_suffix(".error.txt").write_text(traceback.format_exc(), encoding="utf-8")
