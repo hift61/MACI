@@ -38,6 +38,12 @@ class ContextHistory(list):
         super().__init__(copy.deepcopy(messages))
         self.archive = copy.deepcopy(messages)
         self.sink = None
+        # 에이전트 LLM의 추론(reasoning) 기록을 받는 곳. 추론은 대화 이력에 넣지 않음(다시 보내면 모델 입력이 바뀜)
+        self.reasoning_sink = None
+
+    def record_reasoning(self, record: dict) -> None:
+        if self.reasoning_sink:
+            self.reasoning_sink(copy.deepcopy(record))
 
     def append(self, message):
         self.archive.append(copy.deepcopy(message))

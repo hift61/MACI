@@ -251,7 +251,9 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
     compression_path = os.path.splitext(log_path)[0] + '.context_compressions.jsonl'
     archive_path = os.path.splitext(log_path)[0] + '.context_archive.jsonl'
     observation_path = os.path.splitext(log_path)[0] + '.observations.jsonl'
-    for path in (compression_path, archive_path, observation_path):
+    # 에이전트 LLM이 응답마다 내놓은 추론(프로바이더가 돌려준 경우). tool_call_ids로 대화 이력의 응답과 이어짐
+    reasoning_path = os.path.splitext(log_path)[0] + '.agent_reasoning.jsonl'
+    for path in (compression_path, archive_path, observation_path, reasoning_path):
         with open(path, 'w', encoding='utf-8'):
             pass
     context_lock = threading.Lock()
@@ -278,6 +280,8 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
         central._context_memory = ContextMemory(ContextConfig(max_tokens=context_max_tokens, show_costs=disclose_costs))
         central.context_memory.sink = lambda event: write_context(compression_path, 'central', event)
         central.conversation_history.sink = lambda message: write_context(archive_path, 'central', {'message': message})
+        central.conversation_history.reasoning_sink = lambda record: write_context(
+            reasoning_path, 'central', {'step': env.step_count, **record})
         central.code_checks.sink = lambda event: write_check('central', event)
         central.debug_sink = lambda event, details: emit_debug(event, 'central', **details)
         env.joint_policy = central
@@ -298,6 +302,8 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                                                                              show_costs=disclose_costs))
             policies[agent_id].context_memory.sink = lambda event, aid=agent_id: write_context(compression_path, aid, event)
             policies[agent_id].conversation_history.sink = lambda message, aid=agent_id: write_context(archive_path, aid, {'message': message})
+            policies[agent_id].conversation_history.reasoning_sink = lambda record, aid=agent_id: write_context(
+                reasoning_path, aid, {'step': env.step_count, **record})
         checks = getattr(policies[agent_id], "code_checks", None)
         if checks is not None:
             checks.sink = lambda event, aid=agent_id: write_check(aid, event)

@@ -22,7 +22,14 @@ are saved to <manifest>.judges.json, and judge_agreement.py compares judges
 with each other and with human scores from launcher.py's human scoring tab.
 Baselines are recorded per judge model, since judges differ in strictness.
 
+--unit anchor judges decision points instead of every step: each time an
+agent's outside context changed (partner message, failure notice, new
+stage), with its memory, latest context summary, the most relevant earlier
+context it had (embedding retrieval) and what it did next - see
+judge_context.py. About 20-25 calls per run instead of 2 per step.
+
 Usage:
+    python maci_judge.py path/to/manifest.jsonl --unit anchor
     python maci_judge.py path/to/manifest.jsonl --set-baseline
     python maci_judge.py path/to/other_manifest.jsonl
     python maci_judge.py path/to/manifest.jsonl --judge-model nvidia/nemotron-3.5-lightning,upstage/solar-pro4
@@ -169,29 +176,39 @@ def judge_turn(client, judge_model: str, record: dict, agent_record: dict, log=N
     mid-reasoning, returns NaN instead of guessing if it still doesn't fit,
     and reacts to (rather than pre-guesses) context overflow by shrinking
     the policy code text first."""
+    full_code = agent_record.get("generated_code") or ""
+    turn_summary = build_turn_summary(record, agent_record)
+
+    def make_prompt(code_budget):
+        code_text = full_code
+        if code_budget is not None and len(code_text) > code_budget:
+            code_text = "...(earlier code trimmed)...\n" + code_text[-code_budget:]
+        return _build_user_prompt(turn_summary, code_text)
+
+    return ask_judge(client, judge_model, SYSTEM_PROMPT, make_prompt, len(full_code), log=log)
+
+
+def ask_judge(client, judge_model: str, system_prompt: str, make_prompt, full_length: int, log=None,
+              token_budget: int = DEFAULT_TOKEN_BUDGET) -> float:
+    """One streamed judge call -> 0-10 score or NaN. make_prompt(budget) builds the user prompt; budget None means
+    the full text, otherwise the long part is trimmed to that many characters (used only after context overflow)."""
     if log is None:
         def log(msg):
             print(msg, flush=True)
 
-    full_code = agent_record.get("generated_code") or ""
-    turn_summary = build_turn_summary(record, agent_record)
-
-    code_budget = None  # None = send the full code; only shrink once the server rejects it
-    token_budget = DEFAULT_TOKEN_BUDGET
+    code_budget = None  # None = send the full text; only shrink once the server rejects it
+    # token_budget: first max_tokens; grows up to 4x when the judge is cut off mid-reasoning
     max_token_budget = token_budget * 4
 
     while True:
-        code_text = full_code
-        if code_budget is not None and len(code_text) > code_budget:
-            code_text = "...(earlier code trimmed)...\n" + code_text[-code_budget:]
-        user_prompt = _build_user_prompt(turn_summary, code_text)
+        user_prompt = make_prompt(code_budget)
 
         try:
             stream = with_retry(
                 client.chat.completions.create,
                 model=judge_model,
                 messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
                 extra_body={"reasoning": {"enabled": True}},
@@ -227,7 +244,7 @@ def judge_turn(client, judge_model: str, record: dict, agent_record: dict, log=N
         except APIStatusError as e:
             if not is_context_overflow_error(e):
                 raise
-            next_budget = (code_budget // 2) if code_budget is not None else (len(full_code) // 2)
+            next_budget = (code_budget // 2) if code_budget is not None else (full_length // 2)
             if next_budget < 200:
                 log("[maci_judge] WARNING: prompt too long even after trimming code; scoring as NaN.")
                 return float("nan")
@@ -289,6 +306,56 @@ def score_run(manifest_path, client, judge_model, agent_filter=None, max_turns=N
     }
 
 
+ANCHOR_TOKEN_BUDGET = 8000  # 판단 시점 묶음은 길어서 판정기가 더 오래 생각함
+ANCHOR_SYSTEM_PROMPT = (
+    "You are an expert judge of cooperation in a two-agent task. Each agent is driven by Python policy code an LLM "
+    "wrote for itself; the LLM is asked again only at some steps. You are shown ONE decision point of one agent: "
+    "what changed for it (a partner message, a failure notice, a new stage...), its memory and its own latest "
+    "context summary, the most relevant earlier context it had, the policy that was running, its response (code "
+    "changes, context summaries, or no new turn at all) and the actions that actually executed afterwards. "
+    "Score 0-10 how well the agent took the external context into account at this point: the situation change, "
+    "what its partner said or needs to know, and relevant earlier facts (including lessons from earlier failures). "
+    "High: the response and the executed actions react sensibly and consistently with what it knew, use the "
+    "partner's information, and tell the partner what the partner cannot see when the task needs it. Low: it "
+    "ignores the trigger or the partner, repeats a behavior that already failed, or contradicts facts it already "
+    "had. Judge only on information this agent had. Do not reward verbose comments or plans that the code and the "
+    "executed actions do not follow. Reply with only a single number from 0 to 10."
+)
+
+
+def score_run_anchors(manifest_path, client, judge_model, agent_filter=None, max_turns=None, log=None,
+                      bundles=None):
+    """Judge each decision-point bundle (judge_context.py) instead of every step. per_turn entries use the
+    bundle's anchor step, so judge_agreement can compare them with human scores given at those steps."""
+    import judge_context
+    if log is None:
+        def log(msg):
+            print(msg, flush=True)
+    if bundles is None:
+        bundles = judge_context.build_bundles(manifest_path, agent_filter=agent_filter)
+    if max_turns:
+        bundles = bundles[:max_turns]
+    scores, per_turn = [], []
+    for bundle in bundles:
+        score = ask_judge(client, judge_model, ANCHOR_SYSTEM_PROMPT,
+                          lambda budget, b=bundle: judge_context.render(b, budget) + "\n\nScore (0-10):",
+                          len(judge_context.render(bundle)), log=log, token_budget=ANCHOR_TOKEN_BUDGET)
+        log(f"[maci_judge] anchor step={bundle['step']} agent={bundle['agent']} score={score}")
+        per_turn.append({"step": bundle["step"], "agent": bundle["agent"], "score": score})
+        if score == score:
+            scores.append(score)
+    with open(manifest_path, encoding="utf-8") as f:
+        first = json.loads(f.readline() or "{}")
+    return {
+        "raw_avg": sum(scores) / len(scores) if scores else float("nan"),
+        "n_scored": len(scores),
+        "n_total": len(per_turn),
+        "per_turn": per_turn,
+        "actor_models": sorted({a.get("model", "") for a in first.get("agents", [])} - {""}),
+        "unit": "anchor",
+    }
+
+
 def load_baselines() -> dict:
     if os.path.exists(BASELINE_FILE):
         try:
@@ -337,6 +404,14 @@ def main():
     parser.add_argument("--baseline-model", default=DEFAULT_BASELINE_MODEL)
     parser.add_argument("--set-baseline", action="store_true", help="register this run's average as the --baseline-model's 100-point baseline")
     parser.add_argument("--force-baseline", action="store_true", help="allow --set-baseline even if the manifest's actor model doesn't look like --baseline-model")
+    parser.add_argument("--unit", choices=("step", "anchor"), default="step",
+                        help="step: judge every agent step; anchor: judge each decision point where the agent's "
+                             "outside context changed, with relevant earlier context retrieved (judge_context.py)")
+    parser.add_argument("--retrieval", choices=("embedding", "lexical"), default="embedding",
+                        help="--unit anchor: how earlier context is ranked")
+    parser.add_argument("--embed-model", default="openai/text-embedding-3-small")
+    parser.add_argument("--top-k", type=int, default=4, help="--unit anchor: earlier pieces per decision point")
+    parser.add_argument("--max-anchors", type=int, default=12, help="--unit anchor: decision points per agent")
     args = parser.parse_args()
 
     api_key = read_secret(args.api_key_file)
@@ -344,13 +419,31 @@ def main():
     judges = [model.strip() for model in args.judge_model.split(",") if model.strip()]
     if not judges:
         parser.error("--judge-model is empty")
+    bundles = None
+    if args.unit == "anchor":
+        import judge_context
+        similarity = judge_context.make_similarity(args.retrieval, args.manifest, client, args.embed_model)
+        bundles = judge_context.build_bundles(args.manifest, similarity, top_k=args.top_k,
+                                              max_anchors=args.max_anchors, agent_filter=args.agent)
+        judge_context.bundles_path(args.manifest).write_text(json.dumps(bundles, ensure_ascii=False, indent=1),
+                                                             encoding="utf-8")
+        print(f"{len(bundles)} decision points -> {judge_context.bundles_path(args.manifest)}")
     for judge_model in judges:
-        print(f"\n=== Judge: {judge_model} ===")
-        result = score_run(args.manifest, client, judge_model, agent_filter=args.agent, max_turns=args.max_turns)
-        judge_agreement.save_judge_result(args.manifest, judge_model, result)
-        report_result(args, result, judge_model)
+        print(f"\n=== Judge: {judge_model} ({args.unit}) ===")
+        if args.unit == "anchor":
+            result = score_run_anchors(args.manifest, client, judge_model, max_turns=args.max_turns, bundles=bundles)
+            # 판정 단위가 다르므로 step 단위 결과와 같은 칸에 섞지 않음
+            judge_agreement.save_judge_result(args.manifest, judge_model + judge_agreement.ANCHOR_SUFFIX, result)
+        else:
+            result = score_run(args.manifest, client, judge_model, agent_filter=args.agent, max_turns=args.max_turns)
+            judge_agreement.save_judge_result(args.manifest, judge_model, result)
+        report_result(args, result, f"{judge_model}@anchor" if args.unit == "anchor" else judge_model)
     print(f"\nPer-turn judge scores saved to {judge_agreement.judge_path(args.manifest)}")
-    agreement = judge_agreement.report(args.manifest)
+    if args.unit == "anchor":
+        import judge_context
+        agreement = judge_agreement.report(args.manifest, "anchor", judge_context.load_all_anchor_ratings(args.manifest))
+    else:
+        agreement = judge_agreement.report(args.manifest)
     if agreement["pairs"]:
         print("\n=== Agreement (judges / human raters) ===")
         print("\n".join(judge_agreement.format_report(agreement)))

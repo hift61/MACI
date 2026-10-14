@@ -15,7 +15,10 @@ SSH(키 로그인)로 원격 benchmark_runs 아래의 실행(manifest .jsonl)을
 - 이동 다시 보기: 내려받은 뒤 viewer.py로 열기
 - 실시간 따라보기: 진행 중인 실행의 새 step만 계속 이어 받아 viewer.py --live로 보기
 - LLM 출력 평가: 대화 이력의 LLM 응답 하나하나를 사람이 0~10점과 메모로 평가 (llm_outputs.py,
-  <manifest>.llm_ratings.<평가자>.json에 저장). 원격 실행은 대화 이력까지 내려받아 로컬 사본 옆에 저장
+  <manifest>.llm_ratings.<평가자>.json에 저장). 원격 실행은 대화 이력까지 내려받아 로컬 사본 옆에 저장.
+  에이전트 추론(<manifest>.agent_reasoning.jsonl)이 있으면 응답마다 함께 보여 줌
+- 판정기 평가: 바깥 맥락이 바뀐 판단 시점마다 묶음(judge_context.py)을 보여 주고, '판정기 실행'으로 판정 모델이
+  채점(maci_judge --unit anchor와 같음, key.txt 사용), 같은 시점을 사람이 0~10점으로 채점해 판정기와의 일치도를 봄
 원격 작업은 모두 원격의 python3에 아래 REMOTE_HELPER 스크립트를 보내 처리합니다(원격에 따로 설치할 것 없음).
 """
 from __future__ import annotations
@@ -32,6 +35,7 @@ import tarfile
 import threading
 import time
 
+import judge_context
 import llm_outputs
 
 ROOT = Path(__file__).resolve().parent
@@ -46,7 +50,7 @@ REFRESH_SECONDS = 20.0  # 자동 새로고침 간격
 REMOTE_HELPER = r'''
 import io, json, os, sys, tarfile, time
 SIDE = (".debug.jsonl", ".code_checks.jsonl", ".context_archive.jsonl", ".context_compressions.jsonl",
-        ".observations.jsonl")
+        ".observations.jsonl", ".agent_reasoning.jsonl")
 CONTEXT = (".context_archive.jsonl", ".context.json", ".working_context.json", ".context_compressions.jsonl")
 action, root = sys.argv[1], os.path.realpath(os.path.expanduser(sys.argv[2]))
 
@@ -245,6 +249,8 @@ class PiLogsApp:
                        "rater": "", "comment": ""}
         # LLM 출력 평가 화면 상태: {"path", "outputs", "index", "ratings", "filter", "lines", "scroll"}
         self.review: dict | None = None
+        # 판정기 평가 화면 상태: {"path", "bundles", "index", "filter", "lines", "scroll"}
+        self.judge: dict | None = None
         self.runner = runner
         self.source = source  # "remote" 또는 "local"
         self.focus = None
@@ -437,7 +443,10 @@ class PiLogsApp:
             return
         rating = self.review["ratings"].get(output["id"])
         self.fields["comment"] = rating.get("comment", "") if rating else ""
-        text = (llm_outputs.RUBRIC + "\n\n=== LLM 출력 ===\n" + output["output"]
+        reasoning = output.get("reasoning") or ("(프로바이더가 추론을 숨김)" if output.get("reasoning_hidden") else "")
+        text = (llm_outputs.RUBRIC
+                + ("\n\n=== 에이전트 추론 ===\n" + reasoning if reasoning else "")
+                + "\n\n=== LLM 출력 ===\n" + output["output"]
                 + ("\n\n=== 하네스 응답 ===\n" + "\n".join(output["result"]) if output["result"] else "")
                 + "\n\n=== 이 출력 직전에 받은 입력 (앞부분) ===\n" + output["input"][:4000])
         self.review["lines"] = self.wrap(text, 676)
@@ -489,6 +498,141 @@ class PiLogsApp:
         self.button("다음 ▶", (x + 108, 640, 100, 32), lambda: self.move_review(1))
         self.button("다음 미평가", (x + 216, 640, 130, 32), self.next_unrated)
         self.field("comment", "메모 (점수를 누르면 함께 저장)", x + 356, 632, 340)
+
+    # ---- 판정기 평가 (판단 시점 단위, judge_context.py)
+    def judge_client(self):
+        try:
+            from openai import OpenAI
+            from maci_judge import read_secret
+            return OpenAI(base_url="https://openrouter.ai/api/v1", api_key=read_secret("key.txt"))
+        except Exception:
+            return None  # 키가 없으면 묶음은 단어 기반 유사도로 만들고, 판정기 실행은 막힘
+
+    def open_judge(self) -> None:
+        if not self.selected:
+            self.status = "실행을 먼저 고르세요."
+            return
+        rel = self.selected
+
+        def load(path):
+            bundles = judge_context.load_or_build_bundles(path, self.judge_client(), log=lambda message: None)
+            if not bundles:
+                raise ValueError("이 실행에는 판단 시점이 없습니다 (LLM 응답이 없음).")
+            return path, bundles
+
+        def done(result):
+            path, bundles = result
+            self.review = None
+            self.judge = {"path": path, "bundles": bundles, "index": 0, "filter": None, "scroll": 0, "lines": []}
+            self._show_point()
+            self.status = (f"판단 시점 {len(bundles)}개. '판정기 실행'으로 판정 모델 점수를, 숫자 키 0~9로 내 점수를 "
+                           f"매깁니다 (평가자 이름 필요).")
+        fetch = (lambda: self.client.download(rel)) if self.source == "local" else (
+            lambda: self.client.download(rel, True))
+        self.background("판단 시점 만들기", lambda: load(fetch()), done)
+
+    def judge_points(self) -> list[dict]:
+        agent = self.judge["filter"]
+        return [b for b in self.judge["bundles"] if agent is None or b["agent"] == agent]
+
+    def current_point(self) -> dict | None:
+        items = self.judge_points() if self.judge else []
+        return items[min(self.judge["index"], len(items) - 1)] if items else None
+
+    def move_point(self, delta: int) -> None:
+        items = self.judge_points()
+        if items:
+            self.judge["index"] = min(len(items) - 1, max(0, self.judge["index"] + delta))
+            self._show_point()
+
+    def set_point_filter(self, agent: str | None) -> None:
+        self.judge["filter"], self.judge["index"] = agent, 0
+        self._show_point()
+
+    def my_point_rating(self, bundle: dict) -> dict | None:
+        rater = self.fields["rater"].strip()
+        if not rater:
+            return None
+        return judge_context.load_anchor_ratings(self.judge["path"], rater).get(f"{bundle['step']}|{bundle['agent']}")
+
+    def _show_point(self) -> None:
+        bundle = self.current_point()
+        if bundle is None:
+            self.judge["lines"] = ["(이 에이전트의 판단 시점이 없습니다)"]
+            return
+        mine = self.my_point_rating(bundle)
+        self.fields["comment"] = mine.get("comment", "") if mine else ""
+        self.judge["lines"] = self.wrap(judge_context.ANCHOR_RUBRIC + "\n\n" + judge_context.render(bundle), 676)
+        self.judge["scroll"] = 0
+
+    def rate_point(self, score) -> None:
+        bundle = self.current_point()
+        if bundle is None:
+            return
+        if not self.fields["rater"].strip():
+            self.status = "평가자 이름을 먼저 입력하세요."
+            self.focus = "rater"
+            return
+        judge_context.save_anchor_rating(self.judge["path"], self.fields["rater"], bundle, score,
+                                         self.fields["comment"])
+        if score is not None:
+            self.move_point(1)
+
+    def run_judge(self) -> None:
+        client = self.judge_client()
+        if client is None:
+            self.status = "key.txt를 읽을 수 없어 판정기를 실행할 수 없습니다."
+            return
+        import judge_agreement
+        import maci_judge
+        path, bundles = self.judge["path"], list(self.judge["bundles"])
+        model = maci_judge.DEFAULT_JUDGE_MODEL
+        progress = {"done": 0}
+
+        def log(message):
+            if "anchor step=" in message:
+                progress["done"] += 1
+                self.status = f"판정기 실행 중… {progress['done']}/{len(bundles)}"
+
+        def work():
+            result = maci_judge.score_run_anchors(path, client, model, bundles=bundles, log=log)
+            judge_agreement.save_judge_result(path, model + judge_agreement.ANCHOR_SUFFIX, result)
+            return result
+
+        def done(result):
+            self.status = (f"판정기 {model} 완료: 평균 {result['raw_avg']:.2f} "
+                           f"({result['n_scored']}/{result['n_total']} 채점)")
+        self.background(f"판정기 실행 ({len(bundles)}개)", work, done)
+
+    def _draw_judge(self, x: int) -> None:
+        pygame = self.pygame
+        judge = self.judge
+        bundle = self.current_point()
+        items = self.judge_points()
+        self.button("판정 닫기", (x, 126, 120, 32), lambda: setattr(self, "judge", None))
+        for i, (label, agent) in enumerate((("전체", None), ("A", "A"), ("B", "B"))):
+            self.button(label, (x + 132 + i * 66, 126, 60, 32), lambda a=agent: self.set_point_filter(a),
+                        judge["filter"] == agent)
+        self.button("판정기 실행", (x + 336, 126, 130, 32), self.run_judge)
+        self.text(judge_context.summary(judge["path"], judge["bundles"], self.fields["rater"]), x + 476, 134,
+                  width=220)
+        if bundle is not None:
+            key = f"{bundle['step']}|{bundle['agent']}"
+            scores = "  ".join(f"{name.split('/')[-1]} {s[key]:g}" for name, s in
+                               judge_context.judge_scores(judge["path"]).items() if key in s) or "판정 없음"
+            mine = self.my_point_rating(bundle)
+            self.text(f"{judge['index'] + 1}/{len(items)}   에이전트 {bundle['agent']}   step {bundle['step']}   "
+                      f"판정기: {scores}   내 점수: {'-' if mine is None else mine['score']}", x, 166, self.font,
+                      width=696)
+        pygame.draw.rect(self.screen, (10, 15, 23), (x, 192, 696, 400), border_radius=8)
+        for i, line in enumerate(judge["lines"][judge["scroll"]:judge["scroll"] + 19]):
+            self.text(line, x + 10, 198 + i * 20, width=676)
+        for score in range(11):
+            self.button(str(score), (x + score * 56, 600, 50, 32), lambda v=score: self.rate_point(v))
+        self.button("지우기", (x + 616, 600, 80, 32), lambda: self.rate_point(None))
+        self.button("◀ 이전", (x, 640, 100, 32), lambda: self.move_point(-1))
+        self.button("다음 ▶", (x + 108, 640, 100, 32), lambda: self.move_point(1))
+        self.field("comment", "메모 (점수를 누르면 함께 저장)", x + 220, 632, 476)
 
     def open_viewer(self, path: Path, live: bool = False) -> None:
         flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
@@ -552,8 +696,11 @@ class PiLogsApp:
             self.text("목록이 비어 있습니다.", 40, 140, color=(154, 171, 193))
         # 선택한 실행 (또는 LLM 출력 평가 화면)
         x = 460
-        if self.review is not None:
-            self._draw_review(x)
+        if self.review is not None or self.judge is not None:
+            if self.judge is not None:
+                self._draw_judge(x)
+            else:
+                self._draw_review(x)
             self.text(self.status, 24, 728, color=(73, 166, 228), width=1130)
             pygame.display.flip()
             return
@@ -570,7 +717,8 @@ class PiLogsApp:
         if self.source == "remote":
             self.button("대화 이력 포함: " + ("예" if self.include_context else "아니오"), (x, 292, 250, 30),
                         lambda: setattr(self, "include_context", not self.include_context), self.include_context)
-        self.button("LLM 출력 평가", (x + 260, 292, 170, 30), self.open_review)
+        self.button("LLM 출력 평가", (x + 260, 292, 84, 30), self.open_review)
+        self.button("판정기 평가", (x + 350, 292, 84, 30), self.open_judge)
         self.field("rater", "평가자", x + 440, 274, 256)
         pygame.draw.rect(self.screen, (10, 15, 23), (x, 330, 696, 386), border_radius=8)
         end = max(0, len(self.log_lines) - self.log_scroll)
@@ -601,15 +749,22 @@ class PiLogsApp:
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     self.handle_click(event.pos)
                 elif event.type == pygame.MOUSEWHEEL:
-                    if self.review is not None and pygame.mouse.get_pos()[0] >= 450:
-                        self.review["scroll"] = min(max(0, len(self.review["lines"]) - 19),
-                                                    max(0, self.review["scroll"] - event.y * 3))
+                    view = self.judge if self.judge is not None else self.review
+                    if view is not None and pygame.mouse.get_pos()[0] >= 450:
+                        view["scroll"] = min(max(0, len(view["lines"]) - 19), max(0, view["scroll"] - event.y * 3))
                     elif pygame.mouse.get_pos()[0] < 450:
                         self.list_scroll = min(max(0, len(self.runs) - 21), max(0, self.list_scroll - event.y))
                     else:
                         self.log_scroll = min(max(0, len(self.log_lines) - 18), max(0, self.log_scroll - event.y * 3))
                 elif event.type == pygame.TEXTINPUT and self.focus:
                     self.fields[self.focus] += event.text
+                elif event.type == pygame.KEYDOWN and not self.focus and self.judge is not None:
+                    if event.key == pygame.K_LEFT:
+                        self.move_point(-1)
+                    elif event.key == pygame.K_RIGHT:
+                        self.move_point(1)
+                    elif pygame.K_0 <= event.key <= pygame.K_9:
+                        self.rate_point(event.key - pygame.K_0)
                 elif event.type == pygame.KEYDOWN and not self.focus and self.review is not None:
                     if event.key == pygame.K_LEFT:
                         self.move_review(-1)

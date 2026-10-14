@@ -5,6 +5,7 @@
   - output: 응답 본문과 도구 호출 (submit_policy_code의 코드, keep_current_code, manage_context 등)
   - result: 하네스의 도구 응답 (코드 수락/거부 등)
   - step: 그 응답이 나온 대략의 step (직전 'Simulation step result'의 step + 1)
+  - reasoning: 그 응답의 에이전트 추론 (<manifest>.agent_reasoning.jsonl, 프로바이더가 돌려준 경우만. tool_call_id로 연결)
 사람 평가는 <manifest>.llm_ratings.<평가자>.json에 저장: 출력 id(에이전트:순번)마다 0~10점과 메모.
 """
 from __future__ import annotations
@@ -18,6 +19,25 @@ STATUS_PREFIX = 'Context management status (advisory):'
 STEP_PREFIX = 'Simulation step result:'
 RUBRIC = ("평가 기준 (0~10): 이 출력이 그 시점에 모델이 가진 정보로 타당한가, 과제와 상대와의 협력을 실제로 진전시키는가, "
           "코드라면 의도대로 동작할 만한가. 형식만 그럴듯한 출력에 높은 점수를 주지 마세요.")
+
+
+def reasoning_path(manifest) -> Path:
+    manifest = Path(manifest)
+    return manifest.with_name(manifest.stem + ".agent_reasoning.jsonl")
+
+
+# tool_call_id -> 그 응답의 추론 기록 (benchmark.py가 남김). 파일이 없으면(예전 실행) 빈 dict
+def load_reasoning(manifest) -> dict[str, dict]:
+    path = reasoning_path(manifest)
+    if not path.is_file():
+        return {}
+    by_call = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            record = json.loads(line)
+            for call_id in record.get("tool_call_ids") or []:
+                by_call.setdefault(call_id, record)
+    return by_call
 
 
 def archive_path(manifest) -> Path:
@@ -71,12 +91,22 @@ def _describe_call(call: dict) -> str:
     return f"[{name}] " + json.dumps(args, ensure_ascii=False, indent=1)
 
 
+# 도구 호출 하나 -> (도구 이름, 인자 dict). 인자를 읽을 수 없으면 원문을 "raw"로
+def _call_args(call: dict) -> tuple[str, dict]:
+    function = call.get("function", {})
+    try:
+        return function.get("name"), json.loads(function.get("arguments") or "{}")
+    except ValueError:
+        return function.get("name"), {"raw": function.get("arguments")}
+
+
 def extract_outputs(manifest) -> list[dict]:
     """대화 이력의 LLM 응답 목록. 에이전트별 순서를 유지하고, id는 '에이전트:순번'."""
     path = archive_path(manifest)
     if not path.is_file():
         raise FileNotFoundError(f"대화 이력 파일이 없습니다: {path.name} (원격이면 '대화 이력 포함'으로 가져오세요)")
     outputs, last_input, last_step, counters, by_call = [], {}, {}, {}, {}
+    reasoning = load_reasoning(manifest)
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
@@ -98,7 +128,11 @@ def extract_outputs(manifest) -> list[dict]:
             item = {"id": f"{agent}:{counters[agent]}", "agent": agent, "index": counters[agent],
                     "step": last_step.get(agent, 0) + 1, "input": last_input.get(agent, ""),
                     "output": "\n\n".join(parts) or "(빈 응답)", "tools": [c.get("function", {}).get("name") for c in calls],
-                    "result": []}
+                    "calls": [_call_args(c) for c in calls], "call_ids": [c.get("id") for c in calls],
+                    "reasoning": "", "reasoning_hidden": False, "result": []}
+            found = next((reasoning[c.get("id")] for c in calls if c.get("id") in reasoning), None)
+            if found:
+                item["reasoning"], item["reasoning_hidden"] = found.get("reasoning", ""), bool(found.get("hidden"))
             outputs.append(item)
             for call in calls:
                 by_call[call.get("id")] = item

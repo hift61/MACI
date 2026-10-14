@@ -258,6 +258,40 @@ class ScenarioRuleTests(unittest.TestCase):
         team = score_episode(env, 150, [{"type": "sync_success", "group": "sync"}])["team"]
         self.assertEqual((team["attempts"], team["failed_attempts"], team["sync_failures"]), (1, 1, 1))
 
+    def test_sync_attempts_count_everyone_judged_including_a_waiting_agent(self):
+        from scoring import score_episode
+        env, _, _ = build_environment(load("s05_lossy_sync").build())
+        # A가 혼자 들어와 실패, 판 위에서 기다리던 B도 함께 밀려남 (B의 진입은 등록되지 않음) -> 그다음 둘이 성공
+        env._log("sync_pad_entered", ["A"], pad_id="pad_A", group="sync")
+        env._log("sync_fail", ["A", "B"], group="sync", disabled_until=5)
+        env._log("sync_pad_entered", ["A"], pad_id="pad_A", group="sync")
+        env._log("sync_pad_entered", ["B"], pad_id="pad_B", group="sync")
+        env._log("sync_success", ["A", "B"], group="sync")
+        team = score_episode(env, 150, [{"type": "sync_success", "group": "sync"}])["team"]
+        self.assertEqual((team["attempts"], team["failed_attempts"]), (4, 2))
+        self.assertGreaterEqual(team["attempts"], team["failed_attempts"])
+
+    def test_same_award_is_given_once_per_team_for_the_same_target(self):
+        from scoring import ScoreConfig, score_episode
+        env, _, _ = build_environment(load("s03_split_experiment").build())
+        # 같은 문을 A와 B가 번갈아 열어도 가점은 처음 연 A에게 한 번만. 레버를 다시 당겨도 한 번만
+        for agent_id in ("A", "B", "A"):
+            env._log("door_unlocked", [agent_id], door_id="G1")
+            env._log("lever_pulled", [agent_id], lever_id="L1")
+        # 함께 해낸 성공(첫 이벤트에 둘 다 오름)은 둘 다 받음
+        env._log("sync_success", ["A", "B"], group="g")
+        agents = score_episode(env, 150, [])["agents"]
+        config = ScoreConfig()
+        items = {a: [(i["reason"], i["target"]) for i in agents[a]["items"]] for a in agents}
+        self.assertEqual(items["A"].count(("문 열림", "G1")), 1)
+        self.assertNotIn(("문 열림", "G1"), items["B"])
+        self.assertNotIn(("레버 당김", "L1"), items["B"])
+        for a in ("A", "B"):
+            self.assertIn(config.sync_points, [i["points"] for i in agents[a]["items"]])
+        # 실질적 성공이 중간 조작보다 훨씬 크게
+        self.assertGreater(config.keypad_points, 10 * config.lever_points)
+        self.assertGreater(config.sync_points, 10 * config.door_unlock_points / 1.5)
+
     def test_periodic_gate_follows_its_schedule(self):
         module = load("s10_moving_world")
         env, _, _ = build_environment(module.build())

@@ -7,6 +7,7 @@ import copy
 import queue
 import threading
 import ast
+import re
 from pathlib import Path
 
 from openai import OpenAI, RateLimitError
@@ -52,6 +53,49 @@ def _create_with_retry(client, **kwargs):
                 except ValueError:
                     pass
             time.sleep(delay)
+
+
+# 응답 하나에서 에이전트 LLM의 추론 글을 뽑음. 프로바이더마다 담는 곳이 다름:
+#   message.reasoning / reasoning_content (OpenRouter, GLM 등), reasoning_details의 text/summary,
+#   본문 안의 <think>...</think>. 암호화되어 내용이 없는 추론(reasoning_details의 encrypted)은 hidden으로 표시
+def response_reasoning(message) -> dict:
+    extra = getattr(message, 'model_extra', None) or {}
+    parts, hidden = [], False
+    for value in (getattr(message, 'reasoning', None), extra.get('reasoning'), extra.get('reasoning_content')):
+        if isinstance(value, str) and value.strip() and value.strip() not in parts:
+            parts.append(value.strip())
+    for detail in extra.get('reasoning_details') or []:
+        if not isinstance(detail, dict):
+            continue
+        if 'encrypted' in str(detail.get('type', '')) or detail.get('data'):
+            hidden = True
+        if not parts:
+            for key in ('text', 'summary'):
+                value = detail.get(key)
+                if isinstance(value, str) and value.strip():
+                    parts.append(value.strip())
+    content = getattr(message, 'content', None)
+    if isinstance(content, str):
+        parts += [m.strip() for m in re.findall(r'(?s)<think>(.*?)</think>', content) if m.strip()]
+    return {'reasoning': '\n\n'.join(parts), 'hidden': hidden and not parts}
+
+
+def _record_reasoning(history, response) -> None:
+    record = getattr(history, 'record_reasoning', None)
+    if record is None or not getattr(response, 'choices', None):
+        return
+    message = response.choices[0].message
+    found = response_reasoning(message)
+    usage = getattr(response, 'usage', None)
+    details = getattr(usage, 'completion_tokens_details', None)
+    reasoning_tokens = getattr(details, 'reasoning_tokens', None) if details is not None else None
+    content = message.content if isinstance(message.content, str) else None
+    if not (found['reasoning'] or found['hidden'] or reasoning_tokens or (content and content.strip())):
+        return
+    record({'tool_call_ids': [tc.id for tc in (message.tool_calls or [])],
+            'tools': [tc.function.name for tc in (message.tool_calls or [])],
+            'reasoning': found['reasoning'], 'hidden': found['hidden'], 'reasoning_tokens': reasoning_tokens,
+            'content': content or '', 'finish_reason': response.choices[0].finish_reason})
 
 
 class PolicyGaveUp(RuntimeError):
@@ -371,6 +415,7 @@ class LLMPolicy(Policy):
                 tool_choice="required",
                 **self.extra_params
             )
+            _record_reasoning(history, response)
             message = response.choices[0].message
             history.append({'role': 'assistant', 'content': json.dumps(
                 {'content': message.content, 'tool_calls': [
@@ -699,6 +744,7 @@ def _generate_code_with_submission_gate(
                 tool_choice="required",
                 **extra_params,
             )
+            _record_reasoning(messages, response)
             choice = response.choices[0]
             if choice.finish_reason == "length":
                 messages.append({'role': 'assistant', 'content': choice.message.content or '(response truncated)'})
@@ -773,6 +819,7 @@ def _generate_code_with_submission_gate(
         messages=_text_history(messages),
         **extra_params,
     )
+    _record_reasoning(messages, response)
     messages.append({'role': 'assistant', 'content': response.choices[0].message.content or ''})
     if response.choices[0].finish_reason == "length":
         raise ValueError(

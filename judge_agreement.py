@@ -45,10 +45,14 @@ def _read(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
 
 
-def load_judges(manifest) -> dict[str, dict[str, float]]:
+ANCHOR_SUFFIX = "@anchor"  # maci_judge --unit anchor 결과 (판단 시점 단위). step 단위 결과와 섞어 비교하지 않음
+
+
+def load_judges(manifest, unit: str = "step") -> dict[str, dict[str, float]]:
     return {model: {turn_key(t["step"], t["agent"]): t["score"] for t in data.get("per_turn", [])
                     if t.get("score") is not None}
-            for model, data in _read(judge_path(manifest)).items()}
+            for model, data in _read(judge_path(manifest)).items()
+            if model.endswith(ANCHOR_SUFFIX) == (unit == "anchor")}
 
 
 def save_judge_result(manifest, judge_model: str, result: dict) -> None:
@@ -151,8 +155,10 @@ def _mean_scores(raters: dict[str, dict[str, float]]) -> dict[str, float]:
     return {key: sum(values) / len(values) for key, values in totals.items()}
 
 
-def report(manifest) -> dict:
-    judges, humans = load_judges(manifest), load_humans(manifest)
+def report(manifest, unit: str = "step", humans: dict | None = None) -> dict:
+    """unit="anchor"면 판단 시점 판정끼리, humans로 받은 사람 점수(판단 시점 채점)와 비교"""
+    judges = load_judges(manifest, unit)
+    humans = load_humans(manifest) if humans is None else humans
     sources = {f"판정:{name}": scores for name, scores in judges.items()}
     sources.update({f"사람:{name}": scores for name, scores in humans.items()})
     if len(humans) > 1:
