@@ -45,6 +45,8 @@ class Environment:
         self._known: dict[str, dict[str, dict]] = {}  # agent_id -> object_id -> 마지막으로 본 상태 (관찰의 known_objects)
         # agent_id -> 직전 행동의 처리 결과 (관찰의 last_action_result). 잘못된 행동/헛된 시도를 바로 알려줌
         self._action_results: dict[str, dict] = {}
+        # 에이전트별 진행 정체 지표 상태 (_track_progress / progress_status)
+        self._progress: dict[str, dict] = {}
         # agent_id -> 최근 알림 목록 (관찰의 notices). 리셋처럼 자기 행동과 무관하게 일어난 일을 알려줌
         self._notices: dict[str, list[dict]] = {}
         # 중앙집중 모드: 이 객체가 있으면 모든 에이전트의 행동을 한 번에 결정 (decide_all)
@@ -839,14 +841,107 @@ class Environment:
 
         result = {"step": self.step_count, "action_type": action_type, "status": "ok"}
         effects = self.INTERACTION_EFFECTS.get(action_type)
-        if effects is not None and not any(
-            e["type"] in effects and agent_id in e["agent_ids"] for e in self.event_log.entries[events_before:]
-        ):
-            result.update(status="no_effect", reason=(
-                "the interaction changed nothing: the target may be missing, unusable or beyond reach "
-                f"(about {self.interact_radius:g} units)"))
+        new_events = self.event_log.entries[events_before:]
+        if effects is not None and not any(e["type"] in effects and agent_id in e["agent_ids"] for e in new_events):
+            code, reason = self._no_effect_reason(agent_id, action, new_events)
+            result.update(status="no_effect", code=code, reason=reason)
         self._action_results[agent_id] = result
+        self._track_progress(agent_id, action, new_events)
         return action
+
+    # 효과 없는 상호작용의 구체적 이유 (code, 문장). 에이전트가 이미 알 수 있는 것(자기 소지품, 거리, 레버
+    # ready_at_step, 패널 operators)만 말하고, 퍼즐이 숨긴 조건(숨은 배선 등)은 conditions_not_met으로 뭉뚱그림.
+    # 다른 에이전트가 무엇을 들고 있는지는 알려 주지 않음 (상대는 관찰에 보이지 않으므로)
+    _TARGET_FIELDS = {"pick_up": "object_id", "drop": "object_id", "use_key": "key_id",
+                      "press_button": "button_id", "pull_lever": "lever_id"}
+    _TARGET_TYPES = {"pick_up": ("item", "key"), "press_button": ("button",), "pull_lever": ("lever",)}
+
+    def _no_effect_reason(self, agent_id, action, new_events):
+        mine = [e for e in new_events if agent_id in e.get("agent_ids", [])]
+        for event in mine:
+            if event["type"] == "lever_cooling":
+                return "cooldown", f"the lever is cooling down until step {event.get('ready_at_step')}"
+            if event["type"] == "keypad_denied":
+                return "not_allowed", "this panel does not accept presses from you (see its 'operators')"
+            if event["type"] == "pickup_blocked":
+                return "conditions_not_met", f"pick-up blocked: {event.get('reason', 'conditions not met')}"
+        action_type = action.get("type")
+        agent = self.agents[agent_id]
+        target_id = action.get(self._TARGET_FIELDS.get(action_type, ""), None)
+        carried = {o["object_id"]: o for o in agent.inventory}
+        reach = self.interact_radius
+
+        def away(obj, extra=0.0):
+            distance = math.hypot(agent.x - obj["x"], agent.y - obj["y"])
+            if distance > reach + extra:
+                return ("out_of_range", f"'{obj['object_id']}' is {distance:.1f} units away; interactions reach about "
+                                        f"{reach + extra:g} units")
+            return None
+
+        if action_type == "pick_up":
+            if target_id in carried:
+                return "already_carried", f"you are already carrying '{target_id}'"
+            obj = self.objects.get(target_id)
+            if obj is None:
+                return "missing_target", f"no object '{target_id}' is lying anywhere right now"
+            if obj["type"] not in self._TARGET_TYPES["pick_up"]:
+                return "wrong_target_type", f"'{target_id}' is a {obj['type']}, which cannot be picked up"
+            return away(obj) or ("conditions_not_met", "the pick-up conditions were not met")
+        if action_type == "drop":
+            if target_id not in carried:
+                return "not_carried", f"you are not carrying '{target_id}'"
+            return "conditions_not_met", "dropping it changed nothing"
+        if action_type == "use_key":
+            key = carried.get(target_id)
+            if key is None:
+                return "not_carried", f"you are not carrying '{target_id}'"
+            if key.get("type") != "key":
+                return "wrong_target_type", f"'{target_id}' is not a key"
+            lock = self.objects.get(key.get("unlocks"))
+            if lock is None:
+                return "missing_target", f"'{key.get('unlocks')}' (what this key unlocks) is not there"
+            if lock.get("locked") is False:
+                return "already_open", f"'{lock['object_id']}' is already unlocked"
+            return away(lock, lock.get("radius", 0.0)) or ("conditions_not_met", "the key did not work here")
+        if action_type in ("press_button", "pull_lever"):
+            obj = self.objects.get(target_id)
+            if obj is None:
+                return "missing_target", f"there is no '{target_id}'"
+            if obj["type"] not in self._TARGET_TYPES[action_type]:
+                return "wrong_target_type", f"'{target_id}' is a {obj['type']}, not a {self._TARGET_TYPES[action_type][0]}"
+            return away(obj) or ("conditions_not_met", "it was in reach but changed nothing")
+        return "conditions_not_met", "the interaction changed nothing"
+
+    # ---- 진행 정체 지표 (기록만, 에이전트에게는 보여 주지 않음)
+    # 진행으로 보는 이벤트: 세계 상태를 바꾸거나 과제를 진척시킨 것 (실패/막힘/목격은 제외)
+    PROGRESS_EVENTS = frozenset((
+        "item_picked_up", "item_dropped", "item_delivered", "delivery_complete", "door_unlocked", "lever_pulled",
+        "plate_entered", "keypad_input", "keypad_solved", "number_accepted", "sync_success", "checkpoint_visited",
+        "level_completed", "chest_opened", "block_moved", "target_filled", "item_processed", "scale_balanced",
+        "team_assembled", "cargo_handoff", "bonus_collected", "portal_used"))
+
+    def _track_progress(self, agent_id, action, new_events) -> None:
+        state = self._progress.setdefault(agent_id, {"last_progress_step": 0, "last_discovery_step": 0,
+                                                     "last_action": None, "same_action_streak": 0})
+        for event in new_events:
+            if agent_id not in event.get("agent_ids", []):
+                continue
+            if event["type"] in self.PROGRESS_EVENTS:
+                state["last_progress_step"] = self.step_count
+            elif event["type"] == "object_seen":
+                state["last_discovery_step"] = self.step_count
+        key = json.dumps({k: v for k, v in action.items() if k not in ("memory", "recheck_after")},
+                         sort_keys=True, default=str) if isinstance(action, dict) else None
+        state["same_action_streak"] = state["same_action_streak"] + 1 if key == state["last_action"] else 1
+        state["last_action"] = key
+
+    def progress_status(self, agent_id) -> dict:
+        """진행 정체 지표: 마지막 진행/새 발견 이후 지난 step 수, 같은 행동을 연속으로 한 횟수"""
+        state = self._progress.get(agent_id) or {"last_progress_step": 0, "last_discovery_step": 0,
+                                                 "same_action_streak": 0}
+        return {"steps_since_progress": self.step_count - state["last_progress_step"],
+                "steps_since_discovery": self.step_count - state["last_discovery_step"],
+                "same_action_streak": state["same_action_streak"]}
 
     # 숫자 필드는 유한한 실수(bool 제외), id 필드는 문자열(또는 생략)이어야 함
     _NUMBER_FIELDS = ("facing", "angle", "distance")
@@ -860,7 +955,7 @@ class Environment:
     INTERACTION_EFFECTS = {
         "pick_up": {"item_picked_up"},
         "drop": {"item_dropped"},
-        "use_key": {"door_unlocked"},
+        "use_key": {"door_unlocked", "chest_opened"},  # chest_opened: 시나리오 맵의 상자
         "press_button": {"door_unlocked", "door_locked", "number_accepted", "keypad_input"},
         "pull_lever": {"lever_pulled"},
     }

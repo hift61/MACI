@@ -87,7 +87,8 @@ def response_reasoning(message) -> dict:
 #   - 출력 토큰 감점에서 뺌 (추정 토큰 수를 TokenUsage.reasoning_summary_tokens로 기록 -> scoring.py)
 REASONING_SUMMARY_FIELD = 'reasoning_summary'
 REASONING_SUMMARY_INSTRUCTIONS = (
-    "Reasoning summary: every time you call submit_policy_code or keep_current_code, also fill its "
+    "Reasoning summary: every time you call submit_policy_code (or keep_current_code, when it is offered), also "
+    "fill its "
     "'reasoning_summary' argument with a short summary (about 2-5 sentences) of the reasoning behind this answer: "
     "what you noticed in the observation, messages and earlier results, what you concluded, and why this code or "
     "decision follows. It is stored separately for evaluation, is not shown back to you, and does not count "
@@ -876,9 +877,16 @@ def _generate_code_with_submission_gate(
                         result = {"accepted": True}
                         accepted_code = accepted_code if accepted_code is not None else code
                     else:
+                        if checks is not None:
+                            checks.count('submission_rejections', reason=error)
                         result = {"accepted": False, "error": f"NOT accepted - {error}. Fix it and call submit_policy_code again."}
                 else:
-                    result = {'accepted': False, 'error': 'Unknown tool'}
+                    offered = [t['function']['name'] for t in available_tools]
+                    if checks is not None:
+                        checks.count('tool_call_failures', tool=tc.function.name)
+                    result = {'accepted': False, 'error': (
+                        f"Tool '{tc.function.name}' is not available in this call; available tools: "
+                        f"{', '.join(offered)}.")}
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(result)})
 
             if accepted_code is not None:
@@ -1261,8 +1269,12 @@ class CodePolicy(Policy):
                     self.task_description + '\n\nCurrent observation:\n' + json.dumps(self._prompt_observation(observation), ensure_ascii=False))
             elif self._review_due(observation):
                 self._debug('review_started', step=observation['self']['step'])
-                self._replan(observation, 'The code-defined review interval has elapsed. Check the current execution state and observations, then keep or revise the policy.',
-                             scheduled=True)
+                # 안내가 "keep or revise"이므로 keep_current_code 도구도 함께 줌 (예전에는 안내만 하고 도구가 없어
+                # 모델의 keep 호출이 Unknown tool로 거절됐음)
+                self._replan(observation, 'The code-defined review interval has elapsed. Check the current execution state '
+                             'and observations. If your current decide() code should keep running, call keep_current_code; '
+                             'otherwise submit a revised decide() with submit_policy_code.',
+                             scheduled=True, allow_keep=True)
             elif changes and self.env_reviews < self.env_change_cap:
                 self.env_reviews += 1
                 self._debug('env_change_review', step=observation['self']['step'], changes=changes,

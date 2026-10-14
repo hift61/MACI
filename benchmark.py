@@ -373,6 +373,8 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                         "position": [env.agents[agent_id].x, env.agents[agent_id].y],
                         "facing": env.agents[agent_id].facing,
                         "spatial_state": env.agents[agent_id].spatial_state(),
+                        # 진행 정체 지표 (기록만): 마지막 진행/새 발견 이후 step 수, 같은 행동 연속 횟수
+                        "progress": env.progress_status(agent_id) if hasattr(env, "progress_status") else None,
                         "generated_code": getattr(policies[agent_id], "generated_code", None),
                         "decision": {
                             "action": decisions_by_agent.get(agent_id, {}).get("action"),

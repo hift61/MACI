@@ -37,7 +37,8 @@ class PolicyChecksTests(unittest.TestCase):
         result = run_decide_code('def decide(observation):\n    return {"type": "noop"}', {'self': {'step': 7}}, checks=checks)
         self.assertIsNone(result['error'])
         self.assertEqual(checks.snapshot(), {'compile_attempts': 2, 'compile_successes': 2, 'compile_failures': 0,
-                                           'execution_attempts': 2, 'execution_successes': 1, 'execution_failures': 1})
+                                           'execution_attempts': 2, 'execution_successes': 1, 'execution_failures': 1,
+                                           'tool_call_failures': 0, 'submission_rejections': 0})
 
     def test_submission_is_compiled_and_counted(self):
         checks, events = CodeChecks(), []

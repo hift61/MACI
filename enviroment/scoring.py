@@ -303,6 +303,9 @@ def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConf
             if context_points:
                 add(agent_id, env.step_count, f'긴 context 요청 {len(long_requests)}회', 'LLM', context_points)
             agents[agent_id]['code_failures'] = code_failures
+            # 감점에는 넣지 않고 보고만 함 (도구 호출 실패, 제출 거절)
+            agents[agent_id]['tool_call_failures'] = counts.get('tool_call_failures', 0)
+            agents[agent_id]['submission_rejections'] = counts.get('submission_rejections', 0)
             if code_failures:
                 points = code_failures * config.code_failure_penalty / len(members)
                 add(agent_id, env.step_count, f'코드 오류 {code_failures}회', 'LLM', points,

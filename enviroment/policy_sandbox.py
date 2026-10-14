@@ -39,8 +39,11 @@ class CodeChecks:
     """Per-agent counters, with an optional append-only audit sink."""
     def __init__(self):
         self.lock = threading.Lock()
+        # tool_call_failures: 없는/지금 쓸 수 없는 도구 호출, submission_rejections: 제출됐지만 검사에서 거절된 코드
+        # (문법 오류는 compile_failures에도 함께 셈, 허용되지 않은 import 등은 여기에만)
         self.counts = {name: 0 for name in ('compile_attempts', 'compile_successes', 'compile_failures',
-                                           'execution_attempts', 'execution_successes', 'execution_failures')}
+                                           'execution_attempts', 'execution_successes', 'execution_failures',
+                                           'tool_call_failures', 'submission_rejections')}
         self.sink = None
 
     def record(self, phase, code, error, **details):
@@ -52,6 +55,13 @@ class CodeChecks:
                          totals=dict(self.counts), **details)
             if self.sink:
                 self.sink(event)
+
+    def count(self, name, **details):
+        """시도/성공 쌍이 없는 단순 실패 집계 (tool_call_failures, submission_rejections)"""
+        with self.lock:
+            self.counts[name] += 1
+            if self.sink:
+                self.sink(dict(phase=name, success=False, totals=dict(self.counts), **details))
 
     def snapshot(self):
         with self.lock:
