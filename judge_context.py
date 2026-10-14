@@ -95,6 +95,8 @@ def load_run(manifest) -> dict:
         if agent not in chunks:
             continue
         parts = []
+        if output.get("summary"):
+            parts.append("agent's own reasoning summary: " + _short(output["summary"], 2000))
         if output.get("reasoning"):
             parts.append("agent reasoning: " + _short(output["reasoning"], 2500))
         elif output.get("reasoning_hidden"):

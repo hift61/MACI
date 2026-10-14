@@ -23,9 +23,11 @@ class TokenUsage:
     def __init__(self):
         self.lock = threading.Lock()
         # cached_prompt_tokens: prompt_tokens 중 공급자 prompt cache에서 읽은 부분 (보고된 경우만, 비용 추정용)
+        # reasoning_summary_tokens: completion_tokens 중 에이전트가 쓴 추론 요약(reasoning_summary)의 추정 토큰 수.
+        # 출력 토큰 감점에서 뺌 (scoring.py)
         self.counts = dict(requests=0, prompt_tokens=0, completion_tokens=0,
                            total_tokens=0, cached_prompt_tokens=0, unreported_requests=0,
-                           max_prompt_tokens=0)
+                           max_prompt_tokens=0, reasoning_summary_tokens=0)
         # 요청마다 보고된 prompt_tokens (긴 context 감점 계산용). 스냅샷에는 넣지 않음 (로그 크기)
         self.prompt_history: list[int] = []
 
@@ -54,6 +56,10 @@ class TokenUsage:
             cached = details.get('cached_tokens') if isinstance(details, dict) else getattr(details, 'cached_tokens', None)
             if isinstance(cached, int) and not isinstance(cached, bool):
                 self.counts['cached_prompt_tokens'] += max(0, cached)
+
+    def add_reasoning_summary(self, tokens: int) -> None:
+        with self.lock:
+            self.counts['reasoning_summary_tokens'] += max(0, int(tokens))
 
     def snapshot(self):
         with self.lock:

@@ -29,7 +29,7 @@ if ENVIRONMENT_DIR not in sys.path:
     sys.path.insert(0, ENVIRONMENT_DIR)  # enviroment/*.py use flat sibling imports (from policy import ...)
 
 from enviroment import Environment  # noqa: E402
-from policy import (CentralCodePolicy, CodePolicy, agent_reasoning_params, HybridPolicy, NoopPolicy, PolicyGaveUp,  # noqa: E402
+from policy import (REASONING_SUMMARY_FIELD, CentralCodePolicy, CodePolicy, agent_reasoning_params, HybridPolicy, NoopPolicy, PolicyGaveUp,  # noqa: E402
                     RandomPolicy, ToolUsePolicy)
 from scoring import ScoreConfig, clear_step, score_episode  # noqa: E402
 from context_memory import ContextMemory, ContextConfig  # noqa: E402
@@ -356,6 +356,7 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                 "prompt_contract": PROMPT_CONTRACT,
                 "disclose_costs": disclose_costs,
                 "agent_reasoning": ((extra_params or {}).get("extra_body") or {}).get("reasoning", {}).get("effort"),
+                "reasoning_summary": bool((extra_params or {}).get(REASONING_SUMMARY_FIELD)),
                 "configured_steps": steps,
                 "world": snapshot(),
                 "failure": env.failure,
@@ -454,6 +455,10 @@ def main():
     parser.add_argument("--steps", type=int, default=40)
     parser.add_argument("--base-url", default="https://openrouter.ai/api/v1")
     parser.add_argument("--api-key-file", default="key.txt", help="API key file (relative paths use the project directory)")
+    parser.add_argument("--no-reasoning-summary", action="store_true",
+                        help="do not ask agents for a reasoning summary with each answer (by default they write one; "
+                             "it is saved to <out>.agent_reasoning.jsonl, kept out of the conversation, and not "
+                             "counted toward the output-token penalty)")
     parser.add_argument("--agent-reasoning", choices=("low", "medium", "high"), default=None,
                         help="turn on the agent LLM's reasoning and stop forcing tool calls (tool_choice=auto) so "
                              "models such as Anthropic's can think; the reasoning is saved to <out>.agent_reasoning.jsonl. "
@@ -515,6 +520,8 @@ def main():
     extra_params = {"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}
     if args.agent_reasoning:
         extra_params.update(agent_reasoning_params(args.agent_reasoning))
+    if not args.no_reasoning_summary:
+        extra_params[REASONING_SUMMARY_FIELD] = True
 
     out_path = args.out
     if not out_path:

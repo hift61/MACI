@@ -80,7 +80,58 @@ def response_reasoning(message) -> dict:
     return {'reasoning': '\n\n'.join(parts), 'hidden': hidden and not parts}
 
 
-def _record_reasoning(history, response) -> None:
+# ---- 에이전트 추론 요약 (기본으로 켬, --no-reasoning-summary로 끔)
+# 프로바이더마다 숨은 추론을 주는 정도가 달라서(Haiku는 도구 호출 강제 시 없음, luna는 요약만), 모든 모델에게 같은 방식으로
+# "자기 추론을 요약해" 도구 인자 reasoning_summary로 내게 함. 이 요약은
+#   - 대화 이력에서 빼고 <run>.agent_reasoning.jsonl에만 따로 저장 (다음 호출의 context에 들어가지 않음)
+#   - 출력 토큰 감점에서 뺌 (추정 토큰 수를 TokenUsage.reasoning_summary_tokens로 기록 -> scoring.py)
+REASONING_SUMMARY_FIELD = 'reasoning_summary'
+REASONING_SUMMARY_INSTRUCTIONS = (
+    "Reasoning summary: every time you call submit_policy_code or keep_current_code, also fill its "
+    "'reasoning_summary' argument with a short summary (about 2-5 sentences) of the reasoning behind this answer: "
+    "what you noticed in the observation, messages and earlier results, what you concluded, and why this code or "
+    "decision follows. It is stored separately for evaluation, is not shown back to you, and does not count "
+    "toward output-token costs.")
+
+
+def _with_summary_field(schema: dict) -> dict:
+    schema = copy.deepcopy(schema)
+    parameters = schema['function']['parameters']
+    parameters['properties'][REASONING_SUMMARY_FIELD] = {
+        'type': 'string',
+        'description': "Short summary of your reasoning for this answer (what you noticed, what you concluded, "
+                       "why). Stored separately for evaluation; not counted as output tokens."}
+    parameters['required'] = list(parameters.get('required', [])) + [REASONING_SUMMARY_FIELD]
+    return schema
+
+
+def summary_token_estimate(text: str) -> int:
+    """추론 요약의 토큰 수 추정 (토크나이저 없이: UTF-8 4바이트당 1토큰, 최소 글자 수의 1/2)"""
+    return max(len(text.encode('utf-8')) // 4, len(text) // 2) if text else 0
+
+
+def _pop_summaries(tool_calls) -> tuple[str, list]:
+    """도구 호출 인자에서 reasoning_summary를 꺼내고, 그것을 뺀 인자 문자열로 바꾼 (id, name, arguments) 목록을 돌려줌"""
+    summaries, cleaned = [], []
+    for tc in tool_calls or []:
+        arguments = tc.function.arguments
+        try:
+            args = json.loads(arguments or '{}')
+        except Exception:
+            args = None
+        if isinstance(args, dict) and REASONING_SUMMARY_FIELD in args:
+            value = args.pop(REASONING_SUMMARY_FIELD)
+            if isinstance(value, str) and value.strip():
+                summaries.append(value.strip())
+            arguments = json.dumps(args, ensure_ascii=False)
+        cleaned.append((tc.id, tc.function.name, arguments))
+    return '\n\n'.join(summaries), cleaned
+
+
+def _record_reasoning(history, response, client=None, summary: str = '') -> None:
+    """응답 하나의 추론 기록: 프로바이더가 준 숨은 추론(있으면) + 에이전트가 쓴 추론 요약(summary)"""
+    if summary and client is not None:
+        tracker(client).add_reasoning_summary(summary_token_estimate(summary))
     record = getattr(history, 'record_reasoning', None)
     if record is None or not getattr(response, 'choices', None):
         return
@@ -90,18 +141,24 @@ def _record_reasoning(history, response) -> None:
     details = getattr(usage, 'completion_tokens_details', None)
     reasoning_tokens = getattr(details, 'reasoning_tokens', None) if details is not None else None
     content = message.content if isinstance(message.content, str) else None
-    if not (found['reasoning'] or found['hidden'] or reasoning_tokens or (content and content.strip())):
+    if not (found['reasoning'] or found['hidden'] or reasoning_tokens or summary or (content and content.strip())):
         return
     record({'tool_call_ids': [tc.id for tc in (message.tool_calls or [])],
             'tools': [tc.function.name for tc in (message.tool_calls or [])],
+            'summary': summary, 'summary_tokens_estimate': summary_token_estimate(summary),
             'reasoning': found['reasoning'], 'hidden': found['hidden'], 'reasoning_tokens': reasoning_tokens,
             'content': content or '', 'finish_reason': response.choices[0].finish_reason})
 
 
-# extra_params 중 API로 그대로 보내지 않고 하네스가 해석하는 값 (agent_reasoning_params 참고)
+# extra_params 중 API로 그대로 보내지 않고 하네스가 해석하는 값 (agent_reasoning_params, reasoning_summary 참고)
 def _split_call_options(extra_params: dict) -> tuple[str, dict]:
     params = dict(extra_params or {})
+    params.pop(REASONING_SUMMARY_FIELD, None)
     return params.pop('tool_choice', 'required'), params
+
+
+def _summary_enabled(extra_params: dict) -> bool:
+    return bool((extra_params or {}).get(REASONING_SUMMARY_FIELD, False))
 
 
 # --agent-reasoning: 에이전트 LLM에게 추론(reasoning)을 켜고 도구 호출을 강제하지 않음(tool_choice="auto").
@@ -429,7 +486,7 @@ class LLMPolicy(Policy):
                 tool_choice=tool_choice,
                 **params
             )
-            _record_reasoning(history, response)
+            _record_reasoning(history, response, self.client)
             message = response.choices[0].message
             history.append({'role': 'assistant', 'content': json.dumps(
                 {'content': message.content, 'tool_calls': [
@@ -738,11 +795,16 @@ def _generate_code_with_submission_gate(
     With allow_keep, the model may call keep_current_code instead; then this
     returns None and the caller keeps its current code."""
     messages = history if history is not None else []
+    with_summary = _summary_enabled(extra_params)
     if not messages:
-        messages.append({"role": "system", "content": system_prompt + ('\n\n' + MANAGEMENT_INSTRUCTIONS if manage_context else '')})
+        messages.append({"role": "system", "content": system_prompt
+                         + ('\n\n' + MANAGEMENT_INSTRUCTIONS if manage_context else '')
+                         + ('\n\n' + REASONING_SUMMARY_INSTRUCTIONS if with_summary else '')})
     messages.append({"role": "user", "content": user_content})
-    available_tools = ([SUBMIT_POLICY_TOOL_SCHEMA] + ([KEEP_CODE_TOOL_SCHEMA] if allow_keep else [])
-                       + ([MANAGE_CONTEXT_TOOL_SCHEMA] if manage_context else []))
+    answer_tools = [SUBMIT_POLICY_TOOL_SCHEMA] + ([KEEP_CODE_TOOL_SCHEMA] if allow_keep else [])
+    if with_summary:
+        answer_tools = [_with_summary_field(schema) for schema in answer_tools]
+    available_tools = answer_tools + ([MANAGE_CONTEXT_TOOL_SCHEMA] if manage_context else [])
 
     try:
         for _round in range(MAX_TOOL_ROUNDS):
@@ -759,7 +821,9 @@ def _generate_code_with_submission_gate(
                 tool_choice=tool_choice,
                 **params,
             )
-            _record_reasoning(messages, response)
+            summary, cleaned_calls = _pop_summaries(getattr(response.choices[0].message, 'tool_calls', None)
+                                                    if getattr(response, 'choices', None) else None)
+            _record_reasoning(messages, response, client, summary)
             choice = response.choices[0]
             if choice.finish_reason == "length":
                 messages.append({'role': 'assistant', 'content': choice.message.content or '(response truncated)'})
@@ -784,8 +848,9 @@ def _generate_code_with_submission_gate(
                 "role": "assistant",
                 "content": choice.message.content,
                 "tool_calls": [
-                    {"id": tc.id, "type": "function", "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                    for tc in tool_calls
+                    # 추론 요약은 이력에 남기지 않음 (agent_reasoning.jsonl에만)
+                    {"id": call_id, "type": "function", "function": {"name": name, "arguments": arguments}}
+                    for call_id, name, arguments in cleaned_calls
                 ],
             })
 
@@ -834,7 +899,7 @@ def _generate_code_with_submission_gate(
         messages=_text_history(messages),
         **_split_call_options(extra_params)[1],
     )
-    _record_reasoning(messages, response)
+    _record_reasoning(messages, response, client)
     messages.append({'role': 'assistant', 'content': response.choices[0].message.content or ''})
     if response.choices[0].finish_reason == "length":
         raise ValueError(

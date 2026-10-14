@@ -279,7 +279,8 @@ def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConf
 
     for policy, members in _policy_groups(env):
         usage = getattr(policy, 'token_usage', {}) if policy is not None else {}
-        output_tokens = usage.get('completion_tokens', 0)
+        # 에이전트의 추론 요약(reasoning_summary)은 출력 토큰 감점에 넣지 않음
+        output_tokens = max(0, usage.get('completion_tokens', 0) - usage.get('reasoning_summary_tokens', 0))
         allowance = config.token_allowance * len(members)
         penalty = round(max(0, output_tokens - allowance) / 1000 * config.token_penalty_per_1000 / len(members), 2)
         prompts = getattr(policy, 'prompt_history', []) if policy is not None else []

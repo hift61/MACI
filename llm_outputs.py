@@ -5,7 +5,8 @@
   - output: 응답 본문과 도구 호출 (submit_policy_code의 코드, keep_current_code, manage_context 등)
   - result: 하네스의 도구 응답 (코드 수락/거부 등)
   - step: 그 응답이 나온 대략의 step (직전 'Simulation step result'의 step + 1)
-  - reasoning: 그 응답의 에이전트 추론 (<manifest>.agent_reasoning.jsonl, 프로바이더가 돌려준 경우만. tool_call_id로 연결)
+  - summary: 에이전트가 응답마다 쓴 자기 추론 요약 (<manifest>.agent_reasoning.jsonl, tool_call_id로 연결)
+  - reasoning: 프로바이더가 돌려준 숨은 추론 (있는 경우만)
 사람 평가는 <manifest>.llm_ratings.<평가자>.json에 저장: 출력 id(에이전트:순번)마다 0~10점과 메모.
 """
 from __future__ import annotations
@@ -129,10 +130,11 @@ def extract_outputs(manifest) -> list[dict]:
                     "step": last_step.get(agent, 0) + 1, "input": last_input.get(agent, ""),
                     "output": "\n\n".join(parts) or "(빈 응답)", "tools": [c.get("function", {}).get("name") for c in calls],
                     "calls": [_call_args(c) for c in calls], "call_ids": [c.get("id") for c in calls],
-                    "reasoning": "", "reasoning_hidden": False, "result": []}
+                    "summary": "", "reasoning": "", "reasoning_hidden": False, "result": []}
             found = next((reasoning[c.get("id")] for c in calls if c.get("id") in reasoning), None)
             if found:
                 item["reasoning"], item["reasoning_hidden"] = found.get("reasoning", ""), bool(found.get("hidden"))
+                item["summary"] = found.get("summary", "")
             outputs.append(item)
             for call in calls:
                 by_call[call.get("id")] = item

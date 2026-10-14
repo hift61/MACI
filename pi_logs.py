@@ -445,6 +445,7 @@ class PiLogsApp:
         self.fields["comment"] = rating.get("comment", "") if rating else ""
         reasoning = output.get("reasoning") or ("(프로바이더가 추론을 숨김)" if output.get("reasoning_hidden") else "")
         text = (llm_outputs.RUBRIC
+                + ("\n\n=== 에이전트 추론 요약 ===\n" + output["summary"] if output.get("summary") else "")
                 + ("\n\n=== 에이전트 추론 ===\n" + reasoning if reasoning else "")
                 + "\n\n=== LLM 출력 ===\n" + output["output"]
                 + ("\n\n=== 하네스 응답 ===\n" + "\n".join(output["result"]) if output["result"] else "")

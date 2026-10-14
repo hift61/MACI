@@ -103,6 +103,58 @@ class AgentReasoningOptionTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
 
 
+class ReasoningSummaryTests(unittest.TestCase):
+    SUMMARY = 'B said pad_B is ready, so I enter pad_A at step 9 to sync.'
+
+    def run_gate(self, extra_params):
+        call = SimpleNamespace(id='call-9', function=SimpleNamespace(name='submit_policy_code', arguments=json.dumps(
+            {'code': CODE, 'reasoning_summary': self.SUMMARY})))
+        usage = SimpleNamespace(prompt_tokens=100, completion_tokens=200, total_tokens=300)
+        client = Mock()
+        client.chat.completions.create.return_value = SimpleNamespace(
+            choices=[SimpleNamespace(finish_reason='tool_calls', message=message(calls=[call]))], usage=usage)
+        history, records = ContextHistory(), []
+        history.reasoning_sink = records.append
+        code = _generate_code_with_submission_gate(client, 'm', 'sys', 'task', 0.0, 100, extra_params,
+                                                   history=history)
+        return code, client, history, records
+
+    def test_summary_is_asked_for_saved_apart_and_kept_out_of_the_conversation(self):
+        from policy import REASONING_SUMMARY_FIELD
+        code, client, history, records = self.run_gate({REASONING_SUMMARY_FIELD: True})
+        self.assertEqual(code, CODE)
+        kwargs = client.chat.completions.create.call_args.kwargs
+        submit = next(t for t in kwargs['tools'] if t['function']['name'] == 'submit_policy_code')
+        self.assertIn('reasoning_summary', submit['function']['parameters']['required'])
+        self.assertNotIn(REASONING_SUMMARY_FIELD, kwargs)  # harness option, never sent to the API
+        self.assertIn('Reasoning summary:', history[0]['content'])
+        self.assertEqual(records[0]['summary'], self.SUMMARY)
+        self.assertGreater(records[0]['summary_tokens_estimate'], 0)
+        self.assertNotIn('pad_A at step 9', json.dumps(list(history)))
+
+    def test_summary_tokens_are_not_charged_as_output_tokens(self):
+        from policy import REASONING_SUMMARY_FIELD, summary_token_estimate
+        from token_usage import tracker
+        _, client, _, _ = self.run_gate({REASONING_SUMMARY_FIELD: True})
+        counts = tracker(client).snapshot()
+        self.assertEqual(counts['reasoning_summary_tokens'], summary_token_estimate(self.SUMMARY))
+        from scoring import ScoreConfig, score_episode
+        env = SimpleNamespace(event_log=SimpleNamespace(entries=[], filter=lambda **k: []),
+                              decision_log=SimpleNamespace(entries=[]), step_count=1,
+                              agents={'A': SimpleNamespace(policy=SimpleNamespace(
+                                  token_usage=dict(counts, completion_tokens=60_000 + counts['reasoning_summary_tokens']),
+                                  prompt_history=[], code_checks=None))})
+        score = score_episode(env, 10, [{'type': 'never'}], ScoreConfig())
+        self.assertEqual(score['agents']['A']['token_penalty'], -1.0)  # only the 10,000 tokens above 50,000 count
+
+    def test_without_the_option_nothing_changes(self):
+        _, client, history, records = self.run_gate({})
+        kwargs = client.chat.completions.create.call_args.kwargs
+        submit = next(t for t in kwargs['tools'] if t['function']['name'] == 'submit_policy_code')
+        self.assertNotIn('reasoning_summary', submit['function']['parameters']['properties'])
+        self.assertNotIn('Reasoning summary:', history[0]['content'])
+
+
 class ReasoningInReviewTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
