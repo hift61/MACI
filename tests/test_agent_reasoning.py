@@ -71,6 +71,38 @@ class ReasoningCaptureTests(unittest.TestCase):
         self.assertNotIn('enter at step 5', json.dumps(list(history)))
 
 
+class AgentReasoningOptionTests(unittest.TestCase):
+    def run_gate(self, extra_params, replies):
+        client = Mock()
+        client.chat.completions.create.side_effect = replies
+        code = _generate_code_with_submission_gate(client, 'm', 'sys', 'task', 0.0, 100, extra_params,
+                                                   history=ContextHistory())
+        return code, client.chat.completions.create.call_args_list
+
+    def reply(self, calls=(), content=None):
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason='tool_calls' if calls else 'stop',
+                                                        message=message(content=content, calls=calls))], usage=None)
+
+    def submit(self):
+        return SimpleNamespace(id='c1', function=SimpleNamespace(name='submit_policy_code',
+                                                                 arguments=json.dumps({'code': CODE})))
+
+    def test_default_forces_tool_calls(self):
+        _, calls = self.run_gate({}, [self.reply([self.submit()])])
+        self.assertEqual(calls[0].kwargs['tool_choice'], 'required')
+        self.assertNotIn('extra_body', calls[0].kwargs)
+
+    def test_agent_reasoning_asks_for_reasoning_and_lets_the_model_choose(self):
+        from policy import agent_reasoning_params
+        # 글로만 답해도 하네스가 도구를 쓰라고 다시 묻고, 그다음 제출을 받음
+        code, calls = self.run_gate(agent_reasoning_params('low'),
+                                    [self.reply(content='let me think'), self.reply([self.submit()])])
+        self.assertEqual(code, CODE)
+        self.assertEqual(calls[0].kwargs['tool_choice'], 'auto')
+        self.assertEqual(calls[0].kwargs['extra_body'], {'reasoning': {'effort': 'low'}})
+        self.assertEqual(len(calls), 2)
+
+
 class ReasoningInReviewTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

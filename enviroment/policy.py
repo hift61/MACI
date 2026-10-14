@@ -98,6 +98,19 @@ def _record_reasoning(history, response) -> None:
             'content': content or '', 'finish_reason': response.choices[0].finish_reason})
 
 
+# extra_params 중 API로 그대로 보내지 않고 하네스가 해석하는 값 (agent_reasoning_params 참고)
+def _split_call_options(extra_params: dict) -> tuple[str, dict]:
+    params = dict(extra_params or {})
+    return params.pop('tool_choice', 'required'), params
+
+
+# --agent-reasoning: 에이전트 LLM에게 추론(reasoning)을 켜고 도구 호출을 강제하지 않음(tool_choice="auto").
+# Anthropic 모델은 도구 호출을 강제하면(required) 추론을 아예 만들지 않음. 글로만 답하면 하네스가 도구를 쓰라고
+# 다시 묻는 기존 처리(_generate_code_with_submission_gate)가 그대로 동작함
+def agent_reasoning_params(effort: str) -> dict:
+    return {'extra_body': {'reasoning': {'effort': effort}}, 'tool_choice': 'auto'}
+
+
 class PolicyGaveUp(RuntimeError):
     """Code recovery failed too many times in a row; the episode cannot continue."""
 
@@ -405,6 +418,7 @@ class LLMPolicy(Policy):
                 history.append({'role': 'system', 'content': self.system_prompt})
             history.append({'role': 'user', 'content': 'Current observation:\n' + json.dumps(self._prompt_observation(observation), ensure_ascii=False)})
             self._prepare_context(history, self.max_tokens, TOOLS)
+            tool_choice, params = _split_call_options(self.extra_params)
             response = _create_with_retry(
                 self.client,
                 model=self.model,
@@ -412,8 +426,8 @@ class LLMPolicy(Policy):
                 max_tokens=self.max_tokens,
                 messages=copy.deepcopy(history),
                 tools=TOOLS,
-                tool_choice="required",
-                **self.extra_params
+                tool_choice=tool_choice,
+                **params
             )
             _record_reasoning(history, response)
             message = response.choices[0].message
@@ -734,6 +748,7 @@ def _generate_code_with_submission_gate(
         for _round in range(MAX_TOOL_ROUNDS):
             if prepare_context:
                 prepare_context(messages, max_tokens, available_tools)
+            tool_choice, params = _split_call_options(extra_params)
             response = _create_with_retry(
                 client,
                 model=model,
@@ -741,8 +756,8 @@ def _generate_code_with_submission_gate(
                 max_tokens=max_tokens,
                 messages=copy.deepcopy(messages),
                 tools=available_tools,
-                tool_choice="required",
-                **extra_params,
+                tool_choice=tool_choice,
+                **params,
             )
             _record_reasoning(messages, response)
             choice = response.choices[0]
@@ -817,7 +832,7 @@ def _generate_code_with_submission_gate(
         temperature=temperature,
         max_tokens=max_tokens,
         messages=_text_history(messages),
-        **extra_params,
+        **_split_call_options(extra_params)[1],
     )
     _record_reasoning(messages, response)
     messages.append({'role': 'assistant', 'content': response.choices[0].message.content or ''})
