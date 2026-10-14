@@ -10,8 +10,14 @@
 - 안전: 폴더 밖 경로는 거부하고 실행 기록(manifest .jsonl)만 고를 수 있음. 쓰는 파일은 사람 채점 파일과
   판단 시점 묶음 캐시(<manifest>.judge_bundles.json), 판정기 결과(--allow-judge)뿐.
   API 키처럼 보이는 문자열은 가림. Tailscale IP에 붙이면 tailnet 밖에서는 접근할 수 없음
+- 외부 공개(Cloudflare Tunnel 등)할 때: --password-file로 사이트 전체에 비밀번호(Basic 인증, 사용자 이름은 아무거나),
+  --read-only로 사람 채점을 끔 (판정기 버튼은 --allow-judge로만 정함). 비밀번호 없이 공개 주소(127.0.0.1 등 터널 뒤)로 쓰기를 켜는 것은 권하지 않음
+
+    python pi_status_site.py benchmark_runs --host 127.0.0.1 --password-file ~/.maci_site_password   # 터널 뒤
 """
 import argparse
+import base64
+import hmac
 import html
 import json
 import re
@@ -159,8 +165,9 @@ def eval_page(title: str, body: str, refresh: bool = False) -> bytes:
 class Evaluator:
     """로그 평가 페이지의 상태: 판단 시점 묶음 캐시와 판정기 실행 작업"""
 
-    def __init__(self, root: Path, allow_judge: bool = False, embed: bool = False):
-        self.root, self.allow_judge, self.embed = root, allow_judge, embed
+    def __init__(self, root: Path, allow_judge: bool = False, embed: bool = False, read_only: bool = False):
+        self.root, self.embed, self.read_only = root, embed, read_only
+        self.allow_judge = allow_judge
         self.jobs: dict[str, str] = {}  # manifest 상대 경로 -> 판정기 실행 상태 글
         self.lock = threading.Lock()
 
@@ -211,6 +218,12 @@ class Evaluator:
                         f'<button {"disabled" if job.startswith("실행 중") else ""}>판정기 실행 '
                         f'({len(bundles)}개 시점, API 비용)</button><span class="meta">{esc(job)}</span></form>'
                         if self.allow_judge else '<div class="meta">판정기 실행은 꺼져 있습니다 (--allow-judge).</div>')
+        rate_form = ('' if self.read_only else
+                     '<form method="post" action="rate"><input type="hidden" name="path" value="{rel}">'
+                     '<input type="hidden" name="agent" value="{agent}"><input type="hidden" name="step" value="{step}">'
+                     '<input name="rater" placeholder="채점자" value="{rater}" required size="10">'
+                     '<select name="score">' + "".join(f"<option>{i}</option>" for i in range(11)) + '</select>'
+                     '<input name="comment" placeholder="메모"><button>저장</button></form>')
         points = []
         for bundle in bundles:
             key = judge_agreement.turn_key(bundle["step"], bundle["agent"])
@@ -222,12 +235,8 @@ class Evaluator:
                 f'<span>{esc(redact(" | ".join(bundle["trigger"]))[:160])}</span>'
                 f'<span class="meta">판정기: {esc(judge_text or "-")} · 사람: {esc(human_text or "-")}</span></summary>'
                 f'<pre>{esc(redact(judge_context.render(bundle)))}</pre>'
-                f'<form method="post" action="rate"><input type="hidden" name="path" value="{esc(rel)}">'
-                f'<input type="hidden" name="agent" value="{esc(bundle["agent"])}">'
-                f'<input type="hidden" name="step" value="{bundle["step"]}">'
-                f'<input name="rater" placeholder="채점자" value="{esc(rater)}" required size="10">'
-                f'<select name="score">{"".join(f"<option>{i}</option>" for i in range(11))}</select>'
-                f'<input name="comment" placeholder="메모"><button>저장</button></form></details>')
+                + rate_form.format(rel=esc(rel), agent=esc(bundle["agent"]), step=bundle["step"], rater=esc(rater))
+                + '</details>')
         body = (f'<h1>{esc(rel)}</h1><div class="sub"><a href="/eval">실행 목록</a> · '
                 f'{esc(judge_context.summary(manifest, bundles, rater) if rater else f"판단 시점 {len(bundles)}개")}</div>'
                 f'<div class="box">{esc(judge_context.ANCHOR_RUBRIC)}</div>{judge_button}'
@@ -269,11 +278,32 @@ class Evaluator:
         threading.Thread(target=work, daemon=True).start()
 
 
-def make_handler(run_dir: Path, evaluator: Evaluator | None = None):
+def make_handler(run_dir: Path, evaluator: Evaluator | None = None, password: str | None = None):
     evaluator = evaluator or Evaluator(run_dir)
 
     class Handler(BaseHTTPRequestHandler):
+        def _authorized(self) -> bool:
+            """password가 있으면 Basic 인증 (사용자 이름은 보지 않음). 틀리면 401을 보내고 False"""
+            if not password:
+                return True
+            header = self.headers.get("Authorization", "")
+            given = ""
+            if header.startswith("Basic "):
+                try:
+                    given = base64.b64decode(header[6:]).decode("utf-8", "replace").partition(":")[2]
+                except ValueError:
+                    given = ""
+            if hmac.compare_digest(given.encode("utf-8"), password.encode("utf-8")):
+                return True
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Basic realm="MACI", charset="UTF-8"')
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return False
+
         def do_GET(self):
+            if not self._authorized():
+                return
             url = urlparse(self.path)
             query = {k: v[0] for k, v in parse_qs(url.query).items()}
             if url.path in ("/", "/index.html"):
@@ -298,7 +328,12 @@ def make_handler(run_dir: Path, evaluator: Evaluator | None = None):
                 self.send_error(404)
 
         def do_POST(self):
+            if not self._authorized():
+                return
             url = urlparse(self.path)
+            if evaluator.read_only and url.path == "/eval/rate":  # 읽기 전용은 사람 채점만 막음 (판정기는 --allow-judge)
+                self.send_error(403, "read-only")
+                return
             length = min(int(self.headers.get("Content-Length") or 0), 20_000)
             form = {k: v[0] for k, v in parse_qs(self.rfile.read(length).decode("utf-8", "replace")).items()}
             manifest = resolve_manifest(run_dir, form.get("path", ""))
@@ -339,18 +374,34 @@ def make_handler(run_dir: Path, evaluator: Evaluator | None = None):
 def main():
     parser = argparse.ArgumentParser(description="Live status and log evaluation pages for benchmark run folders.")
     parser.add_argument("run_dir")
-    parser.add_argument("--host", default="127.0.0.1", help="Pi의 Tailscale IP에 붙이면 tailnet 안에서만 열림")
+    parser.add_argument("--host", default="127.0.0.1",
+                        help="열 주소, 쉼표로 여러 개 (예: 127.0.0.1,100.105.194.90 = 터널용 로컬 + Tailscale). "
+                             "Tailscale IP만 쓰면 tailnet 안에서만 열림")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--allow-judge", action="store_true", help="로그 평가에서 판정기 실행 버튼을 켬 (key.txt, API 비용)")
     parser.add_argument("--embed", action="store_true", help="판단 시점의 이전 맥락을 임베딩으로 고름 (기본: 단어 기반)")
+    parser.add_argument("--read-only", action="store_true", help="사람 채점을 끄고 보기만 허용 (판정기는 --allow-judge)")
+    parser.add_argument("--password-file", default=None,
+                        help="이 파일의 첫 줄을 비밀번호로 사이트 전체에 Basic 인증 (외부 공개할 때)")
     args = parser.parse_args()
+    password = None
+    if args.password_file:
+        password = Path(args.password_file).expanduser().read_text(encoding="utf-8").splitlines()[0].strip()
+        if len(password) < 8:
+            parser.error("password must be at least 8 characters")
     run_dir = Path(args.run_dir).resolve()
     if not run_dir.is_dir():
         parser.error(f"not a folder: {run_dir}")
-    evaluator = Evaluator(run_dir, allow_judge=args.allow_judge, embed=args.embed)
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(run_dir, evaluator))
-    print(f"Serving {run_dir} at http://{args.host}:{args.port}/ (log evaluation: /eval)", flush=True)
-    server.serve_forever()
+    evaluator = Evaluator(run_dir, allow_judge=args.allow_judge, embed=args.embed, read_only=args.read_only)
+    hosts = [h.strip() for h in args.host.split(",") if h.strip()]
+    handler = make_handler(run_dir, evaluator, password)
+    servers = [ThreadingHTTPServer((host, args.port), handler) for host in hosts]
+    print(f"Serving {run_dir} at " + ", ".join(f"http://{h}:{args.port}/" for h in hosts)
+          + f" (log evaluation: /eval{', read-only' if args.read_only else ''}{', password' if password else ''})",
+          flush=True)
+    for server in servers[1:]:
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+    servers[0].serve_forever()
 
 
 if __name__ == "__main__":

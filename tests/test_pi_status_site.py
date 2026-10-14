@@ -98,5 +98,49 @@ class StatusSiteTests(unittest.TestCase):
         self.assertEqual(error.exception.code, 403)
 
 
+class PublicSiteTests(unittest.TestCase):
+    """외부 공개용: 비밀번호(Basic 인증)와 읽기 전용"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name).resolve()
+        self.manifest = write_run(self.root)
+        evaluator = pi_status_site.Evaluator(self.root, read_only=True)
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0),
+                                          pi_status_site.make_handler(self.root, evaluator, "correct-horse"))
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.tmp.cleanup()
+
+    def request(self, path, password=None, data=None):
+        import base64
+        req = urllib.request.Request(self.base + path, data=data)
+        if password is not None:
+            req.add_header("Authorization", "Basic " + base64.b64encode(f"any:{password}".encode()).decode())
+        with urllib.request.urlopen(req) as response:
+            return response.read().decode("utf-8")
+
+    def test_every_page_needs_the_password(self):
+        for path in ("/", "/status.json", "/eval", "/eval/run?path=run.jsonl"):
+            for password in (None, "wrong"):
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    self.request(path, password)
+                self.assertEqual(error.exception.code, 401)
+        self.assertIn("run.jsonl", self.request("/eval", "correct-horse"))
+
+    def test_read_only_hides_the_rating_form_and_refuses_ratings(self):
+        page = self.request("/eval/run?path=run.jsonl", "correct-horse")
+        self.assertNotIn('action="rate"', page)
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.request("/eval/rate", "correct-horse", urllib.parse.urlencode(
+                {"path": "run.jsonl", "agent": "A", "step": 9, "rater": "x", "score": 5}).encode())
+        self.assertEqual(error.exception.code, 403)
+        self.assertEqual(judge_context.load_anchor_ratings(self.manifest, "x"), {})
+
+
 if __name__ == "__main__":
     unittest.main()
