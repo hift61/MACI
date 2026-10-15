@@ -169,6 +169,28 @@ def agent_reasoning_params(effort: str) -> dict:
     return {'extra_body': {'reasoning': {'effort': effort}}, 'tool_choice': 'auto'}
 
 
+# 도구 호출 강제(tool_choice "required"/"any")를 지원하지 않는 모델(예: claude-opus-5.5)은 400으로 거절함.
+# 그러면 그 client는 이후 "auto"로 보냄. 도구 대신 글로 답하면 제출 루프가 도구를 쓰라고 다시 물음
+def _forced_tool_choice_unsupported(exc) -> bool:
+    text = str(exc).lower()
+    return 'tool_choice' in text and ('not supported' in text or 'unsupported' in text)
+
+
+def _create_with_tool_choice(client, tool_choice, **kwargs):
+    if tool_choice == 'required' and getattr(client, '__dict__', {}).get('_maci_tool_choice_auto') is True:
+        tool_choice = 'auto'
+    try:
+        return _create_with_retry(client, tool_choice=tool_choice, **kwargs)
+    except Exception as exc:
+        if tool_choice != 'required' or not _forced_tool_choice_unsupported(exc):
+            raise
+        try:
+            client._maci_tool_choice_auto = True
+        except AttributeError:
+            pass
+        return _create_with_retry(client, tool_choice='auto', **kwargs)
+
+
 class PolicyGaveUp(RuntimeError):
     """Code recovery failed too many times in a row; the episode cannot continue."""
 
@@ -477,14 +499,14 @@ class LLMPolicy(Policy):
             history.append({'role': 'user', 'content': 'Current observation:\n' + json.dumps(self._prompt_observation(observation), ensure_ascii=False)})
             self._prepare_context(history, self.max_tokens, TOOLS)
             tool_choice, params = _split_call_options(self.extra_params)
-            response = _create_with_retry(
+            response = _create_with_tool_choice(
                 self.client,
+                tool_choice,
                 model=self.model,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
                 messages=copy.deepcopy(history),
                 tools=TOOLS,
-                tool_choice=tool_choice,
                 **params
             )
             _record_reasoning(history, response, self.client)
@@ -812,14 +834,14 @@ def _generate_code_with_submission_gate(
             if prepare_context:
                 prepare_context(messages, max_tokens, available_tools)
             tool_choice, params = _split_call_options(extra_params)
-            response = _create_with_retry(
+            response = _create_with_tool_choice(
                 client,
+                tool_choice,
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 messages=copy.deepcopy(messages),
                 tools=available_tools,
-                tool_choice=tool_choice,
                 **params,
             )
             summary, cleaned_calls = _pop_summaries(getattr(response.choices[0].message, 'tool_calls', None)

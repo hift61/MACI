@@ -216,3 +216,20 @@ class ReasoningInReviewTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ToolChoiceFallbackTests(unittest.TestCase):
+    def test_models_that_reject_forced_tool_choice_fall_back_to_auto(self):
+        from policy import _generate_code_with_submission_gate as gate
+        submit = SimpleNamespace(id='c1', function=SimpleNamespace(name='submit_policy_code',
+                                                                   arguments=json.dumps({'code': CODE})))
+        ok = SimpleNamespace(choices=[SimpleNamespace(finish_reason='tool_calls', message=message(calls=[submit]))],
+                             usage=None)
+        client = Mock()
+        client.chat.completions.create.side_effect = [
+            ValueError('tool_choice: type "tool" and "any" are not supported for this model.'), ok, ok]
+        self.assertEqual(gate(client, 'm', 'sys', 'task', 0.0, 100, {}, history=ContextHistory()), CODE)
+        choices = [c.kwargs['tool_choice'] for c in client.chat.completions.create.call_args_list]
+        self.assertEqual(choices, ['required', 'auto'])
+        gate(client, 'm', 'sys', 'task', 0.0, 100, {}, history=ContextHistory())
+        self.assertEqual(client.chat.completions.create.call_args.kwargs['tool_choice'], 'auto')  # remembered
