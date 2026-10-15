@@ -477,3 +477,19 @@ class ScenarioDeviceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReceptacleCapacityTests(unittest.TestCase):
+    def test_a_full_toll_box_leaves_extra_coins_on_the_floor(self):
+        # s24: 동전 16개, 통행료 합 11개. 꽉 찬 함이 동전을 계속 먹으면 과제가 영구히 불가능해질 수 있었음
+        env, _, _ = build_environment(load("s24_shared_purse").build())
+        toll = env.objects["toll_1"]
+        agent = env.agents["A"]
+        agent.x, agent.y = toll["x"], toll["y"] - 5
+        coins = [o for o in list(env.objects.values()) if o.get("coin")][:toll["target"] + 2]
+        for coin in coins:
+            env.objects.pop(coin["object_id"])
+            agent.inventory.append(coin)
+            env.drop("A", coin["object_id"])
+        self.assertEqual(toll["delivered"], toll["target"])
+        self.assertEqual(sum(o["object_id"] in env.objects for o in coins), 2)

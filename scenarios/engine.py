@@ -529,6 +529,10 @@ class ScenarioEnvironment(Environment):
                 continue
             if not any(object_id.startswith(prefix) for prefix in receptacle["accepts"]):
                 continue
+            # 목표를 채운 함은 더 받지 않음 (떨어뜨린 물건은 바닥에 남음). 받으면 개수가 정해진 물건(s24의 동전)을
+            # 이미 열린 문에 계속 버려 과제를 영구히 불가능하게 만들 수 있음 - "영구 실패 없음" 안내와 모순
+            if receptacle["delivered"] >= receptacle["target"]:
+                continue
             del self.objects[object_id]
             receptacle["delivered"] += 1
             self._log("item_delivered", [agent_id], object_id=object_id, receptacle_id=receptacle["object_id"],

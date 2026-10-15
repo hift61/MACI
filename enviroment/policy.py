@@ -634,7 +634,7 @@ Object roles (the same for every map; a map may use only some of them):
 - display: shows the "content" produced by the machine it belongs to.
 - clue: read its "content". What one agent reads may differ from what another reads.
 - receptacle: drop an item whose id starts with one of "accepts" within "radius" to deliver it ("delivered",
-  "target"); reaching the target may open the doors in "opens".
+  "target"); reaching the target may open the doors in "opens", and a full receptacle takes no more items.
 - station: drop an item whose id starts with "input" within "radius"; after "process_steps" steps an item whose
   id starts with "output" appears at (out_x, out_y). It handles one item at a time ("busy_until", "queued").
 - scale: "reading" is the total weight of the items lying within "radius"; a scale with a goal only shows
