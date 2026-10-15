@@ -21,6 +21,7 @@ import hmac
 import html
 import json
 import re
+import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -147,6 +148,10 @@ pre{margin:0;padding:10px 12px;border-top:1px solid var(--line);overflow-x:auto;
 form{padding:10px 12px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 input,select,button{font:inherit;padding:4px 8px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px}
 input[name=comment]{flex:1;min-width:200px}.box{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:12px 0}
+.turn-context{padding:12px;border-top:1px solid var(--line)}.turn-context h2{font-size:16px;margin:0}
+.turn-maps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}
+.turn-map{display:block;width:100%;max-height:440px;background:#121721;border-radius:6px;margin-top:8px}
+@media(max-width:640px){.turn-maps{grid-template-columns:1fr}}
 @media (max-width:640px){td:nth-child(n+4),th:nth-child(n+4){display:none}}
 </style>"""
 
@@ -208,7 +213,9 @@ class Evaluator:
     def run(self, rel: str, manifest: Path, rater: str) -> bytes:
         import judge_agreement
         import judge_context
+        from site_turn_context import TurnContext
         bundles = self.bundles(manifest)
+        context = TurnContext(manifest)
         judges = judge_context.judge_scores(manifest)
         humans = judge_context.load_all_anchor_ratings(manifest)
         job = self.jobs.get(rel, "")
@@ -234,7 +241,8 @@ class Evaluator:
                 f'<details id="{anchor}"><summary><b>{esc(bundle["agent"])} · step {bundle["step"]}</b>'
                 f'<span>{esc(redact(" | ".join(bundle["trigger"]))[:160])}</span>'
                 f'<span class="meta">판정기: {esc(judge_text or "-")} · 사람: {esc(human_text or "-")}</span></summary>'
-                f'<pre>{esc(redact(judge_context.render(bundle)))}</pre>'
+                + context.render(bundle["step"], bundle["agent"], lambda value: esc(redact(str(value))))
+                + f'<pre>{esc(redact(judge_context.render(bundle)))}</pre>'
                 + rate_form.format(rel=esc(rel), agent=esc(bundle["agent"]), step=bundle["step"], rater=esc(rater))
                 + '</details>')
         body = (f'<h1>{esc(rel)}</h1><div class="sub"><a href="/eval">실행 목록</a> · '
@@ -395,7 +403,11 @@ def main():
     evaluator = Evaluator(run_dir, allow_judge=args.allow_judge, embed=args.embed, read_only=args.read_only)
     hosts = [h.strip() for h in args.host.split(",") if h.strip()]
     handler = make_handler(run_dir, evaluator, password)
-    servers = [ThreadingHTTPServer((host, args.port), handler) for host in hosts]
+    class IPv6HTTPServer(ThreadingHTTPServer):
+        address_family = socket.AF_INET6
+
+    servers = [(IPv6HTTPServer if ":" in host else ThreadingHTTPServer)((host, args.port), handler)
+               for host in hosts]
     print(f"Serving {run_dir} at " + ", ".join(f"http://{h}:{args.port}/" for h in hosts)
           + f" (log evaluation: /eval{', read-only' if args.read_only else ''}{', password' if password else ''})",
           flush=True)

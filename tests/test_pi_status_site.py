@@ -75,6 +75,53 @@ class StatusSiteTests(unittest.TestCase):
                                      "score": 11})
         self.assertEqual(error.exception.code, 400)
 
+    def test_turn_context_shows_matching_maps_and_only_selected_observation(self):
+        records = [json.loads(line) for line in self.manifest.read_text(encoding="utf-8").splitlines()]
+        for record in records:
+            record["world"] = {"width": 400, "height": 300, "walls": [[190, 0, 10, 200]],
+                               "objects": [{"object_id": "door", "type": "door", "x": 200, "y": 210,
+                                            "locked": record["step"] < 9}]}
+            for a in record["agents"]:
+                a.update(position=[record["step"] * 10, 100], facing=90)
+        self.manifest.write_text("\n".join(json.dumps(r) for r in records), encoding="utf-8")
+        self.manifest.with_suffix(".observations.jsonl").write_text(
+            '\n'.join(json.dumps(r) for r in [
+                {"step": 9, "agent": "A", "observation": {"inbox": ["A_OBSERVATION_9"],
+                 "notice": '<script>alert(1)</script> sk-abcdefghijklmnop'}},
+                {"step": 8, "agent": "A", "observation": {"notice": "WRONG_TURN"}},
+                {"step": 9, "agent": "B", "observation": {"notice": "SECRET_B_OBSERVATION"}}])
+            + '\n{"step":', encoding="utf-8")
+        page = self.get("/eval/run?path=trial/run.jsonl")
+        point = page.split('<details id="p-A-9">')[1].split('<details id="p-')[0]
+        self.assertIn("직전 턴 종료 · step 8", point)
+        self.assertIn("행동 후 · step 9", point)
+        self.assertEqual(point.count('aria-label="턴 상황 지도"'), 2)
+        self.assertIn("A_OBSERVATION_9", point)
+        self.assertNotIn("WRONG_TURN", point)
+        self.assertNotIn("SECRET_B_OBSERVATION", point)
+        self.assertNotIn("<script>", point)
+        self.assertNotIn("sk-abcdefghijklmnop", point)
+        self.assertIn("[redacted]", point)
+
+    def test_old_logs_show_missing_context_without_breaking_ratings(self):
+        page = self.get("/eval/run?path=trial/run.jsonl")
+        self.assertIn("이 시점의 지도 기록이 없습니다", page)
+        self.assertIn("이 턴의 관찰 기록이 없습니다", page)
+        self.assertIn('action="rate"', page)
+
+    def test_first_turn_uses_initial_scene_and_no_later_frame(self):
+        from site_turn_context import TurnContext
+        self.manifest.with_suffix(".scene.json").write_text(json.dumps({
+            "world": {"width": 400, "height": 300, "objects": [], "walls": []},
+            "agents": [{"agent": "A", "position": [20, 30], "facing": 0}]
+        }, indent=2), encoding="utf-8")
+        context = TurnContext(self.manifest)
+        page = context.render(1, "A", pi_status_site.esc)
+        self.assertIn("직전 턴 종료 · step 0", page)
+        self.assertEqual(page.count('aria-label="턴 상황 지도"'), 1)
+        self.assertIn("행동 후 · step 1", page)
+        self.assertNotIn("pad_B ready", page)
+
     def test_paths_outside_the_folder_or_non_runs_are_refused(self):
         for path in ("../secret.txt", "secret.txt", "trial/run.context_archive.jsonl", "/etc/passwd"):
             with self.assertRaises(urllib.error.HTTPError) as error:
