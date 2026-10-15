@@ -172,8 +172,10 @@ def agent_reasoning_params(effort: str) -> dict:
 # 도구 호출 강제(tool_choice "required"/"any")를 지원하지 않는 모델(예: claude-opus-5.5)은 400으로 거절함.
 # 그러면 그 client는 이후 "auto"로 보냄. 도구 대신 글로 답하면 제출 루프가 도구를 쓰라고 다시 물음
 def _forced_tool_choice_unsupported(exc) -> bool:
+    # 예: Opus 'tool_choice: type "tool" and "any" are not supported', Meta Muse 'only "auto" is supported for
+    # tool_choice ... are not currently supported'
     text = str(exc).lower()
-    return 'tool_choice' in text and ('not supported' in text or 'unsupported' in text)
+    return 'tool_choice' in text and 'supported' in text
 
 
 def _create_with_tool_choice(client, tool_choice, **kwargs):

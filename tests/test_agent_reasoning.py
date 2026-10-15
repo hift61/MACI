@@ -233,3 +233,10 @@ class ToolChoiceFallbackTests(unittest.TestCase):
         self.assertEqual(choices, ['required', 'auto'])
         gate(client, 'm', 'sys', 'task', 0.0, 100, {}, history=ContextHistory())
         self.assertEqual(client.chat.completions.create.call_args.kwargs['tool_choice'], 'auto')  # remembered
+
+    def test_other_providers_wording_is_recognized(self):
+        from policy import _forced_tool_choice_unsupported
+        self.assertTrue(_forced_tool_choice_unsupported(ValueError(
+            'only `"auto"` is supported for `tool_choice`. `"none"`, `"required"`, and named function choices are '
+            'not currently supported')))
+        self.assertFalse(_forced_tool_choice_unsupported(ValueError('rate limited')))
