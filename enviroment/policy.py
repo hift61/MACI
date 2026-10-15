@@ -26,7 +26,41 @@ _RATE_LIMIT_DEFAULT_DELAY_SEC = 5.0
 # 이런 요청 하나를 즉시 포기하고 noop으로 넘기면(특히 CodePolicy처럼 코드를 "한 번만"
 # 생성해야 하는 경우) 상위 루프의 짧은 스텝 간격 때문에 429를 계속 다시 유발하게 되므로,
 # 서버가 알려주는 Retry-After(없으면 기본값)만큼 기다렸다가 몇 번 재시도한다.
+# ---- 프롬프트 캐시
+# 매 호출 입력(시스템 프롬프트 + 대화 이력)이 비용의 대부분이라, 앞부분이 그대로인 호출은 캐시로 싸게 읽히게 함.
+# OpenAI/Meta/Gemini 등은 앞부분이 같으면 자동으로 캐시함. Anthropic 모델은 cache_control 표시가 있는 지점까지만
+# 캐시하므로 (1) 시스템 프롬프트 끝, (2) 이력의 마지막 안정 메시지(맨 끝 상태 안내 바로 앞)에 표시를 붙임.
+# 모델이 받는 글 내용은 같고, 요청 형식(문자열 -> text 블록)만 바뀜
+CACHE_MARK_PREFIXES = ('anthropic/',)
+
+
+def _cache_marked(messages, model):
+    if not isinstance(model, str) or not model.startswith(CACHE_MARK_PREFIXES):
+        return messages
+    messages = copy.deepcopy(messages)
+
+    def mark(message):
+        content = message.get('content')
+        if isinstance(content, str) and content:
+            message['content'] = [{'type': 'text', 'text': content, 'cache_control': {'type': 'ephemeral'}}]
+            return True
+        return False
+
+    for message in messages:
+        if message.get('role') == 'system':
+            mark(message)
+            break
+    status_prefix = 'Context management status (advisory):'
+    for message in reversed(messages[:-1] if messages and str(messages[-1].get('content', '')).startswith(
+            status_prefix) else messages):
+        if message.get('role') in ('user', 'assistant') and mark(message):
+            break
+    return messages
+
+
 def _create_with_retry(client, **kwargs):
+    if 'messages' in kwargs:
+        kwargs['messages'] = _cache_marked(kwargs['messages'], kwargs.get('model'))
     for attempt in range(_RATE_LIMIT_MAX_RETRIES):
         try:
             response = client.chat.completions.create(**kwargs)
@@ -826,7 +860,9 @@ def _generate_code_with_submission_gate(
                          + ('\n\n' + MANAGEMENT_INSTRUCTIONS if manage_context else '')
                          + ('\n\n' + REASONING_SUMMARY_INSTRUCTIONS if with_summary else '')})
     messages.append({"role": "user", "content": user_content})
-    answer_tools = [SUBMIT_POLICY_TOOL_SCHEMA] + ([KEEP_CODE_TOOL_SCHEMA] if allow_keep else [])
+    # 도구 목록은 호출마다 같게 둠 (도구 정의가 프롬프트 맨 앞에 들어가므로, 목록이 바뀌면 캐시가 전부 깨짐).
+    # keep_current_code를 쓸 수 없는 호출(아직 코드가 없거나 코드가 실패함)에서 부르면 이유와 함께 거절함
+    answer_tools = [SUBMIT_POLICY_TOOL_SCHEMA, KEEP_CODE_TOOL_SCHEMA]
     if with_summary:
         answer_tools = [_with_summary_field(schema) for schema in answer_tools]
     available_tools = answer_tools + ([MANAGE_CONTEXT_TOOL_SCHEMA] if manage_context else [])
@@ -894,6 +930,12 @@ def _generate_code_with_submission_gate(
                 elif tc.function.name == 'keep_current_code' and allow_keep:
                     result = {"kept": True}
                     kept = True
+                elif tc.function.name == 'keep_current_code':
+                    if checks is not None:
+                        checks.count('tool_call_failures', tool=tc.function.name)
+                    result = {"kept": False, "error": (
+                        "keep_current_code cannot be used in this request: there is no working decide() code to "
+                        "keep (none yet, or it just failed). Submit code with submit_policy_code.")}
                 elif tc.function.name == 'submit_policy_code':
                     code = _extract_code(str(args.get("code", "")))
                     error = _safety_check_error(code, checks)

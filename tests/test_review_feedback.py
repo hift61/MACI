@@ -50,7 +50,7 @@ class FailureCountingTests(unittest.TestCase):
     def test_unavailable_tool_and_rejected_import_are_counted_and_explained(self):
         client, checks, history = Mock(), CodeChecks(), []
         client.chat.completions.create.side_effect = [
-            reply(call('keep_current_code', {})),
+            reply(call('teleport', {})),
             reply(call('submit_policy_code', {'code': 'import os\ndef decide(o): return {"type": "noop"}'})),
             reply(call('submit_policy_code', {'code': CODE})),
         ]
@@ -122,3 +122,37 @@ class ProgressStatusTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class PromptCacheTests(unittest.TestCase):
+    def test_tool_list_is_the_same_whether_or_not_keep_is_allowed(self):
+        tool_sets = []
+        for allow_keep in (False, True):
+            client = Mock()
+            client.chat.completions.create.return_value = reply(call('submit_policy_code', {'code': CODE}))
+            _generate_code_with_submission_gate(client, 'm', 'sys', 'task', 0.0, 100, {}, history=[],
+                                                allow_keep=allow_keep)
+            tool_sets.append([t['function']['name'] for t in client.chat.completions.create.call_args.kwargs['tools']])
+        self.assertEqual(tool_sets[0], tool_sets[1])
+
+    def test_keep_is_refused_with_a_reason_when_there_is_no_code(self):
+        client, checks, history = Mock(), CodeChecks(), []
+        client.chat.completions.create.side_effect = [reply(call('keep_current_code', {})),
+                                                      reply(call('submit_policy_code', {'code': CODE}))]
+        self.assertEqual(_generate_code_with_submission_gate(client, 'm', 'sys', 'task', 0.0, 100, {},
+                                                             checks=checks, history=history), CODE)
+        refusal = json.loads(next(m['content'] for m in history if m['role'] == 'tool'))
+        self.assertFalse(refusal['kept'])
+        self.assertEqual(checks.snapshot()['tool_call_failures'], 1)
+
+    def test_anthropic_requests_get_cache_marks_and_others_are_unchanged(self):
+        from policy import _cache_marked
+        messages = [{'role': 'system', 'content': 'rules'}, {'role': 'user', 'content': 'task'},
+                    {'role': 'assistant', 'content': None, 'tool_calls': []},
+                    {'role': 'user', 'content': 'Context management status (advisory):\n{}'}]
+        self.assertIs(_cache_marked(messages, 'openai/gpt-6-luna'), messages)
+        marked = _cache_marked(messages, 'anthropic/claude-haiku-5.5')
+        self.assertEqual(marked[0]['content'][0]['cache_control'], {'type': 'ephemeral'})
+        self.assertEqual(marked[1]['content'][0]['text'], 'task')  # last stable message before the status line
+        self.assertIsInstance(marked[3]['content'], str)  # the changing status line is not cached
+        self.assertEqual(messages[0]['content'], 'rules')  # caller's history untouched
