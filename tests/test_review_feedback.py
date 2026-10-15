@@ -110,6 +110,15 @@ class ProgressStatusTests(unittest.TestCase):
         status = env.progress_status('A')
         self.assertEqual((status['steps_since_progress'], status['same_action_streak']), (0, 1))
 
+    def test_events_outside_own_action_count_as_progress_and_discovery(self):
+        env, _, _ = build_environment(load('s03_split_experiment').build())
+        env.step_count = 7
+        env._log('object_seen', ['B'], object_id='x', object_type='lever')
+        env._log('level_completed', ['A', 'B'], level=1)
+        env.step_count = 10
+        status = env.progress_status('B')
+        self.assertEqual((status['steps_since_progress'], status['steps_since_discovery']), (3, 3))
+
 
 if __name__ == '__main__':
     unittest.main()

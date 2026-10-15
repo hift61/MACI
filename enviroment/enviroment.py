@@ -920,25 +920,36 @@ class Environment:
         "level_completed", "chest_opened", "block_moved", "target_filled", "item_processed", "scale_balanced",
         "team_assembled", "cargo_handoff", "bonus_collected", "portal_used"))
 
+    def _progress_state(self, agent_id) -> dict:
+        return self._progress.setdefault(agent_id, {"last_progress_step": 0, "last_discovery_step": 0,
+                                                    "last_action": None, "same_action_streak": 0})
+
+    # 같은 행동 연속 횟수만 여기서 셈. 진행/발견은 progress_status가 이벤트 기록 전체에서 셈
+    # (목격, 함께 든 물건, 동시 진입, 단계 완료처럼 그 에이전트의 행동 밖에서 기록되는 이벤트도 포함하려고)
     def _track_progress(self, agent_id, action, new_events) -> None:
-        state = self._progress.setdefault(agent_id, {"last_progress_step": 0, "last_discovery_step": 0,
-                                                     "last_action": None, "same_action_streak": 0})
-        for event in new_events:
-            if agent_id not in event.get("agent_ids", []):
-                continue
-            if event["type"] in self.PROGRESS_EVENTS:
-                state["last_progress_step"] = self.step_count
-            elif event["type"] == "object_seen":
-                state["last_discovery_step"] = self.step_count
+        state = self._progress_state(agent_id)
         key = json.dumps({k: v for k, v in action.items() if k not in ("memory", "recheck_after")},
                          sort_keys=True, default=str) if isinstance(action, dict) else None
         state["same_action_streak"] = state["same_action_streak"] + 1 if key == state["last_action"] else 1
         state["last_action"] = key
 
+    def _scan_progress_events(self) -> None:
+        entries = self.event_log.entries
+        start = getattr(self, "_progress_scanned", 0)
+        for event in entries[start:]:
+            kind = ("last_progress_step" if event["type"] in self.PROGRESS_EVENTS
+                    else "last_discovery_step" if event["type"] == "object_seen" else None)
+            if kind is None:
+                continue
+            for aid in event.get("agent_ids") or []:
+                if aid in self.agents:
+                    self._progress_state(aid)[kind] = event["step"]
+        self._progress_scanned = len(entries)
+
     def progress_status(self, agent_id) -> dict:
         """진행 정체 지표: 마지막 진행/새 발견 이후 지난 step 수, 같은 행동을 연속으로 한 횟수"""
-        state = self._progress.get(agent_id) or {"last_progress_step": 0, "last_discovery_step": 0,
-                                                 "same_action_streak": 0}
+        self._scan_progress_events()
+        state = self._progress_state(agent_id)
         return {"steps_since_progress": self.step_count - state["last_progress_step"],
                 "steps_since_discovery": self.step_count - state["last_discovery_step"],
                 "same_action_streak": state["same_action_streak"]}
