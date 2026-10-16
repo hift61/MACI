@@ -705,7 +705,8 @@ POLICY_LAYOUT_INSTRUCTIONS = """Use the supplied action-function layout below.
 Keep sections 1 and 2 (observation setup and helpers) unchanged. Fill the DECISION START/END
 region with your task-specific logic and any additional local helper functions.
 Return the COMPLETE decide(observation) function, including the supplied sections.
-Use finish(), move_toward(), or send_message() for all action returns so memory is saved.
+Use finish(), move_toward(), or a communication helper (send_message, share_belief, request_info,
+confirm, claim_role, claim_task, issue_command) for all action returns so memory is saved.
 Set recheck_after in the decision region to a positive integer: it is the number of
 turns before the LLM reviews the current execution state and decides again.
 For example, recheck_after = 3 at step 1 schedules review BEFORE executing step 4.
@@ -1268,7 +1269,7 @@ class CodePolicy(Policy):
         if attempted_move:
             return f"your last move {last} was blocked - your position {pos} did not change"
         intentional = last.get('type') in (
-            'noop', 'send_message', 'request_info', 'confirm', 'claim_role', 'claim_task', 'issue_command')
+            'noop', 'send_message', 'share_belief', 'request_info', 'confirm', 'claim_role', 'claim_task', 'issue_command')
         if not intentional and self._stall_count >= self.stall_limit and not self._on_pressure_plate(observation, pos):
             return f"you have not moved from {pos} for {self._stall_count} steps in a row"
         return None

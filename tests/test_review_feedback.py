@@ -156,3 +156,27 @@ class PromptCacheTests(unittest.TestCase):
         self.assertEqual(marked[1]['content'][0]['text'], 'task')  # last stable message before the status line
         self.assertIsInstance(marked[3]['content'], str)  # the changing status line is not cached
         self.assertEqual(messages[0]['content'], 'rules')  # caller's history untouched
+
+
+class CommunicationHelperTests(unittest.TestCase):
+    def test_template_offers_a_helper_for_every_communication_action(self):
+        from policy import POLICY_LAYOUT
+        for name in ('send_message', 'share_belief', 'request_info', 'confirm', 'claim_role', 'claim_task',
+                     'issue_command'):
+            self.assertIn(f'def {name}(', POLICY_LAYOUT)
+
+    def test_helpers_produce_actions_the_environment_delivers(self):
+        from policy import POLICY_LAYOUT
+        from policy_sandbox import run_decide_code
+        env, _, _ = build_environment(load('s03_split_experiment').build())
+        calls = {'share_belief': "share_belief('B', 'L1', 'opens G2')", 'request_info': "request_info('B', 'L4')",
+                 'confirm': "confirm('B', 'L1', True)", 'claim_role': "claim_role('scout')",
+                 'claim_task': "claim_task('west levers')", 'issue_command': "issue_command('B', {'type': 'noop'})"}
+        for kind, call_text in calls.items():
+            code = POLICY_LAYOUT.replace('    return finish()\n    # DECISION END', f'    return {call_text}\n    # DECISION END')
+            result = run_decide_code(code, env.get_observation('A'))
+            self.assertIsNone(result['error'], kind)
+            env.apply_action('A', result['action'])
+            self.assertEqual(env.agents['B'].inbox[-1]['type'],
+                             {'share_belief': 'belief', 'request_info': 'request', 'confirm': 'confirm',
+                              'claim_role': 'role_claim', 'claim_task': 'task_claim', 'issue_command': 'command'}[kind])

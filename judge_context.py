@@ -77,6 +77,15 @@ def _action_text(action) -> str:
     return action.get("type", "?") + (f" {_short(fields, 120)}" if fields else "")
 
 
+# 소통 행동 7종의 본문 (send_message만 content가 있음)
+def _message_body(message: dict) -> str:
+    kind = message.get("type", "text")
+    if kind == "text":
+        return str(message.get("content"))
+    fields = {k: v for k, v in message.items() if k not in ("type", "from", "receiver_id", "step", "handled")}
+    return f"[{kind}] " + json.dumps(fields, ensure_ascii=False, default=str)
+
+
 def load_run(manifest) -> dict:
     """실행 기록을 에이전트별 조각/행동/기준점 재료로 정리."""
     manifest = Path(manifest)
@@ -120,7 +129,7 @@ def load_run(manifest) -> dict:
         step = record["step"]
         for message in record.get("messages") or []:
             sender, receiver = message.get("from"), message.get("receiver_id")
-            text = f"message {sender} -> {receiver}: {_short(message.get('content'), 500)}"
+            text = f"message {sender} -> {receiver}: {_short(_message_body(message), 500)}"
             for agent in {sender, receiver} & set(agents):
                 chunks[agent].append({"step": step, "kind": "message", "text": text})
             if receiver in triggers:

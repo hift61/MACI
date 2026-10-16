@@ -37,11 +37,30 @@ def decide(observation):
         travel = min(step_size, distance - stop_radius)
         return finish("move_forward", distance=travel)
 
+    # Communication helpers (each returns one action; messages arrive in the receiver's inbox next step).
     def send_message(receiver_id, content):
         return finish("send_message", receiver_id=receiver_id, content=content)
 
+    def share_belief(receiver_id, subject, claim):
+        return finish("share_belief", receiver_id=receiver_id, subject=subject, claim=claim)
+
+    def request_info(receiver_id, subject):
+        return finish("request_info", receiver_id=receiver_id, subject=subject)
+
+    def confirm(receiver_id, subject, agree=True):
+        return finish("confirm", receiver_id=receiver_id, subject=subject, agree=agree)
+
+    def claim_role(role):
+        return finish("claim_role", role=role)
+
+    def claim_task(task):
+        return finish("claim_task", task=task)
+
+    def issue_command(receiver_id, command):
+        return finish("issue_command", receiver_id=receiver_id, command=command)
+
     # 3. DECISION START: replace only this region with task-specific logic.
     # Read new messages, inspect observed state, select a target, and act.
-    # Save state in memory. Return through finish/move_toward/send_message.
+    # Save state in memory. Return through finish/move_toward or a communication helper.
     return finish()
     # DECISION END
