@@ -623,7 +623,8 @@ class PiLogsApp:
                                judge_context.judge_scores(judge["path"]).items() if key in s) or "판정 없음"
             mine = self.my_point_rating(bundle)
             self.text(f"{judge['index'] + 1}/{len(items)}   에이전트 {bundle['agent']}   step {bundle['step']}   "
-                      f"판정기: {scores}   내 점수: {'-' if mine is None else mine['score']}", x, 166, self.font,
+                      f"판정기: {scores}   내 점수: "
+                      f"{'-' if mine is None else mine.get('score', judge_context.LABELS.get(mine.get('label'), '-'))}", x, 166, self.font,
                       width=696)
         pygame.draw.rect(self.screen, (10, 15, 23), (x, 192, 696, 400), border_radius=8)
         for i, line in enumerate(judge["lines"][judge["scroll"]:judge["scroll"] + 19]):

@@ -375,6 +375,69 @@ def load_or_build_bundles(manifest, client=None, embed_model: str = DEFAULT_EMBE
 ANCHOR_RUBRIC = ("평가 기준 (0~10): 이 시점에 에이전트가 바깥 맥락(바뀐 상황, 상대의 말과 필요, 앞서 알게 된 사실과 실패)을 "
                  "고려해 반응했는가. 실제 코드와 행동으로 이어지지 않은 계획이나 긴 주석에는 점수를 주지 마세요.")
 
+# 항목별 판정 (사람 평가 화면 human_review_v1과 같은 키·문구: maci_eval/rande_rubric.py의 HEADS).
+# 판단 시점마다 항목 하나를 골라 충족/미충족/근거 부족/평가 기회 없음 중 하나와 이유를 남김.
+# 0~10점과 같은 파일에 저장하되 기록에 score 대신 criterion/label이 있음
+CRITERIA_VERSION = "rande-rubric-1.0-proposed"
+CRITERIA = {
+    "message_reflection": {
+        "name": "메시지 정보 반영",
+        "opportunity": "수신이 확인된 과제 관련 정보와 이후 의사결정 기회가 존재함",
+        "yes": "내용에 특정적인 행동·계획·기억 반영 근거가 있음; 인과성은 별도 개입 근거가 있을 때만 표시",
+        "no": "완전한 후속 기록에서 명시적으로 요구되는 적절한 반영을 하지 않았다는 근거가 있음",
+        "unknown": "행동의 의미적 일치나 시간적 선후만 있고 반영 출처가 불명확함",
+    },
+    "responsive_dialogue": {
+        "name": "필요 기반 대화 연속성",
+        "opportunity": "답변·조율·상태 갱신이 필요한 질문/요청/중요 변화가 실제 전달되었고 응답 가능 시간이 있음",
+        "yes": "해당 필요를 충족하는 관련 답변·확인·갱신이 적시에 제공됨",
+        "no": "완전한 기회 동안 필요한 응답이 없거나 무관한 말만 반복함",
+        "unknown": "전달·응답 가능성·후속 기록 중 하나가 확인되지 않음",
+    },
+    "error_nonrepetition": {
+        "name": "알려진 오류 비반복",
+        "opportunity": "실패 원인 피드백에 노출되고 같은 원인이 유지되는 비교 가능한 재시도 기회가 있음",
+        "yes": "동일한 알려진 실패 원인을 피하거나 필요한 조건을 바꾼 뒤 재시도함",
+        "no": "해당 피드백을 받은 뒤 실패 원인이 그대로인데 같은 오류를 반복함",
+        "unknown": "실패 피드백 접근·원인 동일성·재시도 기회가 불명확함",
+    },
+    "feedback_adaptation": {
+        "name": "실행 결과에 대한 적응",
+        "opportunity": "직전 실행 결과가 다음 의사결정 전에 접근 가능하며 후속 결정이 관측됨",
+        "yes": "관측된 결과를 적절히 반영해 수정하거나 성공한 방식을 유지함",
+        "no": "접근 가능한 결정적 실행 결과와 충돌하는 후속 선택을 함",
+        "unknown": "결과 접근·내용 특정적 연결·적절한 대응 여부를 확인할 수 없음",
+    },
+    "epistemic_consistency": {
+        "name": "발화와 접근 가능한 상황의 일치",
+        "opportunity": "현재/과거 상태에 관한 검증 가능한 사실 주장이 있고 당시 접근 가능한 증거가 보존됨",
+        "yes": "주장의 내용·시제·확실성 수준이 당시 접근 가능한 관측/기억/수신 정보와 일치함",
+        "no": "주장이 당시 접근 가능한 명시적 증거와 모순됨",
+        "unknown": "주장이나 당시 증거가 부족함; 비공개 세계 정보만으로 모순을 만들지 않음",
+    },
+}
+LABELS = {"yes": "충족", "no": "미충족", "unknown": "근거 부족", "not_applicable": "평가 기회 없음"}
+LABEL_GUIDE = {
+    "yes": "해당 항목을 충족하는 구체적인 근거가 있습니다.",
+    "no": "충분히 관측된 평가 기회에서 기준을 충족하지 못한 근거가 있습니다.",
+    "unknown": "기회나 정보의 출처, 후속 기록 등이 불확실합니다.",
+    "not_applicable": "해당 항목을 평가할 상황이 아니었다는 근거가 있습니다.",
+}
+CRITERIA_NOTE = ("판단 시점마다 지정된 항목 하나를 평가합니다. 모든 판정에 이유가 필요합니다. 단순한 행동 일치는 메시지의 영향을 "
+                 "증명하지 않습니다. 관측되지 않은 후속 행동을 실패로 간주하지 마세요. 발화의 정합성은 발화 당시 접근 가능한 "
+                 "정보로 판단합니다. 근거가 부족하면 근거 부족, 평가 기회가 없다는 근거가 있을 때만 평가 기회 없음입니다.")
+# 계기로 기본 항목을 고름 (채점자가 바꿀 수 있음): 실패 > 받은 메시지 > 그 밖의 실행 결과
+ERROR_EVENTS = ("sync_fail", "keypad_reset", "keypad_denied", "cargo_spoiled", "zone_overloaded", "block_stuck")
+
+
+def default_criterion(bundle: dict) -> str:
+    trigger = " ".join(bundle.get("trigger") or [])
+    if any(f"{event}(" in trigger for event in ERROR_EVENTS):
+        return "error_nonrepetition"
+    if "received message" in trigger or "a message arrived" in trigger:
+        return "message_reflection"
+    return "feedback_adaptation"
+
 
 def anchor_ratings_path(manifest, rater: str) -> Path:
     manifest = Path(manifest)
@@ -396,12 +459,36 @@ def load_all_anchor_ratings(manifest) -> dict[str, dict[str, float]]:
     """채점자 이름 -> {turn_key: 점수}"""
     manifest = Path(manifest)
     prefix = manifest.stem + ".anchor_ratings."
+    return {rater: {key: r["score"] for key, r in ratings.items() if r.get("score") is not None}
+            for rater, ratings in _all_anchor_records(manifest).items()}
+
+
+def load_all_anchor_labels(manifest) -> dict[str, dict[str, dict]]:
+    """채점자 이름 -> {turn_key: {"criterion", "label", "comment"}} (항목별 판정만)"""
+    return {rater: {key: r for key, r in ratings.items() if r.get("label") in LABELS}
+            for rater, ratings in _all_anchor_records(manifest).items()}
+
+
+def _all_anchor_records(manifest) -> dict[str, dict[str, dict]]:
+    manifest = Path(manifest)
+    prefix = manifest.stem + ".anchor_ratings."
     result = {}
-    for path in manifest.parent.glob(prefix + "*.json"):
+    for path in sorted(manifest.parent.glob(prefix + "*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
         result[data.get("rater") or path.name[len(prefix):-5]] = {
-            judge_agreement.turn_key(r["step"], r["agent"]): r["score"] for r in data.get("ratings", [])}
+            judge_agreement.turn_key(r["step"], r["agent"]): r for r in data.get("ratings", [])}
     return result
+
+
+def _now() -> str:
+    return datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _write_anchor_ratings(manifest, rater: str, ratings: dict[str, dict]) -> None:
+    ordered = sorted(ratings.values(), key=lambda r: (r["step"], str(r["agent"])))
+    anchor_ratings_path(manifest, rater).write_text(json.dumps(
+        {"rater": rater.strip(), "manifest": Path(manifest).name, "rubric": ANCHOR_RUBRIC,
+         "criteria_version": CRITERIA_VERSION, "ratings": ordered}, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def save_anchor_rating(manifest, rater: str, bundle: dict, score, comment: str = "") -> None:
@@ -413,11 +500,62 @@ def save_anchor_rating(manifest, rater: str, bundle: dict, score, comment: str =
     ratings.pop(key, None)
     if score is not None:
         ratings[key] = {"step": bundle["step"], "agent": bundle["agent"], "score": score, "comment": comment.strip(),
-                        "time": datetime.datetime.now().astimezone().isoformat(timespec="seconds")}
-    ordered = sorted(ratings.values(), key=lambda r: (r["step"], str(r["agent"])))
-    anchor_ratings_path(manifest, rater).write_text(json.dumps(
-        {"rater": rater.strip(), "manifest": Path(manifest).name, "rubric": ANCHOR_RUBRIC, "ratings": ordered},
-        ensure_ascii=False, indent=2), encoding="utf-8")
+                        "time": _now()}
+    _write_anchor_ratings(manifest, rater, ratings)
+
+
+def save_anchor_label(manifest, rater: str, bundle: dict, criterion: str, label: str | None, comment: str = "") -> None:
+    """판단 시점 하나에 항목 판정을 저장 (같은 시점의 이전 채점은 점수든 판정이든 바뀜). label=None이면 지움."""
+    ratings = load_anchor_ratings(manifest, rater)
+    key = judge_agreement.turn_key(bundle["step"], bundle["agent"])
+    if label is None:
+        ratings.pop(key, None)
+    else:
+        if criterion not in CRITERIA:
+            raise ValueError("없는 평가 항목입니다.")
+        if label not in LABELS:
+            raise ValueError("충족 / 미충족 / 근거 부족 / 평가 기회 없음 중 하나를 선택하세요.")
+        if not comment.strip():
+            raise ValueError("판정 이유를 적으세요.")
+        ratings[key] = {"step": bundle["step"], "agent": bundle["agent"], "criterion": criterion, "label": label,
+                        "comment": comment.strip(), "time": _now()}
+    _write_anchor_ratings(manifest, rater, ratings)
+
+
+def _kappa(pairs: list[tuple[str, str]]) -> dict:
+    """원 일치율과 Cohen kappa (maci_eval.human_review.agreement와 같은 계산)"""
+    n = len(pairs)
+    if not n:
+        return {"n": 0, "agreement": None, "kappa": None}
+    observed = sum(a == b for a, b in pairs) / n
+    first, second = Counter(a for a, _ in pairs), Counter(b for _, b in pairs)
+    expected = sum(first[k] * second[k] for k in set(first) | set(second)) / n ** 2
+    return {"n": n, "agreement": observed, "kappa": (observed - expected) / (1 - expected) if expected < 1 else None}
+
+
+def label_agreement(manifest) -> list[str]:
+    """사람끼리 항목 판정 일치도 (같은 시점에 같은 항목을 고른 경우만). 판정기는 아직 0~10점이라 비교하지 않음"""
+    raters = {name: labels for name, labels in load_all_anchor_labels(manifest).items() if labels}
+    if not raters:
+        return ["항목 판정: 아직 없음"]
+    lines = ["항목 판정: " + ", ".join(f"{name} {len(labels)}개" for name, labels in raters.items())
+             + " (판정기는 0~10점이라 항목 판정과 비교하지 않음)"]
+    names = list(raters)
+    fmt = lambda v: "-" if v is None else f"{v:.3f}"
+    for i, first in enumerate(names):
+        for second in names[i + 1:]:
+            pairs: dict[str, list] = {}
+            for key in set(raters[first]) & set(raters[second]):
+                a, b = raters[first][key], raters[second][key]
+                if a["criterion"] == b["criterion"]:
+                    pairs.setdefault(a["criterion"], []).append((a["label"], b["label"]))
+            if not pairs:
+                lines.append(f"{first} vs {second}: 같은 시점·같은 항목 판정이 없음")
+            for criterion, items in sorted(pairs.items()):
+                stats = _kappa(items)
+                lines.append(f"{first} vs {second} · {CRITERIA[criterion]['name']}: 공통 {stats['n']}개  "
+                             f"일치율={fmt(stats['agreement'])}  kappa={fmt(stats['kappa'])}")
+    return lines
 
 
 def judge_scores(manifest) -> dict[str, dict[str, float]]:
@@ -432,8 +570,12 @@ def summary(manifest, bundles: list[dict], rater: str) -> str:
     for name, scores in judges.items():
         values = list(scores.values())
         parts.append(f"{name.split('/')[-1]} 평균 {sum(values) / len(values):.1f}" if values else name)
-    if mine:
-        human = {k: r["score"] for k, r in mine.items()}
+    labels = Counter(LABELS[r["label"]] for r in mine.values() if r.get("label") in LABELS)
+    if labels:
+        parts.append(f"내 항목 판정 {sum(labels.values())}/{len(bundles)} ("
+                     + ", ".join(f"{name} {n}" for name, n in labels.items()) + ")")
+    human = {k: r["score"] for k, r in mine.items() if r.get("score") is not None}
+    if human:
         parts.append(f"내 채점 {len(human)}/{len(bundles)} 평균 {sum(human.values()) / len(human):.1f}")
         for name, scores in judges.items():
             agree = judge_agreement.compare(scores, human)

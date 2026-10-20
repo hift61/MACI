@@ -5,8 +5,9 @@
 
 - / : 폴더 안(하위 폴더 포함) 각 실행의 <맵>.log 마지막 줄들과 진행 step, 끝났으면 score.json의 결과 몇 개 (5초마다 갱신)
 - /eval : 로그 평가. 실행을 고르면 판단 시점(바깥 맥락이 바뀐 때, judge_context.py)마다 묶음 내용,
-  판정기 점수(judges.json의 '<모델>@anchor'), 사람 점수와 일치도를 보여 주고, 사람이 0~10점과 메모로 채점함
-  (<manifest>.anchor_ratings.<채점자>.json). --allow-judge면 '판정기 실행' 버튼으로 판정 모델이 채점 (key.txt, API 비용)
+  판정기 점수(judges.json의 '<모델>@anchor'), 사람 판정과 일치도를 보여 주고, 사람이 항목 하나를 골라
+  충족/미충족/근거 부족/평가 기회 없음과 이유로 판정함 (사람 평가 화면 human_review_v1과 같은 다섯 항목,
+  <manifest>.anchor_ratings.<채점자>.json; 이전의 0~10점 기록도 그대로 읽음). --allow-judge면 '판정기 실행' 버튼으로 판정 모델이 채점 (key.txt, API 비용)
 - 안전: 폴더 밖 경로는 거부하고 실행 기록(manifest .jsonl)만 고를 수 있음. 쓰는 파일은 사람 채점 파일과
   판단 시점 묶음 캐시(<manifest>.judge_bundles.json), 판정기 결과(--allow-judge)뿐.
   API 키처럼 보이는 문자열은 가림. Tailscale IP에 붙이면 tailnet 밖에서는 접근할 수 없음
@@ -147,7 +148,12 @@ summary{cursor:pointer;padding:10px 12px;display:flex;gap:12px;flex-wrap:wrap;al
 pre{margin:0;padding:10px 12px;border-top:1px solid var(--line);overflow-x:auto;font-size:12px;max-height:520px;white-space:pre-wrap}
 form{padding:10px 12px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 input,select,button{font:inherit;padding:4px 8px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px}
-input[name=comment]{flex:1;min-width:200px}.box{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:12px 0}
+input[name=comment]{flex:1;min-width:200px}
+form.rate{display:grid;gap:8px}form.rate .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+form.rate fieldset{border:1px solid var(--line);border-radius:6px;display:flex;gap:14px;flex-wrap:wrap}
+form.rate textarea{font:inherit;padding:6px 8px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px}
+.rubric{border-left:3px solid var(--run);padding:2px 10px}.rubric p{margin:4px 0}.box h3{font-size:14px;margin:10px 0 2px}
+details.plain{border:0;background:none;margin:0}details.plain summary{padding:4px 0}.box{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:12px 0}
 .turn-context{padding:12px;border-top:1px solid var(--line)}.turn-context h2{font-size:16px;margin:0}
 .turn-maps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}
 .turn-map{display:block;width:100%;max-height:440px;background:#121721;border-radius:6px;margin-top:8px}
@@ -158,6 +164,67 @@ input[name=comment]{flex:1;min-width:200px}.box{background:var(--card);border:1p
 
 def esc(value) -> str:
     return html.escape(str(value), quote=True)
+
+
+def rubric_html(criterion: str) -> str:
+    """항목 하나의 평가 기회/충족/미충족/근거 부족 (사람 평가 화면과 같은 형식)"""
+    import judge_context
+    rubric = judge_context.CRITERIA[criterion]
+    return '<div class="rubric">' + "".join(
+        f'<p><b>{title}:</b> {esc(rubric[field])}</p>'
+        for title, field in (("평가 기회", "opportunity"), ("충족", "yes"), ("미충족", "no"), ("근거 부족", "unknown"))
+    ) + '</div>'
+
+
+def criteria_json() -> str:
+    import judge_context
+    return json.dumps(judge_context.CRITERIA, ensure_ascii=False).replace("</", "<\\/")
+
+
+def criteria_guide() -> str:
+    import judge_context
+    labels = "".join(f'<li><b>{esc(name)}:</b> {esc(judge_context.LABEL_GUIDE[label])}</li>'
+                     for label, name in judge_context.LABELS.items())
+    criteria = "".join(f'<h3>{esc(c["name"])}</h3>{rubric_html(key)}' for key, c in judge_context.CRITERIA.items())
+    return (f'<div class="box"><b>평가 안내</b><p>{esc(judge_context.CRITERIA_NOTE)}</p><ul>{labels}</ul>'
+            f'<details class="plain"><summary>다섯 항목 기준 전체</summary>{criteria}</details>'
+            f'<p class="meta">판정기는 아직 0~10점입니다: {esc(judge_context.ANCHOR_RUBRIC)}</p></div>')
+
+
+def rate_form(rel: str, bundle: dict, rater: str, saved: dict | None) -> str:
+    """판단 시점 하나의 항목 판정 양식. 저장된 판정이 있으면 채워 둠, 없으면 계기로 고른 기본 항목"""
+    import judge_context
+    saved = saved if saved and saved.get("label") in judge_context.LABELS else None
+    criterion = saved["criterion"] if saved else judge_context.default_criterion(bundle)
+    options = "".join(f'<option value="{key}"{" selected" if key == criterion else ""}>{esc(c["name"])}</option>'
+                      for key, c in judge_context.CRITERIA.items())
+    radios = "".join(f'<label><input type="radio" name="label" value="{label}" required'
+                     f'{" checked" if saved and saved["label"] == label else ""}> {esc(name)}</label>'
+                     for label, name in judge_context.LABELS.items())
+    comment = esc((saved or {}).get("comment", ""))
+    return (f'<form method="post" action="rate" class="rate"><input type="hidden" name="path" value="{esc(rel)}">'
+            f'<input type="hidden" name="agent" value="{esc(bundle["agent"])}">'
+            f'<input type="hidden" name="step" value="{bundle["step"]}">'
+            f'<div class="row"><input name="rater" placeholder="채점자" value="{esc(rater)}" required size="10">'
+            f'<label>평가 항목 <select name="criterion">{options}</select></label></div>'
+            f'{rubric_html(criterion)}<fieldset><legend>판정</legend>{radios}</fieldset>'
+            f'<textarea name="comment" required rows="2" placeholder="판정 이유 (근거가 된 step·기록)">{comment}</textarea>'
+            f'<div class="row"><button>저장</button></div></form>')
+
+
+# 평가 항목을 바꾸면 그 항목의 기준으로 바꿔 보여 줌 (스크립트가 없어도 서버가 고른 항목의 기준은 보임)
+RUBRIC_SCRIPT = """<script>
+const CRITERIA = __CRITERIA__;
+const FIELDS = [['평가 기회','opportunity'],['충족','yes'],['미충족','no'],['근거 부족','unknown']];
+document.addEventListener('change', e => {
+  if (e.target.name !== 'criterion') return;
+  const box = e.target.form.querySelector('.rubric'), rubric = CRITERIA[e.target.value];
+  box.replaceChildren(...FIELDS.map(([title, field]) => {
+    const p = document.createElement('p'), b = document.createElement('b');
+    b.textContent = title + ':'; p.append(b, ' ' + rubric[field]); return p;
+  }));
+});
+</script>"""
 
 
 def eval_page(title: str, body: str, refresh: bool = False) -> bytes:
@@ -225,17 +292,17 @@ class Evaluator:
                         f'<button {"disabled" if job.startswith("실행 중") else ""}>판정기 실행 '
                         f'({len(bundles)}개 시점, API 비용)</button><span class="meta">{esc(job)}</span></form>'
                         if self.allow_judge else '<div class="meta">판정기 실행은 꺼져 있습니다 (--allow-judge).</div>')
-        rate_form = ('' if self.read_only else
-                     '<form method="post" action="rate"><input type="hidden" name="path" value="{rel}">'
-                     '<input type="hidden" name="agent" value="{agent}"><input type="hidden" name="step" value="{step}">'
-                     '<input name="rater" placeholder="채점자" value="{rater}" required size="10">'
-                     '<select name="score">' + "".join(f"<option>{i}</option>" for i in range(11)) + '</select>'
-                     '<input name="comment" placeholder="메모"><button>저장</button></form>')
+        labels = judge_context.load_all_anchor_labels(manifest)
+        mine = judge_context.load_anchor_ratings(manifest, rater) if rater.strip() else {}
         points = []
         for bundle in bundles:
             key = judge_agreement.turn_key(bundle["step"], bundle["agent"])
             judge_text = "  ".join(f"{name.split('/')[-1]} {s[key]:g}" for name, s in judges.items() if key in s)
-            human_text = "  ".join(f"{name} {s[key]:g}" for name, s in humans.items() if key in s)
+            human_text = "  ".join(
+                [f"{name} {s[key]:g}" for name, s in humans.items() if key in s]
+                + [f"{name} {judge_context.LABELS[s[key]['label']]}"
+                   f"({judge_context.CRITERIA[s[key]['criterion']]['name']})"
+                   for name, s in labels.items() if key in s])
             anchor = f"p-{bundle['agent']}-{bundle['step']}"
             points.append(
                 f'<details id="{anchor}"><summary><b>{esc(bundle["agent"])} · step {bundle["step"]}</b>'
@@ -243,12 +310,14 @@ class Evaluator:
                 f'<span class="meta">판정기: {esc(judge_text or "-")} · 사람: {esc(human_text or "-")}</span></summary>'
                 + context.render(bundle["step"], bundle["agent"], lambda value: esc(redact(str(value))))
                 + f'<pre>{esc(redact(judge_context.render(bundle)))}</pre>'
-                + rate_form.format(rel=esc(rel), agent=esc(bundle["agent"]), step=bundle["step"], rater=esc(rater))
+                + ('' if self.read_only else rate_form(rel, bundle, rater, mine.get(key)))
                 + '</details>')
+        agreement += "<br>" + "<br>".join(esc(line) for line in judge_context.label_agreement(manifest))
         body = (f'<h1>{esc(rel)}</h1><div class="sub"><a href="/eval">실행 목록</a> · '
                 f'{esc(judge_context.summary(manifest, bundles, rater) if rater else f"판단 시점 {len(bundles)}개")}</div>'
-                f'<div class="box">{esc(judge_context.ANCHOR_RUBRIC)}</div>{judge_button}'
-                f'<div class="box">{agreement}</div>{"".join(points) or "<p>판단 시점이 없습니다.</p>"}')
+                f'{criteria_guide()}{judge_button}'
+                f'<div class="box">{agreement}</div>{"".join(points) or "<p>판단 시점이 없습니다.</p>"}'
+                f'{RUBRIC_SCRIPT.replace("__CRITERIA__", criteria_json())}')
         return eval_page(rel, body, refresh=job.startswith("실행 중"))
 
     def rate(self, manifest: Path, form: dict) -> None:
@@ -257,8 +326,13 @@ class Evaluator:
         bundle = bundles.get((form.get("agent", ""), int(form.get("step", "-1"))))
         if bundle is None:
             raise ValueError("없는 판단 시점입니다.")
-        score = int(form.get("score", ""))
-        judge_context.save_anchor_rating(manifest, form.get("rater", ""), bundle, score, form.get("comment", "")[:1000])
+        comment = form.get("comment", "")[:1000]
+        if "criterion" in form or "label" in form:  # 항목 판정 (사이트 양식)
+            judge_context.save_anchor_label(manifest, form.get("rater", ""), bundle, form.get("criterion", ""),
+                                            form.get("label", ""), comment)
+            return
+        score = int(form.get("score", ""))  # 0~10점 (이전 양식)
+        judge_context.save_anchor_rating(manifest, form.get("rater", ""), bundle, score, comment)
 
     def start_judge(self, rel: str, manifest: Path) -> None:
         import judge_agreement

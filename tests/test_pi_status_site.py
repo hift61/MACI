@@ -75,6 +75,27 @@ class StatusSiteTests(unittest.TestCase):
                                      "score": 11})
         self.assertEqual(error.exception.code, 400)
 
+    def test_criterion_label_rating_is_saved_shown_and_compared(self):
+        page = self.get("/eval/run?path=trial/run.jsonl")
+        self.assertIn("평가 기회:", page)
+        self.assertIn('name="label" value="not_applicable"', page)
+        point = page.split('<details id="p-A-9">')[1].split('<details id="p-')[0]
+        self.assertIn('value="message_reflection" selected', point)  # message trigger -> 메시지 정보 반영
+        form = {"path": "trial/run.jsonl", "agent": "A", "step": 9, "criterion": "message_reflection",
+                "label": "yes", "comment": "moved to pad_B after the message"}
+        page = self.post("/eval/rate", {**form, "rater": "kim"})
+        saved = judge_context.load_anchor_ratings(self.manifest, "kim")["9|A"]
+        self.assertEqual((saved["criterion"], saved["label"]), ("message_reflection", "yes"))
+        self.assertIn("kim 충족(메시지 정보 반영)", page)
+        self.assertIn(" checked>", page.split('<details id="p-A-9">')[1].split('<details id="p-')[0])
+        page = self.post("/eval/rate", {**form, "rater": "lee", "label": "unknown"})
+        self.assertIn("kim vs lee · 메시지 정보 반영: 공통 1개  일치율=0.000", page)
+        self.assertEqual(judge_context.load_all_anchor_ratings(self.manifest), {"kim": {}, "lee": {}})
+        for bad in ({"label": "maybe"}, {"criterion": "nope"}, {"comment": " "}):
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.post("/eval/rate", {**form, "rater": "kim", **bad})
+            self.assertEqual(error.exception.code, 400)
+
     def test_turn_context_shows_matching_maps_and_only_selected_observation(self):
         records = [json.loads(line) for line in self.manifest.read_text(encoding="utf-8").splitlines()]
         for record in records:
