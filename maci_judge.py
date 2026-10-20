@@ -45,6 +45,7 @@ import time
 from openai import APIConnectionError, APIStatusError, OpenAI
 
 import judge_agreement
+import providers
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASELINE_FILE = os.path.join(HERE, "maci_judge_baseline.json")
@@ -398,8 +399,7 @@ def main():
     parser.add_argument("--agent", default=None, help="only judge this agent label (e.g. A); default: all agents")
     parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL,
                         help="judge model, or several separated by commas (each scores every selected turn)")
-    parser.add_argument("--base-url", default="https://openrouter.ai/api/v1")
-    parser.add_argument("--api-key-file", default="key.txt", help="API key file (relative paths use the project directory)")
+    providers.add_arguments(parser)
     parser.add_argument("--max-turns", type=int, default=None, help="limit how many manifest lines to judge (for a quick check)")
     parser.add_argument("--baseline-model", default=DEFAULT_BASELINE_MODEL)
     parser.add_argument("--set-baseline", action="store_true", help="register this run's average as the --baseline-model's 100-point baseline")
@@ -409,14 +409,14 @@ def main():
                              "outside context changed, with relevant earlier context retrieved (judge_context.py)")
     parser.add_argument("--retrieval", choices=("embedding", "lexical"), default="embedding",
                         help="--unit anchor: how earlier context is ranked")
-    parser.add_argument("--embed-model", default="openai/text-embedding-3-small")
+    parser.add_argument("--embed-model", default=None, help="embedding model (default: the provider's)")
     parser.add_argument("--top-k", type=int, default=4, help="--unit anchor: earlier pieces per decision point")
     parser.add_argument("--max-anchors", type=int, default=12, help="--unit anchor: decision points per agent")
     args = parser.parse_args()
 
-    api_key = read_secret(args.api_key_file)
-    client = OpenAI(base_url=args.base_url, api_key=api_key)
-    judges = [model.strip() for model in args.judge_model.split(",") if model.strip()]
+    client = OpenAI(base_url=providers.base_url(args), api_key=providers.read_key(args))
+    judges = [providers.model_name(args, model.strip()) for model in args.judge_model.split(",") if model.strip()]
+    args.embed_model = providers.embed_model(args)
     if not judges:
         parser.error("--judge-model is empty")
     bundles = None

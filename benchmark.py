@@ -32,6 +32,7 @@ from enviroment import Environment  # noqa: E402
 from policy import (REASONING_SUMMARY_FIELD, CentralCodePolicy, CodePolicy, agent_reasoning_params, HybridPolicy, NoopPolicy, PolicyGaveUp,  # noqa: E402
                     RandomPolicy, ToolUsePolicy)
 from scoring import ScoreConfig, clear_step, score_episode  # noqa: E402
+import providers  # noqa: E402
 from context_memory import ContextMemory, ContextConfig  # noqa: E402
 from mapgen import MapSpec, generate_map  # noqa: E402
 from mapgen.builder import build_environment  # noqa: E402
@@ -355,7 +356,9 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                 "controller": controller,
                 "prompt_contract": PROMPT_CONTRACT,
                 "disclose_costs": disclose_costs,
-                "agent_reasoning": ((extra_params or {}).get("extra_body") or {}).get("reasoning", {}).get("effort"),
+                "agent_reasoning": (((extra_params or {}).get("extra_body") or {}).get("reasoning", {}).get("effort")
+                                    or (extra_params or {}).get("reasoning_effort")),
+                "api_host": urlparse(base_url).hostname,
                 "reasoning_summary": bool((extra_params or {}).get(REASONING_SUMMARY_FIELD)),
                 "configured_steps": steps,
                 "world": snapshot(),
@@ -455,8 +458,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--model", default="upstage/solar-pro4")
     parser.add_argument("--steps", type=int, default=40)
-    parser.add_argument("--base-url", default="https://openrouter.ai/api/v1")
-    parser.add_argument("--api-key-file", default="key.txt", help="API key file (relative paths use the project directory)")
+    providers.add_arguments(parser)
     parser.add_argument("--no-reasoning-summary", action="store_true",
                         help="do not ask agents for a reasoning summary with each answer (by default they write one; "
                              "it is saved to <out>.agent_reasoning.jsonl, kept out of the conversation, and not "
@@ -518,10 +520,12 @@ def main():
     elif args.map_seed is not None:
         map_spec = generate_map(args.map_seed)
 
-    api_key = ('local' if is_local_endpoint(args.base_url) else read_secret(args.api_key_file)) if args.policy in ("code", "hybrid") else ""
+    api_key = providers.read_key(args) if args.policy in ("code", "hybrid") else ""
+    args.model = providers.model_name(args, args.model)
+    args.base_url = providers.base_url(args)
     extra_params = {"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}
     if args.agent_reasoning:
-        extra_params.update(agent_reasoning_params(args.agent_reasoning))
+        extra_params.update(providers.reasoning_params(args, args.agent_reasoning, agent_reasoning_params))
     if not args.no_reasoning_summary:
         extra_params[REASONING_SUMMARY_FIELD] = True
 

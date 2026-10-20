@@ -30,6 +30,7 @@ from collections import Counter
 from pathlib import Path
 
 import benchmark
+import providers
 
 EXPERIMENTS_DIR = Path(benchmark.RUNS_DIR) / "experiments"
 # 최종안 기본 프로토콜: 정보 비대칭이 있는 두 방 순서 퍼즐의 축소판 (순서 길이 4, 80 step)
@@ -230,8 +231,7 @@ def main():
     parser.add_argument("--presses-per-room", type=int, default=PROTOCOL_DEFAULTS["presses_per_room"])
     parser.add_argument("--steps", type=int, default=PROTOCOL_DEFAULTS["steps"])
     parser.add_argument("--policy", choices=("code", "tooluse", "random", "noop"), default="code")
-    parser.add_argument("--base-url", default="https://openrouter.ai/api/v1")
-    parser.add_argument("--api-key-file", default="key.txt")
+    providers.add_arguments(parser)
     parser.add_argument("--reasoning-effort", default=None)
     parser.add_argument("--score-config", default=None)
     parser.add_argument("--env-change-cap", type=int, default=0, help="주변 환경 변화로 LLM을 다시 부르는 최대 횟수 (0: 끔)")
@@ -287,15 +287,15 @@ def main():
     else:
         protocol_path.write_text(json.dumps({"protocol": protocol}, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    local = benchmark.is_local_endpoint(args.base_url)
-    api_key = ("local" if local else benchmark.read_secret(args.api_key_file)) if args.policy == "code" else ""
+    api_key = providers.read_key(args) if args.policy == "code" else ""
+    args.base_url = providers.base_url(args)
     extra_params = {"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}
     for index, (model, controller, seed, repeat) in enumerate(todo, 1):
         path = run_path(out_dir, model, controller, seed, repeat)
         print(f"\n[{index}/{len(todo)}] {path.name}", flush=True)
         try:
             benchmark.run_episode(
-                model, args.base_url, api_key, extra_params, args.steps, str(path),
+                providers.model_name(args, model), args.base_url, api_key, extra_params, args.steps, str(path),
                 policy_kind=args.policy, environment_kind=args.environment, sequence_seed=seed,
                 pads_per_room=args.pads_per_room, presses_per_room=args.presses_per_room,
                 controller=controller, score_config=score_config, env_change_cap=args.env_change_cap)

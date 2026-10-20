@@ -588,9 +588,8 @@ def main():
     parser = argparse.ArgumentParser(description="Build judge decision-point bundles from a finished run.")
     parser.add_argument("manifest")
     parser.add_argument("--retrieval", choices=("embedding", "lexical"), default="embedding")
-    parser.add_argument("--embed-model", default=DEFAULT_EMBED_MODEL)
-    parser.add_argument("--api-key-file", default="key.txt")
-    parser.add_argument("--base-url", default="https://openrouter.ai/api/v1")
+    import providers
+    providers.add_arguments(parser, embed=True)
     parser.add_argument("--top-k", type=int, default=4)
     parser.add_argument("--max-anchors", type=int, default=12, help="per agent")
     parser.add_argument("--show", type=int, default=0, help="print the first N rendered bundles")
@@ -598,9 +597,9 @@ def main():
     client = None
     if args.retrieval == "embedding":
         from openai import OpenAI
-        from maci_judge import read_secret
-        client = OpenAI(base_url=args.base_url, api_key=read_secret(args.api_key_file))
-    bundles = build_bundles(args.manifest, make_similarity(args.retrieval, args.manifest, client, args.embed_model),
+        client = OpenAI(base_url=providers.base_url(args), api_key=providers.read_key(args))
+    bundles = build_bundles(args.manifest, make_similarity(args.retrieval, args.manifest, client,
+                                                           providers.embed_model(args)),
                             top_k=args.top_k, max_anchors=args.max_anchors)
     bundles_path(args.manifest).write_text(json.dumps(bundles, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"{len(bundles)} bundles -> {bundles_path(args.manifest)}")
