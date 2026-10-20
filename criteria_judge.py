@@ -8,6 +8,8 @@ OpenRouter decisions 모델로 판정하고, 여러 모델이 확실히 일치�
     평가 기회: present / absent  (absent = 평가 기회 없음)
     판정:     yes(충족) / no(미충족) / unknown(근거 부족)
 - 판정 수락 (항목 하나): 모든 모델이 같은 답을 고르고 그 답의 평균 확률이 --threshold(0.8) 이상
+  --weights를 주면 대신 가중 평균: 모델별 확률 분포를 가중치로 평균 내고, 가장 높은 답의 확률이 --threshold
+  이상이면 그 답 (불일치도 가중치로 정리됨)
     1) 평가 기회가 present로 확정되어야 판정을 봄. absent로 확정되면 '평가 기회 없음', 그 밖은 '보류'
     2) 판정이 yes/no로 확정되면 수락, unknown으로 확정되면 '근거 부족', 그 밖(불일치, 확률 부족)은 '보류'
 - 점수: 수락된 판정 중 충족 비율 = yes / (yes + no). 항목별, 에이전트별, 전체. 수락된 판정이 없으면 null
@@ -94,16 +96,36 @@ def _agreed(parts: list[dict], threshold: float):
     return (choice, mean) if mean >= threshold else (None, "low_confidence")
 
 
-def verdict(per_model: dict, models: list[str], criterion: str, threshold: float = THRESHOLD) -> dict:
-    """항목 하나의 최종 판정. status: accepted(label yes/no) / unknown / not_applicable / held(reason)"""
+def _weighted(parts: list[dict], weights: list[float], threshold: float):
+    """가중 평균 확률 분포에서 가장 높은 답의 확률이 threshold 이상이면 (답, 확률), 아니면 (None, 이유)"""
+    combined = {}
+    for part, weight in zip(parts, weights):
+        total = sum(part["probabilities"].values()) or 1.0
+        for key, value in part["probabilities"].items():
+            combined[key] = combined.get(key, 0.0) + weight * value / total
+    choice = max(combined, key=combined.get)
+    p = combined[choice] / sum(weights)
+    return (choice, p) if p >= threshold else (None, "low_confidence")
+
+
+def verdict(per_model: dict, models: list[str], criterion: str, threshold: float = THRESHOLD,
+            weights: dict | None = None) -> dict:
+    """항목 하나의 최종 판정. status: accepted(label yes/no) / unknown / not_applicable / held(reason).
+    weights가 있으면 만장일치 대신 가중 평균"""
     if any(not per_model.get(m) for m in models):
         return {"status": "held", "reason": "missing"}
-    opportunity, info = _agreed([per_model[m][criterion]["opportunity"] for m in models], threshold)
+    if weights:
+        def decide(parts):
+            return _weighted(parts, [weights.get(m, 1.0) for m in models], threshold)
+    else:
+        def decide(parts):
+            return _agreed(parts, threshold)
+    opportunity, info = decide([per_model[m][criterion]["opportunity"] for m in models])
     if opportunity is None:
         return {"status": "held", "reason": f"opportunity_{info}"}
     if opportunity == "absent":
         return {"status": "not_applicable", "p": round(info, 4)}
-    label, info = _agreed([per_model[m][criterion]["label"] for m in models], threshold)
+    label, info = decide([per_model[m][criterion]["label"] for m in models])
     if label is None:
         return {"status": "held", "reason": f"label_{info}"}
     if label == "unknown":
@@ -139,7 +161,7 @@ def judgments_path(manifest) -> Path:
 
 
 def judge_run(manifest, bundles: list[dict], models: list[str], url: str, api_key: str,
-              threshold: float = THRESHOLD, log=print) -> dict:
+              threshold: float = THRESHOLD, log=print, weights: dict | None = None) -> dict:
     path = judgments_path(manifest)
     previous = {}
     if path.is_file():
@@ -158,12 +180,13 @@ def judge_run(manifest, bundles: list[dict], models: list[str], url: str, api_ke
                 cost += answer.pop("_cost")
                 answers[model] = answer
         point = {"agent": bundle["agent"], "step": bundle["step"], "answers": answers,
-                 "verdicts": {c: verdict(answers, models, c, threshold) for c in judge_context.CRITERIA}}
+                 "verdicts": {c: verdict(answers, models, c, threshold, weights) for c in judge_context.CRITERIA}}
         points.append(point)
         log(f"[criteria_judge] {bundle['agent']}@{bundle['step']}: " + ", ".join(
             f"{c}={v.get('label') or v['status'] if v['status'] != 'held' else 'held'}" for c, v in point["verdicts"].items()))
     result = {"manifest": Path(manifest).name, "criteria_version": judge_context.CRITERIA_VERSION,
-              "judges": models, "threshold": threshold, "cost_this_call": cost,
+              "judges": models, "threshold": threshold, "rule": "weighted" if weights else "unanimous",
+              "weights": weights, "cost_this_call": cost,
               "points": points, "summary": summarize(points)}
     path.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
     return result
@@ -176,6 +199,11 @@ def main():
     parser.add_argument("--judge-model", default=DEFAULT_JUDGES, help="decisions models, comma-separated")
     parser.add_argument("--threshold", type=float, default=THRESHOLD,
                         help="mean probability the agreed answer needs (default 0.8)")
+    parser.add_argument("--weights", default=None,
+                        help="model=weight,... : accept by weighted-average probability instead of unanimity "
+                             "(e.g. microsoft/microsoft-decision-1=2,typesafe/jev-1.14=1)")
+    parser.add_argument("--reuse-bundles", action="store_true",
+                        help="use the saved <manifest>.judge_bundles.json when it is newer than the run")
     parser.add_argument("--retrieval", choices=("embedding", "lexical"), default="embedding")
     parser.add_argument("--top-k", type=int, default=4)
     parser.add_argument("--max-anchors", type=int, default=12, help="decision points per agent")
@@ -186,16 +214,26 @@ def main():
     from openai import OpenAI
     api_key = providers.read_key(args)
     client = OpenAI(base_url=providers.base_url(args), api_key=api_key)
-    similarity = judge_context.make_similarity(args.retrieval, args.manifest, client, providers.embed_model(args))
-    bundles = judge_context.build_bundles(args.manifest, similarity, top_k=args.top_k, max_anchors=args.max_anchors)
-    judge_context.bundles_path(args.manifest).write_text(json.dumps(bundles, ensure_ascii=False, indent=1),
-                                                         encoding="utf-8")
+    if args.reuse_bundles:
+        bundles = judge_context.load_or_build_bundles(args.manifest, client, providers.embed_model(args))
+    else:
+        similarity = judge_context.make_similarity(args.retrieval, args.manifest, client, providers.embed_model(args))
+        bundles = judge_context.build_bundles(args.manifest, similarity, top_k=args.top_k, max_anchors=args.max_anchors)
+        judge_context.bundles_path(args.manifest).write_text(json.dumps(bundles, ensure_ascii=False, indent=1),
+                                                             encoding="utf-8")
     models = [m.strip() for m in args.judge_model.split(",") if m.strip()]
+    weights = None
+    if args.weights:
+        weights = {name.strip(): float(value) for name, value in
+                   (item.rsplit("=", 1) for item in args.weights.split(",") if item.strip())}
+        unknown = set(weights) - set(models)
+        if unknown:
+            parser.error(f"--weights names models not in --judge-model: {sorted(unknown)}")
     result = judge_run(args.manifest, bundles, models, decisions_url(providers.base_url(args)), api_key,
-                       args.threshold)
+                       args.threshold, weights=weights)
     s = result["summary"]
     print(f"\n{len(bundles)} decision points x {len(judge_context.CRITERIA)} criteria, judges {models}, "
-          f"threshold {args.threshold}")
+          f"threshold {args.threshold}, rule {result['rule']} {weights or ''}")
     print(f"overall score (yes / accepted): {s['overall']['score']}  yes={s['overall']['yes']} no={s['overall']['no']}")
     print(f"status: {s['overall']['status_counts']}")
     for c, r in s["by_criterion"].items():

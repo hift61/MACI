@@ -49,6 +49,15 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(v["status"], "unknown")
         self.assertEqual(cj.verdict({"a": answer("present", .9, "yes", .9)}, ["a", "b"], self.C)["reason"], "missing")
 
+    def test_weighted_rule_follows_the_heavier_model(self):
+        per_model = {"a": answer("present", .9, "yes", .9), "b": answer("present", .6, "no", .7)}
+        v = cj.verdict(per_model, ["a", "b"], self.C, threshold=0.5, weights={"a": 2, "b": 1})
+        self.assertEqual((v["status"], v["label"]), ("accepted", "yes"))
+        v = cj.verdict(per_model, ["a", "b"], self.C, threshold=0.5, weights={"a": 1, "b": 3})
+        self.assertEqual((v["status"], v["label"]), ("accepted", "no"))
+        v = cj.verdict(per_model, ["a", "b"], self.C, threshold=0.9, weights={"a": 2, "b": 1})
+        self.assertEqual(v["status"], "held")
+
     def test_score_is_yes_share_of_accepted(self):
         points = [{"agent": "A", "step": 1, "verdicts": {
             "message_reflection": {"status": "accepted", "label": "yes"},
