@@ -15,6 +15,13 @@ import benchmark
 
 
 class PolicyChecksTests(unittest.TestCase):
+    def test_unserializable_action_gets_a_clear_error(self):
+        code = 'def decide(observation):\n    return {"type": "wait", "memory": {"seen": {1, 2}}}\n'
+        result = run_decide_code(code, {'self': {'step': 1}})
+        self.assertIsNone(result['action'])
+        self.assertIn('not JSON-serializable', result['error'])
+        self.assertNotIn('harness crashed', result['error'])
+
     def test_compile_failure_never_executes(self):
         checks = CodeChecks()
         with patch('policy_sandbox._run_decide_code') as run:

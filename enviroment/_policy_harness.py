@@ -106,6 +106,11 @@ def main():
         action = decide_fn(observation)
         if not isinstance(action, dict) or "type" not in action:
             raise ValueError(f"decide() returned invalid action: {action!r}")
+        try:
+            json.dumps(action)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"decide() returned an action that is not JSON-serializable ({e}); action and memory "
+                             "may hold only dict/list/str/int/float/bool/None (e.g. convert sets to sorted lists)")
         result["action"] = action
     except Exception as e:
         result["error"] = f"{type(e).__name__}: {e}"
