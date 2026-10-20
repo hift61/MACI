@@ -12,7 +12,11 @@ OpenRouter decisions 모델로 판정하고, 여러 모델이 확실히 일치�
   이상이면 그 답 (불일치도 가중치로 정리됨)
     1) 평가 기회가 present로 확정되어야 판정을 봄. absent로 확정되면 '평가 기회 없음', 그 밖은 '보류'
     2) 판정이 yes/no로 확정되면 수락, unknown으로 확정되면 '근거 부족', 그 밖(불일치, 확률 부족)은 '보류'
-- 점수: 수락된 판정 중 충족 비율 = yes / (yes + no). 항목별, 에이전트별, 전체. 수락된 판정이 없으면 null
+- 연속 점수(soft, 기본으로 보고하는 점수): 판정을 버리지 않고 확률을 그대로 씀. 판단 시점 x 항목마다
+    턴 점수 = 모델 평균 P(yes) / (P(yes) + P(no))            (0~1)
+    비중     = 모델 평균 P(present) x 모델 평균 (1 - P(unknown))
+  점수 = 비중으로 가중 평균한 턴 점수 (항목별, 에이전트별, 전체). --weights가 있으면 모델 평균도 그 가중치로
+- 수락 점수(accepted): 수락된 판정 중 충족 비율 = yes / (yes + no). 수락된 판정이 없으면 null
 - 결과: <manifest 이름>.criteria_judgments.json (모델별 원 답과 확률, 판정 상태, 요약). 다시 실행하면 이미 받은
   답은 다시 묻지 않음
 """
@@ -133,6 +137,25 @@ def verdict(per_model: dict, models: list[str], criterion: str, threshold: float
     return {"status": "accepted", "label": label, "p": round(info, 4)}
 
 
+def soft_score(per_model: dict, models: list[str], criterion: str, weights: dict | None = None) -> dict | None:
+    """연속 점수: {"score": 충족 쪽 확률(0~1), "weight": 평가 기회 확률 x 근거가 있는 정도}. 답이 빠진 모델이 있으면 None"""
+    if any(not per_model.get(m) for m in models):
+        return None
+    scores, opportunity, informative = [], [], []
+    for m in models:
+        label = per_model[m][criterion]["label"]["probabilities"]
+        opp = per_model[m][criterion]["opportunity"]["probabilities"]
+        yes, no, unknown = label.get("yes", 0.0), label.get("no", 0.0), label.get("unknown", 0.0)
+        scores.append(yes / (yes + no) if yes + no else 0.5)
+        opportunity.append(opp.get("present", 0.0) / (sum(opp.values()) or 1.0))
+        informative.append(1.0 - unknown / ((yes + no + unknown) or 1.0))
+    w = [(weights or {}).get(m, 1.0) for m in models]
+
+    def mean(values):
+        return sum(v * x for v, x in zip(values, w)) / sum(w)
+    return {"score": round(mean(scores), 4), "weight": round(mean(opportunity) * mean(informative), 4)}
+
+
 def summarize(points: list[dict]) -> dict:
     def ratio(verdicts):
         yes = sum(v.get("label") == "yes" for v in verdicts)
@@ -146,12 +169,22 @@ def summarize(points: list[dict]) -> dict:
             out[name] = out.get(name, 0) + 1
         return out
 
+    def soft(entries):
+        total = sum(e["weight"] for e in entries)
+        return {"score": round(sum(e["weight"] * e["score"] for e in entries) / total, 4) if total else None,
+                "weight": round(total, 4)}
+
     every = [(p["agent"], c, v) for p in points for c, v in p["verdicts"].items()]
+    softs = [(p["agent"], c, s) for p in points for c, s in (p.get("soft") or {}).items() if s]
+    agents = sorted({a for a, _, _ in every})
     return {
+        "soft": {"overall": soft([s for _, _, s in softs]),
+                 "by_criterion": {c: soft([s for _, k, s in softs if k == c]) for c in judge_context.CRITERIA},
+                 "by_agent": {a: soft([s for b, _, s in softs if b == a]) for a in agents}},
         "overall": {**ratio([v for _, _, v in every]), "status_counts": counts([v for _, _, v in every]),
                     "n_judgments": len(every)},
         "by_criterion": {c: ratio([v for _, k, v in every if k == c]) for c in judge_context.CRITERIA},
-        "by_agent": {a: ratio([v for b, _, v in every if b == a]) for a in sorted({a for a, _, _ in every})},
+        "by_agent": {a: ratio([v for b, _, v in every if b == a]) for a in agents},
     }
 
 
@@ -180,7 +213,8 @@ def judge_run(manifest, bundles: list[dict], models: list[str], url: str, api_ke
                 cost += answer.pop("_cost")
                 answers[model] = answer
         point = {"agent": bundle["agent"], "step": bundle["step"], "answers": answers,
-                 "verdicts": {c: verdict(answers, models, c, threshold, weights) for c in judge_context.CRITERIA}}
+                 "verdicts": {c: verdict(answers, models, c, threshold, weights) for c in judge_context.CRITERIA},
+                 "soft": {c: soft_score(answers, models, c, weights) for c in judge_context.CRITERIA}}
         points.append(point)
         log(f"[criteria_judge] {bundle['agent']}@{bundle['step']}: " + ", ".join(
             f"{c}={v.get('label') or v['status'] if v['status'] != 'held' else 'held'}" for c, v in point["verdicts"].items()))
@@ -234,10 +268,11 @@ def main():
     s = result["summary"]
     print(f"\n{len(bundles)} decision points x {len(judge_context.CRITERIA)} criteria, judges {models}, "
           f"threshold {args.threshold}, rule {result['rule']} {weights or ''}")
-    print(f"overall score (yes / accepted): {s['overall']['score']}  yes={s['overall']['yes']} no={s['overall']['no']}")
+    print(f"soft score (probability-weighted, 0-1): {s['soft']['overall']['score']}  weight={s['soft']['overall']['weight']}")
+    for c, r in s["soft"]["by_criterion"].items():
+        print(f"  {c:24s} {r['score']}  (weight {r['weight']})")
+    print(f"accepted score (yes / accepted): {s['overall']['score']}  yes={s['overall']['yes']} no={s['overall']['no']}")
     print(f"status: {s['overall']['status_counts']}")
-    for c, r in s["by_criterion"].items():
-        print(f"  {c:24s} {r['score']}  (yes {r['yes']} / no {r['no']})")
     print(f"cost this call: ${result['cost_this_call']:.4f} -> {judgments_path(args.manifest)}")
 
 

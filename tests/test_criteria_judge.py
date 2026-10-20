@@ -70,6 +70,27 @@ class VerdictTests(unittest.TestCase):
         self.assertIsNone(s["by_criterion"]["feedback_adaptation"]["score"])
 
 
+class SoftScoreTests(unittest.TestCase):
+    def test_soft_score_and_weight(self):
+        a = {c: {"opportunity": {"choice": "present", "probabilities": {"present": .8, "absent": .2}},
+                 "label": {"choice": "yes", "probabilities": {"yes": .6, "no": .2, "unknown": .2}}}
+             for c in judge_context.CRITERIA}
+        b = {c: {"opportunity": {"choice": "absent", "probabilities": {"present": .4, "absent": .6}},
+                 "label": {"choice": "no", "probabilities": {"yes": .2, "no": .6, "unknown": .2}}}
+             for c in judge_context.CRITERIA}
+        s = cj.soft_score({"a": a, "b": b}, ["a", "b"], "message_reflection")
+        self.assertAlmostEqual(s["score"], 0.5)          # (0.75 + 0.25) / 2
+        self.assertAlmostEqual(s["weight"], 0.6 * 0.8)   # mean P(present) x mean (1 - P(unknown))
+        self.assertIsNone(cj.soft_score({"a": a}, ["a", "b"], "message_reflection"))
+
+    def test_summary_weights_turn_scores(self):
+        points = [{"agent": "A", "step": 1, "verdicts": {}, "soft": {"message_reflection": {"score": 1.0, "weight": 3.0},
+                                                                  "responsive_dialogue": {"score": 0.0, "weight": 1.0}}}]
+        s = cj.summarize(points)["soft"]
+        self.assertAlmostEqual(s["overall"]["score"], 0.75)
+        self.assertIsNone(s["by_criterion"]["feedback_adaptation"]["score"])
+
+
 class AskTests(unittest.TestCase):
     def test_parses_all_questions_and_resumes(self):
         calls = []
