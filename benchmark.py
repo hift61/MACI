@@ -359,6 +359,7 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                 "agent_reasoning": (((extra_params or {}).get("extra_body") or {}).get("reasoning", {}).get("effort")
                                     or (extra_params or {}).get("reasoning_effort")),
                 "api_host": urlparse(base_url).hostname,
+                "route": (((extra_params or {}).get("extra_body") or {}).get("provider") or {}).get("only"),
                 "reasoning_summary": bool((extra_params or {}).get(REASONING_SUMMARY_FIELD)),
                 "configured_steps": steps,
                 "world": snapshot(),
@@ -468,6 +469,9 @@ def main():
                              "models such as Anthropic's can think; the reasoning is saved to <out>.agent_reasoning.jsonl. "
                              "Changes behavior and cost, so compare only with runs that used the same setting")
     parser.add_argument("--reasoning-effort", default=None, help="passed through as extra_params.reasoning_effort (e.g. 'low' for Groq gpt-oss models)")
+    parser.add_argument("--route", default=None,
+                        help="OpenRouter only: comma-separated provider endpoints to pin, no fallback "
+                             "(e.g. openai/flex for OpenAI's half-price flex tier)")
     parser.add_argument("--out", default=None, help="manifest.jsonl output path (default: benchmark_runs/<timestamp>.jsonl)")
     parser.add_argument("--map-seed", type=int, default=None, help="mapgen으로 이 시드의 무작위 맵을 만들어 사용 (기본 GenConfig)")
     parser.add_argument("--map-file", default=None, help="저장된 맵 JSON(python -m mapgen --save로 생성)을 사용")
@@ -526,6 +530,9 @@ def main():
     extra_params = {"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}
     if args.agent_reasoning:
         extra_params.update(providers.reasoning_params(args, args.agent_reasoning, agent_reasoning_params))
+    if args.route:
+        route = [name.strip() for name in args.route.split(",") if name.strip()]
+        extra_params.setdefault("extra_body", {})["provider"] = {"only": route, "allow_fallbacks": False}
     if not args.no_reasoning_summary:
         extra_params[REASONING_SUMMARY_FIELD] = True
 
