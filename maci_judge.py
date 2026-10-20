@@ -41,6 +41,8 @@ import json
 import os
 import re
 import time
+import urllib.error
+import urllib.request
 
 from openai import APIConnectionError, APIStatusError, OpenAI
 
@@ -324,8 +326,54 @@ ANCHOR_SYSTEM_PROMPT = (
 )
 
 
+FEWSHOT_FILE = os.path.join(HERE, "judge_fewshot.json")
+DECISIONS_RETRIES = 5
+
+
+def decisions_url(base_url: str) -> str:
+    """OpenRouter decisions endpoint next to the chat API: .../api/v1 -> .../api/alpha/decisions"""
+    root = base_url.rstrip("/")
+    return (root[:-3] if root.endswith("/v1") else root) + "/alpha/decisions"
+
+
+def ask_decisions(url: str, api_key: str, judge_model: str, rendered: str, fewshot: dict, log=None) -> dict:
+    """One OpenRouter decisions call for a decision point -> {"score": probability-weighted 0-10, "argmax", "cost"}.
+    Same setup as the human comparison (benchmark_runs/pi/judge_compare_decisions.py): the human rating sheet's
+    rubric, human-scored examples as the scale reference, and an 11-option choice (the score type allows only 10
+    levels). Failures retry; NaN after DECISIONS_RETRIES."""
+    log = log or (lambda msg: print(msg, flush=True))
+    criteria = {str(i): f"Score {i} of 10" + (" (lowest)" if i == 0 else " (highest)" if i == 10 else "")
+                for i in range(11)}
+    body = {"model": judge_model,
+            "state": {"examples": [{"decision_point": e["decision_point"], "human_score": e["human_score"]}
+                                   for e in fewshot["examples"]],
+                      "decision_point": rendered},
+            "questions": {"q": {"type": "choice", "criteria": criteria,
+                                "instructions": fewshot["rubric"] + " Use the human-scored examples as the "
+                                                                    "reference for the scale."}}}
+    for attempt in range(1, DECISIONS_RETRIES + 1):
+        try:
+            request = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"),
+                                             headers={"Authorization": "Bearer " + api_key,
+                                                      "Content-Type": "application/json"})
+            response = json.load(urllib.request.urlopen(request, timeout=180))
+            answer = response["answers"]["q"]
+            probs = {k: v for k, v in (answer.get("probabilities") or {}).items() if k in criteria}
+            if probs and sum(probs.values()) > 0:
+                return {"score": sum(int(k) * v for k, v in probs.items()) / sum(probs.values()),
+                        "argmax": int(answer["choice"]) if str(answer.get("choice")) in criteria else None,
+                        "cost": (response.get("usage") or {}).get("cost", 0.0)}
+            log(f"[maci_judge] decisions answer without probabilities (attempt {attempt})")
+        except urllib.error.HTTPError as exc:
+            log(f"[maci_judge] decisions HTTP {exc.code} (attempt {attempt}): {exc.read()[:200]!r}")
+        except Exception as exc:
+            log(f"[maci_judge] decisions failed (attempt {attempt}): {type(exc).__name__}: {exc}")
+        time.sleep(2 * attempt)
+    return {"score": float("nan"), "argmax": None, "cost": 0.0}
+
+
 def score_run_anchors(manifest_path, client, judge_model, agent_filter=None, max_turns=None, log=None,
-                      bundles=None):
+                      bundles=None, decisions=None):
     """Judge each decision-point bundle (judge_context.py) instead of every step. per_turn entries use the
     bundle's anchor step, so judge_agreement can compare them with human scores given at those steps."""
     import judge_context
@@ -336,13 +384,19 @@ def score_run_anchors(manifest_path, client, judge_model, agent_filter=None, max
         bundles = judge_context.build_bundles(manifest_path, agent_filter=agent_filter)
     if max_turns:
         bundles = bundles[:max_turns]
-    scores, per_turn = [], []
+    scores, per_turn, cost = [], [], 0.0
     for bundle in bundles:
-        score = ask_judge(client, judge_model, ANCHOR_SYSTEM_PROMPT,
-                          lambda budget, b=bundle: judge_context.render(b, budget) + "\n\nScore (0-10):",
-                          len(judge_context.render(bundle)), log=log, token_budget=ANCHOR_TOKEN_BUDGET)
+        entry = {"step": bundle["step"], "agent": bundle["agent"]}
+        if decisions:  # (url, api_key, fewshot): OpenRouter decisions model
+            answer = ask_decisions(*decisions[:2], judge_model, judge_context.render(bundle), decisions[2], log=log)
+            score, entry["argmax"], cost = answer["score"], answer["argmax"], cost + (answer["cost"] or 0.0)
+        else:
+            score = ask_judge(client, judge_model, ANCHOR_SYSTEM_PROMPT,
+                              lambda budget, b=bundle: judge_context.render(b, budget) + "\n\nScore (0-10):",
+                              len(judge_context.render(bundle)), log=log, token_budget=ANCHOR_TOKEN_BUDGET)
         log(f"[maci_judge] anchor step={bundle['step']} agent={bundle['agent']} score={score}")
-        per_turn.append({"step": bundle["step"], "agent": bundle["agent"], "score": score})
+        entry["score"] = score
+        per_turn.append(entry)
         if score == score:
             scores.append(score)
     with open(manifest_path, encoding="utf-8") as f:
@@ -354,6 +408,7 @@ def score_run_anchors(manifest_path, client, judge_model, agent_filter=None, max
         "per_turn": per_turn,
         "actor_models": sorted({a.get("model", "") for a in first.get("agents", [])} - {""}),
         "unit": "anchor",
+        **({"judge_api": "decisions", "judge_cost": cost} if decisions else {}),
     }
 
 
@@ -412,6 +467,9 @@ def main():
     parser.add_argument("--embed-model", default=None, help="embedding model (default: the provider's)")
     parser.add_argument("--top-k", type=int, default=4, help="--unit anchor: earlier pieces per decision point")
     parser.add_argument("--max-anchors", type=int, default=12, help="--unit anchor: decision points per agent")
+    parser.add_argument("--decisions", action="store_true",
+                        help="--unit anchor: the judge models are OpenRouter decisions models (e.g. cloudflare/clef-flash, "
+                             "typesafe/jev-1.14), scored with the human-scored examples in judge_fewshot.json")
     args = parser.parse_args()
 
     client = OpenAI(base_url=providers.base_url(args), api_key=providers.read_key(args))
@@ -419,6 +477,12 @@ def main():
     args.embed_model = providers.embed_model(args)
     if not judges:
         parser.error("--judge-model is empty")
+    if args.decisions and args.unit != "anchor":
+        parser.error("--decisions needs --unit anchor")
+    decisions = None
+    if args.decisions:
+        with open(FEWSHOT_FILE, encoding="utf-8") as f:
+            decisions = (decisions_url(providers.base_url(args)), providers.read_key(args), json.load(f))
     bundles = None
     if args.unit == "anchor":
         import judge_context
@@ -431,7 +495,8 @@ def main():
     for judge_model in judges:
         print(f"\n=== Judge: {judge_model} ({args.unit}) ===")
         if args.unit == "anchor":
-            result = score_run_anchors(args.manifest, client, judge_model, max_turns=args.max_turns, bundles=bundles)
+            result = score_run_anchors(args.manifest, client, judge_model, max_turns=args.max_turns, bundles=bundles,
+                                       decisions=decisions)
             # 판정 단위가 다르므로 step 단위 결과와 같은 칸에 섞지 않음
             judge_agreement.save_judge_result(args.manifest, judge_model + judge_agreement.ANCHOR_SUFFIX, result)
         else:
