@@ -1,4 +1,4 @@
-"""시나리오 맵 패키지 (협력 실험용 고난도 환경 21종).
+"""시나리오 맵 패키지 (협력 실험용 고난도 환경 12종, SCENARIO_NAMES).
 
 구성
   engine.py   - ScenarioEnvironment: 시나리오 전용 물체/규칙 (기존 Environment 상속, 원본 수정 없음)
@@ -15,30 +15,34 @@ import importlib
 
 SCENARIO_NAMES = [
     "s01_deadlock",
-    "s02_leapfrog",
-    "s03_split_experiment",
-    "s04_half_mastermind",
-    "s05_lossy_sync",
-    "s06_short_radio",
     "s07_me_vs_us",
-    "s08_boring_role",
     "s09_shared_budget",
-    "s10_moving_world",
     "s11_pincer",
     "s12_unreliable_eyes",
     # 아래는 MAP_GUIDE.md(ARC-AGI-3 기조 + 실패 맵 분석)로 만든 맵
     "s13_crossed_testimony",
     "s14_silent_porters",
-    "s15_glass_division",
-    # 아래는 장치 추가와 함께 만든 맵 (s16~s24)
-    "s16_remote_maze",
+    # 아래는 장치 추가와 함께 만든 맵
     "s17_push_blocks",
     "s18_assembly_line",
     "s19_hot_cargo",
-    "s20_scales",
     "s21_silent_signs",
-    "s22_narrow_bridge",
     "s23_key_chests",
+]
+# 벤치마크에서 뺀 맵: 모듈은 남겨 두고(load()로 불러 장치 테스트에 씀) 맵으로 내보내지 않음.
+# 예전에 내보낸 맵 파일은 map_datas/excluded/에 있음 (런처 맵 목록에 나오지 않음)
+EXCLUDED_SCENARIO_NAMES = [
+    "s02_leapfrog",
+    "s03_split_experiment",
+    "s04_half_mastermind",
+    "s05_lossy_sync",
+    "s06_short_radio",
+    "s08_boring_role",
+    "s10_moving_world",
+    "s15_glass_division",
+    "s16_remote_maze",
+    "s20_scales",
+    "s22_narrow_bridge",
     "s24_shared_purse",
 ]
 
