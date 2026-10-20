@@ -9,3 +9,4 @@ benchmark_runs/
 .venv-gui/
 .uv-cache/
 .python-runtime/
+openai.txt
