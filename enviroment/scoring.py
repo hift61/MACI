@@ -300,6 +300,10 @@ def score_episode(env, max_steps: int, objectives: list[dict], config: ScoreConf
             context_points = max(-share, config.context_penalty_cap)
             agents[agent_id]['context_penalty'] = context_points
             agents[agent_id]['long_context_requests'] = len(long_requests)
+            # 요청마다 [prompt_tokens, cached_tokens] (캐시가 어디서 깨지는지 확인용)
+            cached = getattr(policy, 'cached_history', []) if policy is not None else []
+            if len(cached) == len(prompts):
+                agents[agent_id]['request_tokens'] = [[p, c] for p, c in zip(prompts, cached)]
             if context_points:
                 add(agent_id, env.step_count, f'긴 context 요청 {len(long_requests)}회', 'LLM', context_points)
             agents[agent_id]['code_failures'] = code_failures

@@ -242,6 +242,11 @@ class Policy:
         client = getattr(self, 'client', None)
         return list(tracker(client).prompt_history) if client is not None else []
 
+    @property
+    def cached_history(self) -> list:
+        client = getattr(self, 'client', None)
+        return list(tracker(client).cached_history) if client is not None else []
+
     def _new_messages(self, observation):
         inbox = observation.get('inbox', [])
         reviewed = getattr(self, '_reviewed_inbox_count', 0)

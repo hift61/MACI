@@ -30,6 +30,8 @@ class TokenUsage:
                            max_prompt_tokens=0, reasoning_summary_tokens=0)
         # 요청마다 보고된 prompt_tokens (긴 context 감점 계산용). 스냅샷에는 넣지 않음 (로그 크기)
         self.prompt_history: list[int] = []
+        # 요청마다 보고된 cached_tokens (보고 안 되면 None). prompt_history와 같은 순서. 캐시가 어디서 깨지는지 보는 용도
+        self.cached_history: list[int | None] = []
 
     def record(self, response):
         usage = getattr(response, 'usage', None)
@@ -54,8 +56,11 @@ class TokenUsage:
                 self.counts['max_prompt_tokens'] = max(self.counts['max_prompt_tokens'], values['prompt_tokens'])
             details = getattr(usage, 'prompt_tokens_details', None)
             cached = details.get('cached_tokens') if isinstance(details, dict) else getattr(details, 'cached_tokens', None)
-            if isinstance(cached, int) and not isinstance(cached, bool):
+            known = isinstance(cached, int) and not isinstance(cached, bool)
+            if known:
                 self.counts['cached_prompt_tokens'] += max(0, cached)
+            if isinstance(values['prompt_tokens'], int) and not isinstance(values['prompt_tokens'], bool):
+                self.cached_history.append(max(0, cached) if known else None)
 
     def add_reasoning_summary(self, tokens: int) -> None:
         with self.lock:

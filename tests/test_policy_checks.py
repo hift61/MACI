@@ -15,6 +15,17 @@ import benchmark
 
 
 class PolicyChecksTests(unittest.TestCase):
+    def test_token_usage_keeps_cached_tokens_per_request(self):
+        from types import SimpleNamespace
+        from token_usage import TokenUsage
+        usage = TokenUsage()
+        usage.record(SimpleNamespace(usage=SimpleNamespace(prompt_tokens=100, completion_tokens=5, total_tokens=105,
+                                                           prompt_tokens_details={'cached_tokens': 80})))
+        usage.record(SimpleNamespace(usage=SimpleNamespace(prompt_tokens=120, completion_tokens=5, total_tokens=125,
+                                                           prompt_tokens_details=None)))
+        self.assertEqual(usage.prompt_history, [100, 120])
+        self.assertEqual(usage.cached_history, [80, None])
+
     def test_unserializable_action_gets_a_clear_error(self):
         code = 'def decide(observation):\n    return {"type": "wait", "memory": {"seen": {1, 2}}}\n'
         result = run_decide_code(code, {'self': {'step': 1}})

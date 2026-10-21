@@ -33,6 +33,8 @@ from policy import (REASONING_SUMMARY_FIELD, CentralCodePolicy, CodePolicy, agen
                     RandomPolicy, ToolUsePolicy)
 from scoring import ScoreConfig, clear_step, score_episode  # noqa: E402
 import providers  # noqa: E402
+
+PROMPT_CACHE_KEY_FIELD = "_prompt_cache_key"  # extra_params 안에서만 쓰는 표시 (요청에는 안 보냄)
 from context_memory import ContextMemory, ContextConfig  # noqa: E402
 from mapgen import MapSpec, generate_map  # noqa: E402
 from mapgen.builder import build_environment  # noqa: E402
@@ -272,10 +274,21 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
 
     env.snapshot_sink = save_snapshot
 
+    # --prompt-cache-key: 에이전트마다 고정 키를 보내 같은 앞부분 요청이 같은 캐시로 가게 함 (OpenAI)
+    cache_prefix = (extra_params or {}).get(PROMPT_CACHE_KEY_FIELD)
+    extra_params = {k: v for k, v in (extra_params or {}).items() if k != PROMPT_CACHE_KEY_FIELD}
+
+    def agent_params(agent_id):
+        if not cache_prefix:
+            return extra_params
+        params = dict(extra_params)
+        params["extra_body"] = {**params.get("extra_body", {}), "prompt_cache_key": f"{cache_prefix}-{agent_id}"}
+        return params
+
     central = None
     if controller == "central":
         central = CentralCodePolicy(model, central_task_description(task_descriptions), list(env.agents),
-                                    base_url=base_url, api_key=api_key, extra_params=extra_params)
+                                    base_url=base_url, api_key=api_key, extra_params=agent_params("central"))
         if is_local_endpoint(base_url):
             central.client = central.client.with_options(timeout=60, max_retries=0)
         central._context_memory = ContextMemory(ContextConfig(max_tokens=context_max_tokens, show_costs=disclose_costs))
@@ -296,8 +309,8 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                             'always take noop actions and will not assist or reply.')
         policies[agent_id] = (NoopPolicy() if solo_agent is not None and agent_id != solo_agent else
                               policy_factory(agent_id, description) if policy_factory is not None else
-                              make_policy(policy_kind, model, description, base_url, api_key, extra_params,
-                                          env.interact_radius, env_change_cap))
+                              make_policy(policy_kind, model, description, base_url, api_key,
+                                          agent_params(agent_id), env.interact_radius, env_change_cap))
         if hasattr(policies[agent_id], 'client'):
             policies[agent_id]._context_memory = ContextMemory(ContextConfig(max_tokens=context_max_tokens,
                                                                              show_costs=disclose_costs))
@@ -360,6 +373,8 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                                     or (extra_params or {}).get("reasoning_effort")),
                 "api_host": urlparse(base_url).hostname,
                 "route": (((extra_params or {}).get("extra_body") or {}).get("provider") or {}).get("only"),
+                "service_tier": ((extra_params or {}).get("extra_body") or {}).get("service_tier"),
+                "prompt_cache_key": cache_prefix,
                 "reasoning_summary": bool((extra_params or {}).get(REASONING_SUMMARY_FIELD)),
                 "configured_steps": steps,
                 "world": snapshot(),
@@ -472,6 +487,11 @@ def main():
     parser.add_argument("--route", default=None,
                         help="OpenRouter only: comma-separated provider endpoints to pin, no fallback "
                              "(e.g. openai/flex for OpenAI's half-price flex tier)")
+    parser.add_argument("--service-tier", default=None,
+                        help="sent as service_tier (e.g. flex on the OpenAI API: half price, slower)")
+    parser.add_argument("--prompt-cache-key", action="store_true",
+                        help="send a fixed prompt_cache_key per agent (<out name>-<agent>) so OpenAI routes "
+                             "requests with the same prefix to the same cache")
     parser.add_argument("--out", default=None, help="manifest.jsonl output path (default: benchmark_runs/<timestamp>.jsonl)")
     parser.add_argument("--map-seed", type=int, default=None, help="mapgen으로 이 시드의 무작위 맵을 만들어 사용 (기본 GenConfig)")
     parser.add_argument("--map-file", default=None, help="저장된 맵 JSON(python -m mapgen --save로 생성)을 사용")
@@ -533,6 +553,8 @@ def main():
     if args.route:
         route = [name.strip() for name in args.route.split(",") if name.strip()]
         extra_params.setdefault("extra_body", {})["provider"] = {"only": route, "allow_fallbacks": False}
+    if args.service_tier:
+        extra_params.setdefault("extra_body", {})["service_tier"] = args.service_tier
     if not args.no_reasoning_summary:
         extra_params[REASONING_SUMMARY_FIELD] = True
 
@@ -541,6 +563,8 @@ def main():
         os.makedirs(RUNS_DIR, exist_ok=True)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         out_path = os.path.join(RUNS_DIR, f"{timestamp}.jsonl")
+    if args.prompt_cache_key:
+        extra_params[PROMPT_CACHE_KEY_FIELD] = "maci-" + os.path.splitext(os.path.basename(out_path))[0]
 
     run_episode(args.model, args.base_url, api_key, extra_params, args.steps, out_path, map_spec, args.policy,
                 args.environment, args.sequence_seed, args.pads_per_room, args.presses_per_room, args.max_resets, args.debug,
