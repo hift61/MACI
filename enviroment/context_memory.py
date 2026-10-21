@@ -64,6 +64,9 @@ class ContextHistory(list):
 class ContextConfig:
     max_tokens: int = 64_000  # Advisory pressure threshold, never an eviction rule.
     show_costs: bool = False  # 긴 context 감점 규칙/금액을 상태 메시지에 보여 줄지 (정보 계약 v2 기본: 숨김)
+    # 지난 상태 메시지를 지우지 않고 남김. OpenAI prompt cache는 '이전 요청 전체'까지만 이어 주므로, 매번 지우고 새로
+    # 붙이면 시스템 프롬프트 뒤로는 캐시가 안 됨 (DeepSeek/Qwen은 아무 지점까지나 캐시해서 영향 없음)
+    keep_status_history: bool = False
 
 
 def groups(messages):
@@ -85,8 +88,9 @@ class ContextMemory:
 
     def prepare(self, history, output_tokens, tools=()):
         # Refresh only host-generated advisory metadata, never agent history.
-        history[:] = [m for m in history if not (
-            m.get('role') == 'user' and (m.get('content') or '').startswith(STATUS_PREFIX))]
+        if not self.config.keep_status_history:
+            history[:] = [m for m in history if not (
+                m.get('role') == 'user' and (m.get('content') or '').startswith(STATUS_PREFIX))]
         status = self.snapshot(history)
         status.update(output_token_reserve=output_tokens,
                       request_token_upper_estimate=token_bound(history) + token_bound(tools) + output_tokens,

@@ -154,7 +154,7 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                 map_spec: MapSpec = None, policy_kind: str = "code", environment_kind: str = "map",
                 sequence_seed: int = 42, pads_per_room: int = 5, presses_per_room: int = 3,
                 max_resets: int | None = None, debug: bool = False, reveal_goal: bool = True,
-                reward_visible: bool = False, context_max_tokens: int = 64_000,
+                reward_visible: bool = False, context_max_tokens: int = 64_000, keep_status_history: bool = False,
                 solo_agent: str | None = None, controller: str = "decentralized",
                 score_config: ScoreConfig | None = None, policy_factory=None, env_change_cap: int = 0,
                 disclose_costs: bool = False,
@@ -291,7 +291,8 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                                     base_url=base_url, api_key=api_key, extra_params=agent_params("central"))
         if is_local_endpoint(base_url):
             central.client = central.client.with_options(timeout=60, max_retries=0)
-        central._context_memory = ContextMemory(ContextConfig(max_tokens=context_max_tokens, show_costs=disclose_costs))
+        central._context_memory = ContextMemory(ContextConfig(max_tokens=context_max_tokens, show_costs=disclose_costs,
+                                                              keep_status_history=keep_status_history))
         central.context_memory.sink = lambda event: write_context(compression_path, 'central', event)
         central.conversation_history.sink = lambda message: write_context(archive_path, 'central', {'message': message})
         central.conversation_history.reasoning_sink = lambda record: write_context(
@@ -313,6 +314,7 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                                           agent_params(agent_id), env.interact_radius, env_change_cap))
         if hasattr(policies[agent_id], 'client'):
             policies[agent_id]._context_memory = ContextMemory(ContextConfig(max_tokens=context_max_tokens,
+                                                                             keep_status_history=keep_status_history,
                                                                              show_costs=disclose_costs))
             policies[agent_id].context_memory.sink = lambda event, aid=agent_id: write_context(compression_path, aid, event)
             policies[agent_id].conversation_history.sink = lambda message, aid=agent_id: write_context(archive_path, aid, {'message': message})
@@ -369,6 +371,7 @@ def run_episode(model: str, base_url: str, api_key: str, extra_params: dict, ste
                 "controller": controller,
                 "prompt_contract": PROMPT_CONTRACT,
                 "disclose_costs": disclose_costs,
+                "keep_status_history": keep_status_history,
                 "agent_reasoning": (((extra_params or {}).get("extra_body") or {}).get("reasoning", {}).get("effort")
                                     or (extra_params or {}).get("reasoning_effort")),
                 "api_host": urlparse(base_url).hostname,
@@ -489,6 +492,9 @@ def main():
                              "(e.g. openai/flex for OpenAI's half-price flex tier)")
     parser.add_argument("--service-tier", default=None,
                         help="sent as service_tier (e.g. flex on the OpenAI API: half price, slower)")
+    parser.add_argument("--keep-status-history", action="store_true",
+                        help="keep earlier context-status messages instead of replacing them, so each request "
+                             "extends the previous one (needed for OpenAI prompt caching past the system prompt)")
     parser.add_argument("--prompt-cache-key", action="store_true",
                         help="send a fixed prompt_cache_key per agent (<out name>-<agent>) so OpenAI routes "
                              "requests with the same prefix to the same cache")
@@ -569,7 +575,8 @@ def main():
     run_episode(args.model, args.base_url, api_key, extra_params, args.steps, out_path, map_spec, args.policy,
                 args.environment, args.sequence_seed, args.pads_per_room, args.presses_per_room, args.max_resets, args.debug,
                 reveal_goal=not args.hide_goal, reward_visible=args.show_reward,
-                context_max_tokens=args.context_max_tokens, solo_agent=args.solo_agent,
+                context_max_tokens=args.context_max_tokens, keep_status_history=args.keep_status_history,
+                solo_agent=args.solo_agent,
                 controller=args.controller, score_config=score_config, env_change_cap=args.env_change_cap,
                 disclose_costs=args.disclose_costs,
                 clue_hints=not args.no_clue_hints)

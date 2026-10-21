@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import random
 import time
 import traceback
@@ -65,6 +66,11 @@ def _create_with_retry(client, **kwargs):
         try:
             response = client.chat.completions.create(**kwargs)
             tracker(client).record(response)
+            dump_path = os.environ.get('MACI_DUMP_REQUESTS')  # 디버그: 요청과 사용량을 그대로 기록 (캐시 확인용)
+            if dump_path:
+                with open(dump_path, 'a', encoding='utf-8') as dump:
+                    dump.write(json.dumps({'request': kwargs, 'usage': getattr(response, 'usage', None)},
+                                          ensure_ascii=False, default=lambda o: getattr(o, 'model_dump', lambda: str(o))()) + '\n')
             if not getattr(response, 'choices', None):
                 extra = getattr(response, 'model_extra', None) or {}
                 error = extra.get('error') or {}

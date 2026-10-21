@@ -148,3 +148,16 @@ class ContextCompressionTests(unittest.TestCase):
                 self.assertTrue(any((m.get('content') or '').startswith(SUMMARY_PREFIX) for m in working[aid]))
                 self.assertEqual(policy.token_usage['requests'], 8)
                 self.assertEqual(policy.generated_code, code)
+
+
+class StatusHistoryTests(unittest.TestCase):
+    def test_status_is_replaced_by_default_and_kept_when_asked(self):
+        for keep, expected in ((False, 1), (True, 2)):
+            history = [{'role': 'system', 'content': 's'}, {'role': 'user', 'content': 'obs'}]
+            memory = ContextMemory(ContextConfig(keep_status_history=keep))
+            memory.prepare(history, 100)
+            history.append({'role': 'user', 'content': 'next obs'})
+            memory.prepare(history, 100)
+            statuses = [m for m in history if m['content'].startswith(STATUS_PREFIX)]
+            self.assertEqual(len(statuses), expected)
+            self.assertTrue(history[-1]['content'].startswith(STATUS_PREFIX))
